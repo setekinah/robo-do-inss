@@ -1,0 +1,5 @@
+streamlit==1.55.0
+# Dependencias opcionais para a Fase 2 documental:
+# pypdf
+# pillow
+# pytesseract

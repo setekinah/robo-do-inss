@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOFI.IA PREVI - Triagem Inteligente</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="hero-panel">
+      <p class="eyebrow">Triagem de benefícios</p>
+      <h1>SOFI.IA PREVI</h1>
+      <p class="hero-copy">
+        Um MVP de atendimento guiado para qualificar leads de INSS com base em fluxos
+        de decisão inspirados nos roteiros das imagens enviadas.
+      </p>
+
+      <div class="hero-card">
+        <h2>Fluxos iniciais</h2>
+        <ul class="flow-list">
+          <li>Auxílio-Acidente</li>
+          <li>Aposentadoria</li>
+          <li>BPC/LOAS</li>
+        </ul>
+      </div>
+
+      <div class="hero-card muted">
+        <h2>Saída do sistema</h2>
+        <p>
+          O atendente recebe uma classificação, um resumo da resposta do lead e o próximo
+          encaminhamento sugerido.
+        </p>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">Etapa 1</p>
+            <h2>Dados do atendimento</h2>
+          </div>
+          <button class="ghost-button" id="resetAllButton" type="button">Reiniciar tudo</button>
+        </div>
+
+        <form id="leadForm" class="lead-form">
+          <label>
+            Nome do lead
+            <input type="text" id="leadName" placeholder="Ex.: Maria da Silva">
+          </label>
+          <label>
+            Telefone
+            <input type="text" id="leadPhone" placeholder="(11) 99999-9999">
+          </label>
+          <label>
+            Tipo de atendimento
+            <select id="flowSelector"></select>
+          </label>
+          <label class="full-width">
+            Observações
+            <textarea id="leadNotes" rows="3" placeholder="Contexto rápido do caso"></textarea>
+          </label>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">Etapa 2</p>
+            <h2>Triagem guiada</h2>
+          </div>
+          <span class="status-pill" id="progressLabel">Aguardando início</span>
+        </div>
+
+        <div id="journeyIntro" class="empty-state">
+          <h3>Escolha o fluxo e inicie a triagem</h3>
+          <p>
+            O sistema vai apresentar uma pergunta por vez e conduzir automaticamente
+            para o próximo passo conforme as respostas.
+          </p>
+          <button class="primary-button" id="startButton" type="button">Iniciar fluxo</button>
+        </div>
+
+        <div id="questionCard" class="question-card hidden">
+          <div class="question-meta">
+            <span id="currentFlowName"></span>
+            <span id="currentStepCode"></span>
+          </div>
+          <h3 id="questionTitle"></h3>
+          <p id="questionHelp" class="question-help"></p>
+          <div id="questionOptions" class="option-grid"></div>
+          <div class="actions">
+            <button class="ghost-button" id="backButton" type="button">Voltar</button>
+          </div>
+        </div>
+
+        <div id="resultCard" class="result-card hidden"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">Etapa 3</p>
+            <h2>Histórico da sessão</h2>
+          </div>
+        </div>
+        <div id="historyList" class="history-list">
+          <p class="history-placeholder">Nenhuma resposta registrada ainda.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="flows.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
