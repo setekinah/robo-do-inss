@@ -46,6 +46,50 @@ def init_database() -> None:
         ensure_column(conn, "benefit_category", "TEXT")
         ensure_column(conn, "estimated_monthly_value", "REAL")
         ensure_column(conn, "estimated_total_value", "REAL")
+        ensure_column(conn, "crm_stage", "TEXT NOT NULL DEFAULT 'triagem'")
+        ensure_column(conn, "conflict_status", "TEXT NOT NULL DEFAULT 'pendente'")
+        ensure_column(conn, "assigned_to", "TEXT")
+        ensure_column(conn, "next_action", "TEXT")
+        ensure_column(conn, "next_action_at", "TEXT")
+        ensure_column(conn, "lost_reason", "TEXT")
+        conn.execute(
+            """
+            UPDATE atendimentos
+            SET crm_stage = CASE
+                WHEN status = 'desqualificado' THEN 'perdido'
+                WHEN status IN ('aprovado', 'revisao') THEN 'documentos'
+                ELSE 'triagem'
+            END
+            WHERE crm_stage IS NULL OR crm_stage = ''
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crm_tarefas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                due_at TEXT,
+                assigned_to TEXT,
+                status TEXT NOT NULL DEFAULT 'aberta',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crm_atividades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                activity_type TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS atendimento_documentos (
@@ -134,9 +178,11 @@ def save_attendance(
                 history_json,
                 benefit_category,
                 estimated_monthly_value,
-                estimated_total_value
+                estimated_total_value,
+                crm_stage,
+                conflict_status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lead_name,
@@ -152,6 +198,8 @@ def save_attendance(
                 benefit_category,
                 estimated_monthly_value,
                 estimated_total_value,
+                "triagem",
+                "pendente",
             ),
         )
         attendance_id = int(cursor.lastrowid)
@@ -218,6 +266,12 @@ def search_attendances(
                 benefit_category,
                 estimated_monthly_value,
                 estimated_total_value
+                ,crm_stage,
+                conflict_status,
+                assigned_to,
+                next_action,
+                next_action_at,
+                lost_reason
             FROM atendimentos
             {where_sql}
             ORDER BY id DESC
@@ -248,6 +302,12 @@ def get_attendance_details(attendance_id: int) -> sqlite3.Row | None:
                 benefit_category,
                 estimated_monthly_value,
                 estimated_total_value
+                ,crm_stage,
+                conflict_status,
+                assigned_to,
+                next_action,
+                next_action_at,
+                lost_reason
             FROM atendimentos
             WHERE id = ?
             """,
@@ -567,4 +627,135 @@ def get_document_pipeline_summary() -> dict[str, Any]:
         "validated_documents": int(totals["validated_documents"] or 0),
         "pending_documents": int(totals["pending_documents"] or 0),
         "processed_documents": int(totals["processed_documents"] or 0),
+    }
+
+
+def update_crm_case(
+    *,
+    attendance_id: int,
+    crm_stage: str,
+    conflict_status: str,
+    assigned_to: str,
+    next_action: str,
+    next_action_at: str | None,
+    lost_reason: str = "",
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE atendimentos
+            SET
+                crm_stage = ?,
+                conflict_status = ?,
+                assigned_to = ?,
+                next_action = ?,
+                next_action_at = ?,
+                lost_reason = ?
+            WHERE id = ?
+            """,
+            (
+                crm_stage,
+                conflict_status,
+                assigned_to.strip(),
+                next_action.strip(),
+                next_action_at,
+                lost_reason.strip(),
+                attendance_id,
+            ),
+        )
+        conn.commit()
+
+
+def add_crm_activity(*, attendance_id: int, activity_type: str, body: str) -> None:
+    clean_body = body.strip()
+    if not clean_body:
+        return
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO crm_atividades (attendance_id, activity_type, body)
+            VALUES (?, ?, ?)
+            """,
+            (attendance_id, activity_type, clean_body),
+        )
+        conn.commit()
+
+
+def list_crm_activities(attendance_id: int, limit: int = 30) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT id, attendance_id, activity_type, body, created_at
+            FROM crm_atividades
+            WHERE attendance_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (attendance_id, limit),
+        ).fetchall()
+
+
+def create_crm_task(
+    *, attendance_id: int, title: str, due_at: str | None, assigned_to: str
+) -> None:
+    clean_title = title.strip()
+    if not clean_title:
+        raise ValueError("A tarefa precisa de um título.")
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO crm_tarefas (attendance_id, title, due_at, assigned_to)
+            VALUES (?, ?, ?, ?)
+            """,
+            (attendance_id, clean_title, due_at, assigned_to.strip()),
+        )
+        conn.commit()
+
+
+def list_crm_tasks(attendance_id: int, include_done: bool = False) -> list[sqlite3.Row]:
+    where = "attendance_id = ?" if include_done else "attendance_id = ? AND status = 'aberta'"
+    with get_connection() as conn:
+        return conn.execute(
+            f"""
+            SELECT id, attendance_id, title, due_at, assigned_to, status, created_at, completed_at
+            FROM crm_tarefas
+            WHERE {where}
+            ORDER BY CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, id DESC
+            """,
+            (attendance_id,),
+        ).fetchall()
+
+
+def complete_crm_task(task_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE crm_tarefas
+            SET status = 'concluida', completed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+        conn.commit()
+
+
+def get_crm_summary() -> dict[str, int]:
+    with get_connection() as conn:
+        open_tasks = conn.execute(
+            "SELECT COUNT(*) AS total FROM crm_tarefas WHERE status = 'aberta'"
+        ).fetchone()["total"]
+        overdue_tasks = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM crm_tarefas
+            WHERE status = 'aberta' AND due_at IS NOT NULL AND DATE(due_at) < DATE('now')
+            """
+        ).fetchone()["total"]
+        pending_conflicts = conn.execute(
+            "SELECT COUNT(*) AS total FROM atendimentos WHERE conflict_status = 'pendente'"
+        ).fetchone()["total"]
+    return {
+        "open_tasks": int(open_tasks or 0),
+        "overdue_tasks": int(overdue_tasks or 0),
+        "pending_conflicts": int(pending_conflicts or 0),
     }

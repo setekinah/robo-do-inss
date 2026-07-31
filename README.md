@@ -3,7 +3,7 @@
 Aplicacao local em Python + Streamlit para operacao previdenciaria com:
 
 - triagem guiada de leads
-- CRM operacional
+- CRM jurídico com etapas, conflito de interesse, responsável, tarefas e histórico de interações
 - checklist documental por beneficio
 - leitura tecnica local de PDF e imagem
 - preview de contratos e configuracoes do escritorio
@@ -58,3 +58,10 @@ Para leitura documental local mais completa, o ambiente pode exigir:
 9. Revisao de Beneficio
 10. Planejamento Previdenciario
 11. Outros Assuntos
+
+## Regras do CRM jurídico
+
+- Registre responsável, próxima ação e data para todo atendimento em andamento.
+- Faça a checagem de conflito antes de orientar juridicamente, enviar proposta ou liberar contrato.
+- Use o histórico de relacionamento para registrar ligações, WhatsApp, e-mails, reuniões e notas internas.
+- O contrato permanece bloqueado até que a checagem de conflito esteja marcada como liberada.
