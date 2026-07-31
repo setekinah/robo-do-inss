@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from pathlib import Path
 from typing import Any
 
+from runtime_paths import DATA_DIR
 
-BASE_DIR = Path(__file__).resolve().parent
-SETTINGS_PATH = BASE_DIR / "data" / "office_settings.json"
+
+SETTINGS_PATH = DATA_DIR / "office_settings.json"
 
 
 DEFAULT_OFFICE_SETTINGS: dict[str, Any] = {

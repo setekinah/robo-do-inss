@@ -23,21 +23,14 @@ py -m pip install -r requirements.txt
 py -m streamlit run app.py
 ```
 
-Se voce usa o Python instalado em:
-
-`C:\Users\bruno\AppData\Local\Python\pythoncore-3.14-64\python.exe`
-
-tambem pode rodar:
-
-```powershell
-& "C:\Users\bruno\AppData\Local\Python\pythoncore-3.14-64\python.exe" -m pip install -r "C:\Users\bruno\OneDrive\Desktop\Robo do INSS\requirements.txt"
-& "C:\Users\bruno\AppData\Local\Python\pythoncore-3.14-64\python.exe" -m streamlit run "C:\Users\bruno\OneDrive\Desktop\Robo do INSS\app.py"
-```
+Os comandos devem ser executados dentro da pasta em que o repositório foi extraído ou clonado. Não há caminho de usuário fixo no projeto.
 
 Ou usar o launcher:
 
 - `iniciar_robo_inss.bat`
-- `iniciar_robo_inss_completo.bat`
+- `iniciar_robo_inss_completo.bat` (instala o Streamlit se necessário e abre o navegador)
+
+Os dados operacionais (banco SQLite, configurações e documentos enviados) são armazenados localmente em `%LOCALAPPDATA%\Robo do INSS\data` e não devem ser adicionados ao Git.
 
 ## Dependencias opcionais da fase documental
 
