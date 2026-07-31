@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from runtime_paths import DATA_DIR
 
-BASE_DIR = Path(__file__).resolve().parent
-UPLOADS_DIR = BASE_DIR / "data" / "uploads"
+
+UPLOADS_DIR = DATA_DIR / "uploads"
 
 
 def sanitize_filename(name: str) -> str:

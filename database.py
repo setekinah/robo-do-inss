@@ -3,36 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
-from pathlib import Path
 from typing import Any
 
 from document_rules import build_document_checklist
+from runtime_paths import DATA_DIR
 
 
-BASE_DIR = Path(__file__).resolve().parent
-LOCALAPPDATA_DIR = Path(os.environ.get("LOCALAPPDATA", BASE_DIR))
-
-
-def resolve_data_dir() -> Path:
-    preferred = LOCALAPPDATA_DIR / "Robo do INSS" / "data"
-    fallback = BASE_DIR / "data"
-
-    for candidate in [preferred, fallback]:
-        try:
-            candidate.mkdir(parents=True, exist_ok=True)
-            probe = candidate / ".write_test"
-            probe.write_text("ok", encoding="utf-8")
-            probe.unlink(missing_ok=True)
-            return candidate
-        except OSError:
-            continue
-
-    return fallback
-
-
-DATA_DIR = resolve_data_dir()
 DB_PATH = DATA_DIR / "triagem.db"
 
 

@@ -66,12 +66,13 @@ BRAND_NAME = "SOFI.IA PREVI"
 AGENT_NAME = "Sofia"
 BRAND_SLOGAN = "o seu conhecimento juridico no mundo previdenciario"
 NAV_ITEMS = [
-    ("dashboard", "Dashboard", "📊"),
-    ("crm", "CRM", "📋"),
-    ("leads", "Leads", "👥"),
+    ("dashboard", "Visão geral", "📊"),
+    ("leads", "Atendimentos", "👥"),
+    ("crm", "Carteira", "📋"),
     ("contratos", "Contratos", "📄"),
-    ("configuracoes", "Configuracoes", "⚙️"),
+    ("configuracoes", "Configurações", "⚙️"),
 ]
+
 FEATURE_CARDS = [
     (
         "🎙️",
@@ -2851,12 +2852,14 @@ def render_dashboard_view() -> None:
 
     if not pipeline_records:
         st.markdown(
-            "<div class='pre-empty-state'>Nenhum lead ainda. Quando alguem mandar mensagem no WhatsApp, vai aparecer aqui.</div>",
+            "<div class='pre-empty-state'>Ainda não há atendimentos. Comece registrando o primeiro contato na área de Atendimentos.</div>",
             unsafe_allow_html=True,
         )
-        st.markdown(f"<h3 class='pre-section-title'>Como a {AGENT_NAME} opera</h3>", unsafe_allow_html=True)
+        if st.button("Iniciar novo atendimento", key="dashboard_start_attendance", type="primary"):
+            set_current_view("leads")
+            st.rerun()
+        st.markdown("<h3 class='pre-section-title'>Como usar o sistema</h3>", unsafe_allow_html=True)
         render_process_steps()
-        render_feature_cards_grid()
         return
 
     available_case_ids = [int(record["id"]) for record in pipeline_records]
@@ -3343,7 +3346,7 @@ def render_crm_view() -> None:
 
 
 def render_operational_workspace() -> None:
-    operational_tabs = st.tabs(["Triagem guiada", "Dossie documental", "Consulta analitica"])
+    operational_tabs = st.tabs(["1. Nova triagem", "2. Documentos", "3. Casos salvos"])
     with operational_tabs[0]:
         render_operation_kpis()
         st.divider()
@@ -3379,8 +3382,8 @@ def render_operational_workspace() -> None:
 
 def render_leads_view() -> None:
     render_shell_page_header(
-        "Workspace Juridico",
-        "Triagem, dossie documental e consulta analitica no mesmo ambiente operacional.",
+        "Atendimentos",
+        "Siga a sequência: registre o contato, conclua a triagem e acompanhe documentos e casos salvos.",
     )
     pipeline_records = build_pipeline_records(limit=200)
     dashboard = get_dashboard_summary()
@@ -3406,13 +3409,13 @@ def render_leads_view() -> None:
         st.markdown(
             (
                 "<div class='pre-spotlight'>"
-                "<div class='eyebrow'>Nucleo operacional</div>"
-                "<h3>A esteira juridica precisa parecer comando, nao formulario.</h3>"
-                f"<p>{AGENT_NAME} unifica cadastro, triagem, leitura documental e consulta da carteira para que o escritorio trabalhe com contexto completo, sem pular entre telas desconectadas.</p>"
+                "<div class='eyebrow'>Fluxo de trabalho</div>"
+                "<h3>Comece um atendimento sem perder o contexto do caso.</h3>"
+                "<p>Use a primeira aba para a triagem. Quando o caso for qualificado ou ficar em revisão, os documentos aparecerão automaticamente na segunda aba.</p>"
                 "<div class='pre-inline-stats'>"
-                f"<div class='pre-inline-stat'><strong>{len(pipeline_records)}</strong><span>casos no radar</span></div>"
-                f"<div class='pre-inline-stat'><strong>{len(triage_state.history)}</strong><span>respostas na sessao</span></div>"
-                f"<div class='pre-inline-stat'><strong>{int(dashboard.get('document_backlog', 0))}</strong><span>pendencias documentais</span></div>"
+                "<div class='pre-inline-stat'><strong>1</strong><span>cadastre e responda</span></div>"
+                "<div class='pre-inline-stat'><strong>2</strong><span>confira documentos</span></div>"
+                "<div class='pre-inline-stat'><strong>3</strong><span>acompanhe o caso</span></div>"
                 "</div>"
                 "</div>"
             ),
@@ -3423,12 +3426,12 @@ def render_leads_view() -> None:
         st.markdown(
             (
                 "<div class='pre-card'>"
-                "<h3 class='pre-section-title'>Pulso da operacao</h3>"
+                "<h3 class='pre-section-title'>Onde estou?</h3>"
                 "<div class='pre-meta-list'>"
-                f"<div class='pre-meta-item'><strong>Fluxo atual</strong><span>{current_flow['name']}</span></div>"
-                f"<div class='pre-meta-item'><strong>Etapa corrente</strong><span>{current_step}</span></div>"
-                f"<div class='pre-meta-item'><strong>Prioridade do escritorio</strong><span>{next_priority}</span></div>"
-                f"<div class='pre-meta-item'><strong>Base qualificada</strong><span>{next((int(row['total']) for row in dashboard['by_status'] if row['status'] == 'aprovado'), 0)} caso(s) aprovados no filtro principal.</span></div>"
+                f"<div class='pre-meta-item'><strong>Benefício selecionado</strong><span>{current_flow['name']}</span></div>"
+                f"<div class='pre-meta-item'><strong>Pergunta atual</strong><span>{current_step}</span></div>"
+                f"<div class='pre-meta-item'><strong>Próxima pendência</strong><span>{next_priority}</span></div>"
+                f"<div class='pre-meta-item'><strong>Casos qualificados</strong><span>{next((int(row['total']) for row in dashboard['by_status'] if row['status'] == 'aprovado'), 0)} caso(s).</span></div>"
                 "</div>"
                 "</div>"
             ),
