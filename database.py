@@ -17,6 +17,7 @@ def get_connection() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -84,6 +85,20 @@ def init_database() -> None:
             )
             """
         )
+        ensure_task_column(conn, "description", "TEXT")
+        ensure_task_column(conn, "priority", "TEXT NOT NULL DEFAULT 'media'")
+        ensure_task_column(conn, "source_event_id", "INTEGER")
+        ensure_task_column(conn, "requires_review", "INTEGER NOT NULL DEFAULT 0")
+        ensure_task_column(conn, "review_status", "TEXT NOT NULL DEFAULT 'nao_aplicavel'")
+        ensure_task_column(conn, "task_type", "TEXT NOT NULL DEFAULT 'manual'")
+        ensure_task_column(conn, "updated_at", "TEXT")
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_tarefas_source_event
+            ON crm_tarefas(source_event_id)
+            WHERE source_event_id IS NOT NULL
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS crm_atividades (
@@ -95,6 +110,47 @@ def init_database() -> None:
                 FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
             )
             """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS integration_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_key TEXT NOT NULL UNIQUE,
+                event_type TEXT NOT NULL,
+                source TEXT NOT NULL,
+                attendance_id INTEGER,
+                external_reference TEXT,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                priority TEXT NOT NULL DEFAULT 'media',
+                status TEXT NOT NULL DEFAULT 'pendente',
+                requires_review INTEGER NOT NULL DEFAULT 0,
+                occurred_at TEXT,
+                received_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                processing_started_at TEXT,
+                processed_at TEXT,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS integration_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                details_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(event_id) REFERENCES integration_events(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_integration_events_status ON integration_events(status, id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_integration_audit_event ON integration_audit_log(event_id, id)"
         )
         conn.execute(
             """
@@ -150,6 +206,15 @@ def ensure_document_column(conn: sqlite3.Connection, column_name: str, column_ty
         conn.execute(
             f"ALTER TABLE atendimento_documentos ADD COLUMN {column_name} {column_type}"
         )
+
+
+def ensure_task_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(crm_tarefas)").fetchall()
+    }
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE crm_tarefas ADD COLUMN {column_name} {column_type}")
 
 
 def save_attendance(
@@ -721,6 +786,22 @@ def add_crm_activity(*, attendance_id: int, activity_type: str, body: str) -> No
         conn.commit()
 
 
+def set_case_next_action_if_missing(
+    *, attendance_id: int, next_action: str, next_action_at: str | None
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE atendimentos
+            SET next_action = ?, next_action_at = ?
+            WHERE id = ?
+              AND (next_action IS NULL OR TRIM(next_action) = '' OR next_action_at IS NULL)
+            """,
+            (next_action.strip(), next_action_at, attendance_id),
+        )
+        conn.commit()
+
+
 def list_crm_activities(attendance_id: int, limit: int = 30) -> list[sqlite3.Row]:
     with get_connection() as conn:
         return conn.execute(
@@ -736,20 +817,69 @@ def list_crm_activities(attendance_id: int, limit: int = 30) -> list[sqlite3.Row
 
 
 def create_crm_task(
-    *, attendance_id: int, title: str, due_at: str | None, assigned_to: str
-) -> None:
+    *,
+    attendance_id: int,
+    title: str,
+    due_at: str | None,
+    assigned_to: str,
+    description: str = "",
+    priority: str = "media",
+    source_event_id: int | None = None,
+    requires_review: bool = False,
+    task_type: str = "manual",
+) -> int:
     clean_title = title.strip()
     if not clean_title:
         raise ValueError("A tarefa precisa de um título.")
+    if not description.strip():
+        raise ValueError("A tarefa precisa de uma descrição.")
+    if not due_at:
+        raise ValueError("A tarefa precisa de um prazo operacional.")
+    if not assigned_to.strip():
+        raise ValueError("A tarefa precisa de um responsável.")
+    normalized_priority = priority.strip().lower()
+    if normalized_priority not in {"baixa", "media", "alta", "critica"}:
+        raise ValueError("Prioridade de tarefa inválida.")
     with get_connection() as conn:
-        conn.execute(
+        if source_event_id is not None:
+            existing = conn.execute(
+                "SELECT id FROM crm_tarefas WHERE source_event_id = ?",
+                (source_event_id,),
+            ).fetchone()
+            if existing is not None:
+                return int(existing["id"])
+        cursor = conn.execute(
             """
-            INSERT INTO crm_tarefas (attendance_id, title, due_at, assigned_to)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO crm_tarefas (
+                attendance_id,
+                title,
+                due_at,
+                assigned_to,
+                description,
+                priority,
+                source_event_id,
+                requires_review,
+                review_status,
+                task_type,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """,
-            (attendance_id, clean_title, due_at, assigned_to.strip()),
+            (
+                attendance_id,
+                clean_title,
+                due_at,
+                assigned_to.strip(),
+                description.strip(),
+                normalized_priority,
+                source_event_id,
+                1 if requires_review else 0,
+                "pendente" if requires_review else "nao_aplicavel",
+                task_type.strip() or "manual",
+            ),
         )
         conn.commit()
+        return int(cursor.lastrowid)
 
 
 def list_crm_tasks(attendance_id: int, include_done: bool = False) -> list[sqlite3.Row]:
@@ -757,7 +887,22 @@ def list_crm_tasks(attendance_id: int, include_done: bool = False) -> list[sqlit
     with get_connection() as conn:
         return conn.execute(
             f"""
-            SELECT id, attendance_id, title, due_at, assigned_to, status, created_at, completed_at
+            SELECT
+                id,
+                attendance_id,
+                title,
+                due_at,
+                assigned_to,
+                status,
+                created_at,
+                completed_at,
+                description,
+                priority,
+                source_event_id,
+                requires_review,
+                review_status,
+                task_type,
+                updated_at
             FROM crm_tarefas
             WHERE {where}
             ORDER BY CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, id DESC
@@ -768,14 +913,65 @@ def list_crm_tasks(attendance_id: int, include_done: bool = False) -> list[sqlit
 
 def complete_crm_task(task_id: int) -> None:
     with get_connection() as conn:
-        conn.execute(
+        cursor = conn.execute(
             """
             UPDATE crm_tarefas
-            SET status = 'concluida', completed_at = CURRENT_TIMESTAMP
+            SET status = 'concluida', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
+              AND (requires_review = 0 OR review_status = 'aprovada')
             """,
             (task_id,),
         )
+        if cursor.rowcount == 0:
+            raise ValueError("A tarefa precisa ser revisada antes da conclusão.")
+        conn.commit()
+
+
+def review_crm_task(*, task_id: int, approved: bool, due_at: str | None = None) -> None:
+    with get_connection() as conn:
+        task = conn.execute(
+            "SELECT id, requires_review, review_status, source_event_id FROM crm_tarefas WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+        if task is None:
+            raise ValueError("Tarefa não encontrada.")
+        if not int(task["requires_review"]):
+            raise ValueError("Esta tarefa não exige revisão humana.")
+        if str(task["review_status"]) != "pendente":
+            raise ValueError("Esta tarefa já foi revisada.")
+        conn.execute(
+            """
+            UPDATE crm_tarefas
+            SET review_status = ?,
+                status = CASE WHEN ? = 1 THEN status ELSE 'cancelada' END,
+                due_at = CASE WHEN ? = 1 THEN COALESCE(?, due_at) ELSE due_at END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                "aprovada" if approved else "rejeitada",
+                1 if approved else 0,
+                1 if approved else 0,
+                due_at,
+                task_id,
+            ),
+        )
+        if task["source_event_id"] is not None:
+            conn.execute(
+                """
+                INSERT INTO integration_audit_log (event_id, action, details_json)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    int(task["source_event_id"]),
+                    "tarefa_aprovada" if approved else "tarefa_rejeitada",
+                    json.dumps(
+                        {"task_id": task_id, "due_at": due_at},
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                ),
+            )
         conn.commit()
 
 
@@ -830,3 +1026,242 @@ def get_crm_performance() -> dict[str, Any]:
             """
         ).fetchone()["days"]
     return {"by_source": by_source, "average_days_to_contract": float(average_days or 0)}
+
+
+def enqueue_integration_event(
+    *,
+    event_key: str,
+    event_type: str,
+    source: str,
+    attendance_id: int | None,
+    external_reference: str,
+    payload: dict[str, Any],
+    priority: str,
+    requires_review: bool,
+    occurred_at: str | None = None,
+) -> tuple[int, bool]:
+    clean_key = event_key.strip()
+    if not clean_key:
+        raise ValueError("O evento precisa de uma chave de idempotência.")
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO integration_events (
+                event_key,
+                event_type,
+                source,
+                attendance_id,
+                external_reference,
+                payload_json,
+                priority,
+                requires_review,
+                occurred_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                clean_key,
+                event_type.strip(),
+                source.strip(),
+                attendance_id,
+                external_reference.strip(),
+                json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                priority.strip().lower(),
+                1 if requires_review else 0,
+                occurred_at,
+            ),
+        )
+        if cursor.rowcount == 0:
+            existing = conn.execute(
+                "SELECT id FROM integration_events WHERE event_key = ?",
+                (clean_key,),
+            ).fetchone()
+            if existing is None:
+                raise RuntimeError("Não foi possível recuperar o evento idempotente.")
+            return int(existing["id"]), False
+        event_id = int(cursor.lastrowid)
+        conn.execute(
+            """
+            INSERT INTO integration_audit_log (event_id, action, details_json)
+            VALUES (?, 'evento_recebido', ?)
+            """,
+            (
+                event_id,
+                json.dumps(
+                    {"event_type": event_type, "source": source},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            ),
+        )
+        conn.commit()
+        return event_id, True
+
+
+def get_integration_event(event_id: int) -> sqlite3.Row | None:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM integration_events WHERE id = ?
+            """,
+            (event_id,),
+        ).fetchone()
+
+
+def list_pending_integration_events(limit: int = 20) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM integration_events
+            WHERE status = 'pendente'
+            ORDER BY
+                CASE priority
+                    WHEN 'critica' THEN 0
+                    WHEN 'alta' THEN 1
+                    WHEN 'media' THEN 2
+                    ELSE 3
+                END,
+                id ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+
+def list_integration_events(limit: int = 30) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT
+                e.*,
+                a.lead_name,
+                t.id AS task_id,
+                t.title AS task_title,
+                t.review_status AS task_review_status
+            FROM integration_events e
+            LEFT JOIN atendimentos a ON a.id = e.attendance_id
+            LEFT JOIN crm_tarefas t ON t.source_event_id = e.id
+            ORDER BY e.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+
+def mark_integration_event_processing(event_id: int) -> bool:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE integration_events
+            SET status = 'processando',
+                processing_started_at = CURRENT_TIMESTAMP,
+                attempts = attempts + 1,
+                last_error = NULL
+            WHERE id = ? AND status = 'pendente'
+            """,
+            (event_id,),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+
+
+def complete_integration_event(event_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE integration_events
+            SET status = 'concluido', processed_at = CURRENT_TIMESTAMP, last_error = NULL
+            WHERE id = ?
+            """,
+            (event_id,),
+        )
+        conn.commit()
+
+
+def fail_integration_event(event_id: int, error_message: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE integration_events
+            SET status = 'falhou', processed_at = CURRENT_TIMESTAMP, last_error = ?
+            WHERE id = ?
+            """,
+            (error_message.strip()[:1000], event_id),
+        )
+        conn.commit()
+
+
+def retry_integration_event(event_id: int) -> None:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE integration_events
+            SET status = 'pendente', last_error = NULL, processing_started_at = NULL, processed_at = NULL
+            WHERE id = ? AND status = 'falhou'
+            """,
+            (event_id,),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Somente eventos com falha podem ser reenfileirados.")
+        conn.commit()
+
+
+def add_integration_audit(*, event_id: int, action: str, details: dict[str, Any]) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO integration_audit_log (event_id, action, details_json)
+            VALUES (?, ?, ?)
+            """,
+            (
+                event_id,
+                action.strip(),
+                json.dumps(details, ensure_ascii=False, sort_keys=True),
+            ),
+        )
+        conn.commit()
+
+
+def list_integration_audit(event_id: int, limit: int = 50) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT id, event_id, action, details_json, created_at
+            FROM integration_audit_log
+            WHERE event_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (event_id, limit),
+        ).fetchall()
+
+
+def get_integration_summary() -> dict[str, int]:
+    with get_connection() as conn:
+        status_rows = conn.execute(
+            """
+            SELECT status, COUNT(*) AS total
+            FROM integration_events
+            GROUP BY status
+            """
+        ).fetchall()
+        status_totals = {str(row["status"]): int(row["total"] or 0) for row in status_rows}
+        pending_review = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM crm_tarefas
+            WHERE status = 'aberta' AND requires_review = 1 AND review_status = 'pendente'
+            """
+        ).fetchone()["total"]
+        automated_tasks = conn.execute(
+            "SELECT COUNT(*) AS total FROM crm_tarefas WHERE source_event_id IS NOT NULL"
+        ).fetchone()["total"]
+    return {
+        "pending": status_totals.get("pendente", 0),
+        "processing": status_totals.get("processando", 0),
+        "completed": status_totals.get("concluido", 0),
+        "failed": status_totals.get("falhou", 0),
+        "pending_review": int(pending_review or 0),
+        "automated_tasks": int(automated_tasks or 0),
+    }
