@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from document_rules import build_document_checklist
@@ -13,12 +15,21 @@ from runtime_paths import DATA_DIR
 DB_PATH = DATA_DIR / "triagem.db"
 
 
-def get_connection() -> sqlite3.Connection:
+@contextmanager
+def get_connection() -> Iterator[sqlite3.Connection]:
+    """Open a transactional SQLite connection and always release the file handle."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def init_database() -> None:
@@ -59,6 +70,10 @@ def init_database() -> None:
         ensure_column(conn, "conflict_notes", "TEXT")
         ensure_column(conn, "contracted_at", "TEXT")
         ensure_column(conn, "crm_stage_updated_at", "TEXT")
+        ensure_column(conn, "privacy_notice_acknowledged", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(conn, "privacy_legal_basis", "TEXT")
+        ensure_column(conn, "privacy_acknowledged_at", "TEXT")
+        ensure_column(conn, "triage_profile_json", "TEXT NOT NULL DEFAULT '{}'")
         conn.execute(
             """
             UPDATE atendimentos
@@ -234,6 +249,9 @@ def save_attendance(
     benefit_category: str | None = None,
     estimated_monthly_value: float | None = None,
     estimated_total_value: float | None = None,
+    privacy_notice_acknowledged: bool = False,
+    privacy_legal_basis: str = "",
+    triage_profile: dict[str, Any] | None = None,
 ) -> int:
     with get_connection() as conn:
         cursor = conn.execute(
@@ -255,9 +273,14 @@ def save_attendance(
                 crm_stage,
                 conflict_status
                 ,lead_email,
-                lead_source
+                lead_source,
+                privacy_notice_acknowledged,
+                privacy_legal_basis,
+                triage_profile_json,
+                privacy_acknowledged_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END)
             """,
             (
                 lead_name,
@@ -277,6 +300,10 @@ def save_attendance(
                 "pendente",
                 lead_email.strip(),
                 lead_source.strip(),
+                1 if privacy_notice_acknowledged else 0,
+                privacy_legal_basis.strip(),
+                json.dumps(triage_profile or {}, ensure_ascii=False, sort_keys=True),
+                1 if privacy_notice_acknowledged else 0,
             ),
         )
         attendance_id = int(cursor.lastrowid)
@@ -353,7 +380,11 @@ def search_attendances(
                 lead_source,
                 conflict_checked_parties,
                 conflict_notes,
-                contracted_at
+                contracted_at,
+                privacy_notice_acknowledged,
+                privacy_legal_basis,
+                privacy_acknowledged_at,
+                triage_profile_json
             FROM atendimentos
             {where_sql}
             ORDER BY id DESC
@@ -394,7 +425,11 @@ def get_attendance_details(attendance_id: int) -> sqlite3.Row | None:
                 lead_source,
                 conflict_checked_parties,
                 conflict_notes,
-                contracted_at
+                contracted_at,
+                privacy_notice_acknowledged,
+                privacy_legal_basis,
+                privacy_acknowledged_at,
+                triage_profile_json
             FROM atendimentos
             WHERE id = ?
             """,
@@ -728,6 +763,8 @@ def update_crm_case(
     lost_reason: str = "",
     conflict_checked_parties: str = "",
     conflict_notes: str = "",
+    privacy_notice_acknowledged: bool = False,
+    privacy_legal_basis: str = "",
 ) -> None:
     with get_connection() as conn:
         current = conn.execute(
@@ -738,6 +775,8 @@ def update_crm_case(
             raise ValueError("Defina a próxima ação e a data antes de mudar a etapa do caso.")
         if conflict_status == "liberado" and not conflict_checked_parties.strip():
             raise ValueError("Informe as partes verificadas antes de liberar o conflito.")
+        if privacy_notice_acknowledged and not privacy_legal_basis.strip():
+            raise ValueError("Informe a base legal antes de registrar a ciência de privacidade.")
         conn.execute(
             """
             UPDATE atendimentos
@@ -750,6 +789,13 @@ def update_crm_case(
                 lost_reason = ?
                 ,conflict_checked_parties = ?
                 ,conflict_notes = ?
+                ,privacy_notice_acknowledged = ?
+                ,privacy_legal_basis = ?
+                ,privacy_acknowledged_at = CASE
+                    WHEN ? = 1 AND privacy_notice_acknowledged = 0 THEN CURRENT_TIMESTAMP
+                    WHEN ? = 0 THEN NULL
+                    ELSE privacy_acknowledged_at
+                END
                 ,crm_stage_updated_at = CASE WHEN crm_stage != ? THEN CURRENT_TIMESTAMP ELSE crm_stage_updated_at END
                 ,contracted_at = CASE WHEN ? = 'caso_ativo' AND contracted_at IS NULL THEN CURRENT_TIMESTAMP ELSE contracted_at END
             WHERE id = ?
@@ -763,6 +809,10 @@ def update_crm_case(
                 lost_reason.strip(),
                 conflict_checked_parties.strip(),
                 conflict_notes.strip(),
+                1 if privacy_notice_acknowledged else 0,
+                privacy_legal_basis.strip(),
+                1 if privacy_notice_acknowledged else 0,
+                1 if privacy_notice_acknowledged else 0,
                 crm_stage,
                 crm_stage,
                 attendance_id,

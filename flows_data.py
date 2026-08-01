@@ -180,22 +180,22 @@ FLOW_DEFINITIONS = {
                 "id": "idadeTempo",
                 "code": "AP-03",
                 "title": "A soma atual de idade, tempo e carencia ja sugere viabilidade de aposentadoria?",
-                "help": "Etapa inicial de pontos, idade minima e carencia.",
+                "help": "Leitura preliminar; a conclusao depende de CNIS, calculo e regra aplicavel.",
                 "options": [
                     {
                         "label": "Sim",
                         "description": "Ha forte sinal de direito amadurecido.",
-                        "next": "documentosApo",
+                        "next": "regraTransicao",
                     },
                     {
                         "label": "Quase",
                         "description": "Depende de acertos ou averbacoes.",
-                        "result": "revisaoPlanejamento",
+                        "next": "regraTransicao",
                     },
                     {
                         "label": "Nao",
-                        "description": "Ainda esta distante do requisito minimo.",
-                        "result": "desqualificadoSemRequisitos",
+                        "description": "Ainda esta distante; avaliar planejamento e regularizacoes.",
+                        "next": "regraTransicao",
                     },
                 ],
             },
@@ -208,17 +208,17 @@ FLOW_DEFINITIONS = {
                     {
                         "label": "Sim",
                         "description": "Ha base para seguir no fluxo PCD.",
-                        "next": "documentosApo",
+                        "next": "regraTransicao",
                     },
                     {
                         "label": "Parcial",
                         "description": "Existe indicio, mas falta prova consistente.",
-                        "result": "revisaoPlanejamento",
+                        "next": "regraTransicao",
                     },
                     {
                         "label": "Nao",
                         "description": "Sem prova minima da deficiencia no periodo.",
-                        "result": "desqualificadoSemRequisitos",
+                        "next": "regraTransicao",
                     },
                 ],
             },
@@ -231,23 +231,130 @@ FLOW_DEFINITIONS = {
                     {
                         "label": "Sim",
                         "description": "Existe documentacao tecnica relevante.",
-                        "next": "documentosApo",
+                        "next": "regraTransicao",
                     },
                     {
                         "label": "Parcial",
                         "description": "Alguma prova existe, mas precisa consolidar.",
-                        "result": "revisaoPlanejamento",
+                        "next": "regraTransicao",
                     },
                     {
                         "label": "Nao",
                         "description": "Sem prova tecnica suficiente.",
-                        "result": "desqualificadoSemRequisitos",
+                        "next": "regraTransicao",
+                    },
+                ],
+            },
+            "regraTransicao": {
+                "id": "regraTransicao",
+                "code": "AP-06",
+                "title": "Qual cenario juridico parece mais aderente antes do calculo definitivo?",
+                "help": "Nao conclua o direito sem comparar regras anteriores, transicoes e regra permanente.",
+                "options": [
+                    {
+                        "label": "Direito adquirido",
+                        "description": "Possivel preenchimento dos requisitos antes da EC 103/2019.",
+                        "next": "pendenciasCnis",
+                    },
+                    {
+                        "label": "Regra de transicao",
+                        "description": "Pontos, idade minima, pedagio ou outra transicao pode ser aplicavel.",
+                        "next": "pendenciasCnis",
+                    },
+                    {
+                        "label": "Regra permanente",
+                        "description": "Aposentadoria programada ou regra posterior a reforma.",
+                        "next": "pendenciasCnis",
+                    },
+                    {
+                        "label": "Nao calculado",
+                        "description": "Ainda nao ha dados suficientes para escolher a regra.",
+                        "next": "pendenciasCnis",
+                    },
+                ],
+            },
+            "pendenciasCnis": {
+                "id": "pendenciasCnis",
+                "code": "AP-07",
+                "title": "Como esta a consistencia do CNIS e dos vinculos contributivos?",
+                "help": "Verifique vinculos sem baixa, remuneracoes ausentes, indicadores e recolhimentos abaixo do minimo.",
+                "options": [
+                    {
+                        "label": "Sem divergencias",
+                        "description": "Nao foram identificadas pendencias relevantes na leitura inicial.",
+                        "next": "periodosDiferenciados",
+                    },
+                    {
+                        "label": "Com divergencias",
+                        "description": "Ha acertos, complementacoes ou provas de vinculo a providenciar.",
+                        "next": "periodosDiferenciados",
+                    },
+                    {
+                        "label": "Nao analisado",
+                        "description": "O CNIS ainda nao foi obtido ou conferido tecnicamente.",
+                        "next": "periodosDiferenciados",
+                    },
+                ],
+            },
+            "periodosDiferenciados": {
+                "id": "periodosDiferenciados",
+                "code": "AP-08",
+                "title": "Qual periodo diferenciado exige maior atencao na estrategia?",
+                "help": "Escolha o ponto predominante; os demais podem ser registrados no perfil estruturado.",
+                "options": [
+                    {
+                        "label": "Nenhum",
+                        "description": "Predomina tempo urbano comum.",
+                        "next": "objetivoAposentadoria",
+                    },
+                    {
+                        "label": "Rural",
+                        "description": "Ha atividade rural a comprovar ou averbar.",
+                        "next": "objetivoAposentadoria",
+                    },
+                    {
+                        "label": "Especial",
+                        "description": "Ha exposicao nociva, PPP, LTCAT ou conversao a analisar.",
+                        "next": "objetivoAposentadoria",
+                    },
+                    {
+                        "label": "RPPS ou CTC",
+                        "description": "Existe tempo publico, compensacao ou certidao a validar.",
+                        "next": "objetivoAposentadoria",
+                    },
+                    {
+                        "label": "Professor, PCD ou outro",
+                        "description": "Ha regra diferenciada que exige verificacao especifica.",
+                        "next": "objetivoAposentadoria",
+                    },
+                ],
+            },
+            "objetivoAposentadoria": {
+                "id": "objetivoAposentadoria",
+                "code": "AP-09",
+                "title": "Qual e o objetivo principal deste atendimento?",
+                "help": "Defina o produto juridico antes de prometer protocolo ou data de concessao.",
+                "options": [
+                    {
+                        "label": "Beneficio imediato",
+                        "description": "Verificar direito atual, melhor regra e DER segura.",
+                        "next": "documentosApo",
+                    },
+                    {
+                        "label": "Planejamento",
+                        "description": "Projetar cenarios, datas e estrategia contributiva.",
+                        "next": "documentosApo",
+                    },
+                    {
+                        "label": "Regularizacao",
+                        "description": "Priorizar acertos de CNIS, averbacoes e provas antes do pedido.",
+                        "next": "documentosApo",
                     },
                 ],
             },
             "documentosApo": {
                 "id": "documentosApo",
-                "code": "AP-06",
+                "code": "AP-10",
                 "title": "O lead consegue apresentar documentos para calculo e protocolo?",
                 "help": "CNIS, carteira, PPP, laudos e certidoes sustentam a entrada do caso.",
                 "options": [
@@ -272,12 +379,12 @@ FLOW_DEFINITIONS = {
         "results": {
             "qualificadoAposentadoria": {
                 "status": "aprovado",
-                "title": "Lead qualificado para analise previdenciaria completa",
+                "title": "Lead qualificado para analise ou planejamento previdenciario",
                 "summary": (
-                    "O caso indica possibilidade real de aposentadoria ou planejamento estrategico "
-                    "com base documental."
+                    "O caso possui elementos para calculo e estrategia previdenciaria, sem representar "
+                    "conclusao automatica sobre direito adquirido ou melhor regra."
                 ),
-                "next_step": "Enviar para calculo previdenciario, conferencia de requisitos e proposta.",
+                "next_step": "Conferir CNIS e documentos, comparar regras e validar a estrategia com advogado.",
             },
             "revisaoPlanejamento": {
                 "status": "revisao",

@@ -2,7 +2,7 @@
 
 Aplicacao local em Python + Streamlit para operacao previdenciaria com:
 
-- triagem guiada de leads
+- triagem guiada de leads, com perfil previdenciário estruturado para aposentadoria
 - CRM jurídico com etapas, conflito de interesse, responsável, tarefas e histórico de interações
 - orquestrador interno de eventos com fila, idempotência, auditoria e revisão humana de tarefas críticas
 - checklist documental por beneficio
@@ -65,7 +65,9 @@ Para leitura documental local mais completa, o ambiente pode exigir:
 - Registre responsável, próxima ação e data para todo atendimento em andamento.
 - Faça a checagem de conflito antes de orientar juridicamente, enviar proposta ou liberar contrato.
 - Use o histórico de relacionamento para registrar ligações, WhatsApp, e-mails, reuniões e notas internas.
-- O contrato permanece bloqueado até que a checagem de conflito esteja marcada como liberada.
+- Registre a entrega do aviso de privacidade e a base legal predominante do tratamento.
+- O contrato permanece bloqueado até a aprovação da triagem, a liberação do conflito e o registro de privacidade/LGPD.
+- Casos bloqueados continuam visíveis na esteira de contratos, com o motivo e o atalho para regularização no CRM.
 - Eventos repetidos não criam tarefas duplicadas.
 - Publicações, movimentações e exigências geram datas operacionais sugeridas; um responsável deve confirmar qualquer prazo jurídico.
 - A integração com Astrea foi excluída. Kanban, tarefas, documentos e auditoria pertencem ao CRM próprio.
