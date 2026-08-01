@@ -241,18 +241,18 @@ def inject_styles() -> None:
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
         :root {
-            --bg: #f3f0ea;
+            --bg: #f6f8fc;
             --panel: rgba(255, 255, 255, 0.94);
-            --panel-strong: #fcfbf8;
+            --panel-strong: #fbfdff;
             --border: rgba(27, 38, 52, 0.11);
             --text: #1f2430;
-            --muted: #6d6254;
+            --muted: #68758b;
             --navy: #152235;
             --navy-soft: #22324a;
             --navy-deep: #0f1827;
-            --gold: #b58b47;
-            --gold-soft: #d7bf92;
-            --gold-pale: #f5ecdb;
+            --gold: #2f5bea;
+            --gold-soft: #a9c2ff;
+            --gold-pale: #edf3ff;
             --success-bg: #edf7f0;
             --success-text: #1f6a3d;
             --warning-bg: #fff7e8;
@@ -261,8 +261,7 @@ def inject_styles() -> None:
             --danger-text: #a23a31;
         }
         .stApp {
-            background:
-                linear-gradient(180deg, #f6f3ee 0%, #eee7db 100%);
+            background: #f6f8fc;
             color: var(--text);
         }
         html, body, [class*="css"], [data-testid="stAppViewContainer"] {
@@ -1867,6 +1866,173 @@ def inject_lawfirm_admin_theme() -> None:
         [data-testid="stMetric"] { background:#fff; border:1px solid #edf0f6; padding:.8rem; border-radius:8px; box-shadow:0 4px 14px rgba(35,55,95,.05); }
         .stTabs [data-baseweb="tab"] { border-radius:6px !important; }
         button[kind="primary"] { background:var(--admin-blue) !important; border-color:var(--admin-blue) !important; }
+
+        /* Controles nativos e popovers ficam na mesma paleta fria do painel. */
+        [data-baseweb="popover"],
+        [data-baseweb="popover"] > div,
+        [data-baseweb="menu"],
+        [role="listbox"] {
+            background:#ffffff !important;
+            color:var(--admin-ink) !important;
+            border-color:#dfe6f1 !important;
+        }
+        [data-baseweb="popover"] {
+            border:1px solid #dfe6f1 !important;
+            border-radius:8px !important;
+            box-shadow:0 12px 28px rgba(35,55,95,.14) !important;
+        }
+        [role="option"] {
+            background:#ffffff !important;
+            color:#44516a !important;
+        }
+        [role="option"]:hover,
+        [role="option"][aria-selected="true"] {
+            background:#edf3ff !important;
+            color:var(--admin-blue) !important;
+        }
+
+        /* Densidade operacional: mais informacao visivel e menos rolagem. */
+        .stApp:has(.law-admin-topbar) .block-container {
+            max-width:1580px !important;
+            padding-top:.55rem !important;
+            padding-bottom:1.25rem !important;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stVerticalBlock"] { gap:.72rem; }
+        .stApp:has(.law-admin-topbar) [data-testid="stHorizontalBlock"] { gap:.8rem; }
+        .stApp:has(.law-admin-topbar) .law-admin-topbar {
+            padding:.5rem .75rem;
+            margin-bottom:.55rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-page-header {
+            margin:.05rem 0 .65rem !important;
+            padding:.1rem 0 .35rem !important;
+        }
+        .stApp:has(.law-admin-topbar) .pre-page-header h2 { font-size:1.35rem !important; }
+        .stApp:has(.law-admin-topbar) .pre-page-header p { margin-top:.1rem; font-size:.84rem; }
+        .stApp:has(.law-admin-topbar) .panel-heading { margin-bottom:.55rem; }
+        .stApp:has(.law-admin-topbar) .panel-title { font-size:1.35rem; }
+        .stApp:has(.law-admin-topbar) .panel-subtitle { margin-top:.2rem; font-size:.82rem; }
+        .stApp:has(.law-admin-topbar) .pre-section-title {
+            font-size:1.12rem !important;
+            margin-bottom:.35rem !important;
+        }
+        .stApp:has(.law-admin-topbar) .pre-card,
+        .stApp:has(.law-admin-topbar) .panel-box,
+        .stApp:has(.law-admin-topbar) .surface-card { padding:.8rem .9rem !important; }
+        .stApp:has(.law-admin-topbar) .pre-metric-grid { gap:.65rem; margin-bottom:.55rem; }
+        .stApp:has(.law-admin-topbar) .pre-metric-card {
+            min-height:68px;
+            padding:.65rem .75rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-metric-card h3 { font-size:1.45rem; }
+        .stApp:has(.law-admin-topbar) .pre-metric-card p { margin-top:.18rem; font-size:.78rem; }
+        .stApp:has(.law-admin-topbar) .workspace-kpis { gap:.65rem; margin-bottom:.25rem; }
+        .stApp:has(.law-admin-topbar) .kpi-card { border-radius:8px; padding:.65rem .75rem; }
+        .stApp:has(.law-admin-topbar) .kpi-value { font:800 1.45rem/1 "Manrope",sans-serif; }
+        .stApp:has(.law-admin-topbar) .kpi-label { margin-bottom:.2rem; }
+        .stApp:has(.law-admin-topbar) .kpi-note { font-size:.75rem; line-height:1.35; }
+        .stApp:has(.law-admin-topbar) .pre-lead-card {
+            border-radius:8px;
+            padding:.65rem .7rem;
+            margin-bottom:.5rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-focus-hero {
+            border-radius:8px;
+            padding:.75rem .85rem;
+            margin-bottom:.6rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-focus-hero h3 { font-size:1.35rem; }
+        .stApp:has(.law-admin-topbar) .pre-focus-grid { gap:.55rem; margin:.55rem 0; }
+        .stApp:has(.law-admin-topbar) .pre-focus-stat { border-radius:8px; padding:.6rem .7rem; }
+        .stApp:has(.law-admin-topbar) .pre-detail-list { gap:.45rem; margin:.55rem 0 0; }
+        .stApp:has(.law-admin-topbar) .pre-detail-row { border-radius:8px; padding:.55rem .65rem; }
+        .stApp:has(.law-admin-topbar) .pre-task-list { gap:.5rem; }
+        .stApp:has(.law-admin-topbar) .pre-task-item { border-radius:8px; padding:.65rem .7rem; }
+        .stApp:has(.law-admin-topbar) .status-chip { margin-bottom:.45rem; padding:.3rem .6rem; }
+        .stApp:has(.law-admin-topbar) .stButton > button { min-height:2.25rem; border-radius:6px !important; }
+        .stApp:has(.law-admin-topbar) .stTextInput input,
+        .stApp:has(.law-admin-topbar) .stNumberInput input,
+        .stApp:has(.law-admin-topbar) .stSelectbox div[data-baseweb="select"] > div {
+            min-height:2.35rem !important;
+            border-radius:6px !important;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stMetric"] { padding:.55rem .65rem; }
+        .stApp:has(.law-admin-topbar) [data-testid="stDataFrame"] { min-height:0 !important; }
+        .stApp:has(.law-admin-topbar) [data-testid="stVegaLiteChart"] {
+            background:#ffffff !important;
+            border:1px solid #edf0f6;
+            border-radius:8px;
+            padding:.35rem;
+        }
+
+        /* O HTML aberto em uma chamada e fechado em outra vira um card vazio no Streamlit. */
+        .pre-card:empty,
+        .panel-box:empty,
+        div[data-testid="stMarkdown"]:has(.pre-card:empty),
+        div[data-testid="stMarkdown"]:has(.panel-box:empty) {
+            display:none !important;
+            margin:0 !important;
+            padding:0 !important;
+            min-height:0 !important;
+        }
+
+        .stApp:has(.law-admin-topbar) .law-dashboard-primary { gap:.7rem; margin-bottom:.65rem; }
+        .stApp:has(.law-admin-topbar) .law-results-card { min-height:150px; }
+        .stApp:has(.law-admin-topbar) .law-result-segment { padding:.75rem .55rem; }
+        .stApp:has(.law-admin-topbar) .law-result-icon { font-size:1.35rem; margin:.35rem 0; }
+        .stApp:has(.law-admin-topbar) .law-result-value { font-size:1.55rem; }
+        .stApp:has(.law-admin-topbar) .law-stat-panel,
+        .stApp:has(.law-admin-topbar) .law-funnel-panel,
+        .stApp:has(.law-admin-topbar) .law-revenue-panel { padding:.8rem .9rem; }
+        .stApp:has(.law-admin-topbar) .law-stat-value { font-size:1.55rem; margin-top:.5rem; }
+        .stApp:has(.law-admin-topbar) .law-mini-chart { height:48px; margin-top:.5rem; }
+        .stApp:has(.law-admin-topbar) .law-dashboard-secondary { gap:.7rem; margin-bottom:.1rem; }
+        .stApp:has(.law-admin-topbar) .law-side-stack { gap:.7rem; }
+        .stApp:has(.law-admin-topbar) .law-alert-card { min-height:64px; padding:.65rem .8rem; }
+        .stApp:has(.law-admin-topbar) .law-funnel-list { gap:.42rem; margin-top:.65rem; }
+        .stApp:has(.law-admin-topbar) .stTabs [data-baseweb="tab-list"] {
+            gap:.35rem;
+            padding-bottom:.35rem;
+        }
+        .stApp:has(.law-admin-topbar) .stTabs [data-baseweb="tab"] {
+            min-height:2.2rem;
+            padding:.32rem .7rem;
+            font-size:.8rem;
+        }
+        .law-dashboard-details {
+            margin:0 0 .65rem;
+            border:1px solid #e5ebf4;
+            border-radius:8px;
+            background:#ffffff;
+        }
+        .law-dashboard-details summary {
+            padding:.65rem .8rem;
+            color:#40506a;
+            font-size:.83rem;
+            font-weight:700;
+            cursor:pointer;
+            list-style-position:inside;
+        }
+        .law-dashboard-details[open] summary { border-bottom:1px solid #edf0f6; }
+        .law-dashboard-details .law-dashboard-secondary { padding:.7rem; }
+        .law-pulse-inline {
+            display:flex;
+            flex-wrap:wrap;
+            gap:.45rem .7rem;
+            margin:-.15rem 0 .45rem;
+        }
+        .law-pulse-inline span {
+            display:inline-flex;
+            align-items:center;
+            gap:.3rem;
+            padding:.34rem .55rem;
+            border:1px solid #dfe7f4;
+            border-radius:999px;
+            background:#ffffff;
+            color:#647089;
+            font-size:.76rem;
+        }
+        .law-pulse-inline strong { color:var(--admin-blue); }
         @media (max-width: 1100px) {
             .law-dashboard-primary { grid-template-columns:1fr 1fr; }
             .law-results-card { grid-column:span 2; }
@@ -2003,7 +2169,7 @@ def render_operation_kpis() -> None:
 
 def render_recent_queue() -> None:
     render_panel_header("Fila", "Atendimentos recentes", "Acesso rapido aos ultimos registros salvos.")
-    recent_rows = list_recent_attendances(limit=5)
+    recent_rows = list_recent_attendances(limit=3)
     if not recent_rows:
         st.info("Ainda nao ha atendimentos salvos.")
         return
@@ -3054,7 +3220,7 @@ def render_dashboard_view() -> None:
     source_df = build_source_breakdown_dataframe(dashboard)
     activity_df = build_recent_activity_dataframe(dashboard)
     case_df = build_case_dataframe(pipeline_records[:18], office_settings)
-    task_rows = build_recent_task_rows(pipeline_records, limit=5)
+    task_rows = build_recent_task_rows(pipeline_records, limit=3)
     document_hotspot_df = build_document_hotspot_dataframe(pipeline_records, limit=6)
 
     approved_total = next(
@@ -3140,6 +3306,8 @@ def render_dashboard_view() -> None:
             f"<div class='law-panel-legend'><span><i style='background:#3f9fe8'></i>{active_total} em andamento</span><span><i style='background:#42b83f'></i>{settled_total} encerrados</span></div>"
             f"<div class='law-mini-chart'>{cumulative_bars}</div>"
             "</div></div>"
+            "<details class='law-dashboard-details'>"
+            "<summary>Honorários e desempenho do funil</summary>"
             "<div class='law-dashboard-secondary'>"
             "<div class='law-side-stack'>"
             "<div class='law-revenue-panel'>"
@@ -3152,6 +3320,7 @@ def render_dashboard_view() -> None:
             f"<div><span>Pendências documentais</span><strong>{int(dashboard['document_backlog'])}</strong></div>"
             "<div class='law-alert-icon'>&#9888;</div>"
             "</div></div>"
+            "</details>"
             "<div class='law-funnel-panel'>"
             "<div class='law-panel-heading'><h3>Desempenho do funil jurídico</h3><span>Casos por etapa</span></div>"
             f"<div class='law-funnel-list'>{funnel_rows_markup}</div>"
@@ -3179,34 +3348,29 @@ def render_dashboard_view() -> None:
     if st.session_state.selected_dashboard_case_id not in available_case_ids:
         st.session_state.selected_dashboard_case_id = available_case_ids[0]
 
-    focus_toolbar_left, focus_toolbar_right = st.columns([1.2, 0.8], gap="medium")
-    with focus_toolbar_left:
-        focus_case_id = st.selectbox(
-            "Caso-chave da carteira",
-            options=available_case_ids,
-            format_func=lambda case_id: next(
-                (
-                    f"#{item['id']} | {item['lead_name']} | {item['flow_name']}"
-                    for item in pipeline_records
-                    if int(item["id"]) == int(case_id)
-                ),
-                f"Caso #{case_id}",
-            ),
-            key="selected_dashboard_case_id",
-        )
-    with focus_toolbar_right:
-        st.markdown(
+    focus_case_id = st.selectbox(
+        "Caso-chave da carteira",
+        options=available_case_ids,
+        format_func=lambda case_id: next(
             (
-                "<div class='pre-card'>"
-                "<h3 class='pre-section-title'>Pulso da carteira</h3>"
-                f"<div class='pre-meta-list'>"
-                f"<div class='pre-meta-item'><strong>Desqualificados</strong><span>{disqualified_total} caso(s) fora da tese principal, úteis para redirecionamento comercial.</span></div>"
-                f"<div class='pre-meta-item'><strong>Casos monitorados</strong><span>{len(pipeline_records)} casos ativos no radar e {int(dashboard['document_backlog'])} pendencias documentais abertas.</span></div>"
-                "</div>"
-                "</div>"
+                f"#{item['id']} | {item['lead_name']} | {item['flow_name']}"
+                for item in pipeline_records
+                if int(item["id"]) == int(case_id)
             ),
-            unsafe_allow_html=True,
-        )
+            f"Caso #{case_id}",
+        ),
+        key="selected_dashboard_case_id",
+    )
+    st.markdown(
+        (
+            "<div class='law-pulse-inline'>"
+            f"<span><strong>{len(pipeline_records)}</strong> casos monitorados</span>"
+            f"<span><strong>{int(dashboard['document_backlog'])}</strong> pendências documentais</span>"
+            f"<span><strong>{disqualified_total}</strong> desqualificados</span>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
     focus_record = next(
         record for record in pipeline_records if int(record["id"]) == int(focus_case_id)
@@ -3233,162 +3397,143 @@ def render_dashboard_view() -> None:
         else str(focus_record["flow_name"])
     )
 
-    tactical_cols = st.columns([0.92, 1.08], gap="large")
-    with tactical_cols[0]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Fila prioritaria</h3>", unsafe_allow_html=True)
-        st.caption(
-            "O que merece acao humana agora, ordenado por urgencia operacional dentro da carteira."
-        )
-        if not task_rows:
-            st.info("Nenhuma tarefa critica foi identificada nesta carteira.")
-        else:
-            st.markdown("<div class='pre-task-list'>", unsafe_allow_html=True)
-            for task in task_rows:
-                priority_class = str(task["priority"]).lower()
+    action_tab, insight_tab, portfolio_tab = st.tabs(
+        ["Ação prioritária", "Indicadores", "Carteira e risco"]
+    )
+
+    with action_tab:
+        tactical_cols = st.columns([0.92, 1.08], gap="medium")
+        with tactical_cols[0]:
+            with st.container(border=True):
+                st.markdown("<h3 class='pre-section-title'>Fila prioritária</h3>", unsafe_allow_html=True)
+                st.caption("O que merece ação humana agora, ordenado por urgência operacional.")
+                if not task_rows:
+                    st.info("Nenhuma tarefa crítica foi identificada nesta carteira.")
+                else:
+                    for task in task_rows:
+                        priority_class = str(task["priority"]).lower()
+                        st.markdown(
+                            (
+                                "<div class='pre-task-item'>"
+                                f"<div class='pre-task-priority {priority_class}'>{task['priority']}</div>"
+                                f"<h4>#{task['case_id']} | {task['lead_name']}</h4>"
+                                f"<p><strong>{task['title']}</strong></p>"
+                                f"<p>{task['description']}</p>"
+                                "</div>"
+                            ),
+                            unsafe_allow_html=True,
+                        )
+                        if st.button(
+                            f"Trazer para o centro #{task['case_id']}",
+                            key=f"dashboard_focus_task_{task['case_id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.pending_dashboard_case_id = int(task["case_id"])
+                            st.rerun()
+
+        with tactical_cols[1]:
+            with st.container(border=True):
                 st.markdown(
                     (
-                        "<div class='pre-task-item'>"
-                        f"<div class='pre-task-priority {priority_class}'>{task['priority']}</div>"
-                        f"<h4>#{task['case_id']} | {task['lead_name']}</h4>"
-                        f"<p><strong>{task['title']}</strong></p>"
-                        f"<p>{task['description']}</p>"
+                        "<div class='pre-focus-hero'>"
+                        f"<div class='eyebrow'>{get_stage_label(str(focus_record['stage']))}</div>"
+                        f"<h3>#{focus_record['id']} | {focus_record['lead_name']}</h3>"
+                        f"<p>{focus_record['flow_name']} | {status_label}</p>"
+                        "</div>"
+                        "<div class='pre-focus-grid'>"
+                        f"<div class='pre-focus-stat'><strong>{focus_record['score']}/100</strong><span>Score documental atual</span></div>"
+                        f"<div class='pre-focus-stat'><strong>{focus_validated_total}/{focus_required_total}</strong><span>Obrigatórios validados</span></div>"
+                        f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_total) if potential_fee_total > 0 else '-'}</strong><span>Honorário potencial</span></div>"
+                        f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_monthly) if potential_fee_monthly > 0 else '-'}</strong><span>Recorrência mensal estimada</span></div>"
+                        "</div>"
+                        f"<div class='status-chip' style='background:{status_background}; color:{status_color};'>{status_label}</div>"
+                        "<div class='pre-detail-list'>"
+                        f"<div class='pre-detail-row'><strong>Benefício dominante</strong><span>{focus_benefit_label}</span></div>"
+                        f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{focus_details['summary'] if focus_details and focus_details['summary'] else 'Caso pronto para leitura executiva dentro do painel.'}</span></div>"
+                        f"<div class='pre-detail-row'><strong>Próximo passo</strong><span>{focus_details['next_step'] if focus_details and focus_details['next_step'] else 'Sem orientação registrada ainda.'}</span></div>"
+                        f"<div class='pre-detail-row'><strong>Risco documental</strong><span>{', '.join(pending_required_names[:3]) if pending_required_names else 'Sem pendências críticas nos documentos obrigatórios.'}</span></div>"
                         "</div>"
                     ),
                     unsafe_allow_html=True,
                 )
-                if st.button(
-                    f"Trazer para o centro #{task['case_id']}",
-                    key=f"dashboard_focus_task_{task['case_id']}",
-                    use_container_width=True,
-                ):
-                    st.session_state.pending_dashboard_case_id = int(task["case_id"])
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with tactical_cols[1]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown(
-            (
-                "<div class='pre-focus-hero'>"
-                f"<div class='eyebrow'>{get_stage_label(str(focus_record['stage']))}</div>"
-                f"<h3>#{focus_record['id']} | {focus_record['lead_name']}</h3>"
-                f"<p>{focus_record['flow_name']} | {status_label}</p>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            (
-                "<div class='pre-focus-grid'>"
-                f"<div class='pre-focus-stat'><strong>{focus_record['score']}/100</strong><span>Score documental atual</span></div>"
-                f"<div class='pre-focus-stat'><strong>{focus_validated_total}/{focus_required_total}</strong><span>Obrigatorios validados</span></div>"
-                f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_total) if potential_fee_total > 0 else '-'}</strong><span>Honorario potencial</span></div>"
-                f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_monthly) if potential_fee_monthly > 0 else '-'}</strong><span>Recorrencia mensal estimada</span></div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f"<div class='status-chip' style='background:{status_background}; color:{status_color};'>{status_label}</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            (
-                "<div class='pre-detail-list'>"
-                f"<div class='pre-detail-row'><strong>Beneficio dominante</strong><span>{focus_benefit_label}</span></div>"
-                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{focus_details['summary'] if focus_details and focus_details['summary'] else 'Caso pronto para leitura executiva dentro do painel.'}</span></div>"
-                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{focus_details['next_step'] if focus_details and focus_details['next_step'] else 'Sem orientacao registrada ainda.'}</span></div>"
-                f"<div class='pre-detail-row'><strong>Risco documental</strong><span>{', '.join(pending_required_names[:3]) if pending_required_names else 'Sem pendencias criticas nos documentos obrigatorios.'}</span></div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        action_cols = st.columns(2, gap="small")
-        with action_cols[0]:
-            if st.button("Abrir no CRM", key="dashboard_open_crm_focus", use_container_width=True):
-                st.session_state.selected_crm_case_id = int(focus_record["id"])
-                set_current_view("crm")
-                st.rerun()
-        with action_cols[1]:
-            secondary_label = "Abrir contratos" if normalized_status == "aprovado" else "Abrir dossie"
-            if st.button(secondary_label, key="dashboard_open_workspace_focus", use_container_width=True):
-                if normalized_status == "aprovado":
-                    st.session_state.selected_contract_attendance_id = int(focus_record["id"])
-                    set_current_view("contratos")
-                else:
-                    st.session_state.selected_attendance_id = int(focus_record["id"])
-                    st.session_state.selected_document_attendance_id = int(focus_record["id"])
-                    set_current_view("leads")
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    insight_cols = st.columns([1.0, 1.0], gap="large")
-    with insight_cols[0]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Origem e resultado</h3>", unsafe_allow_html=True)
-        st.caption("Leitura gerencial da conversao por fluxo monitorado no escritorio.")
-        if source_df.empty:
-            st.info("Ainda nao ha volume suficiente para distribuir resultados por fluxo.")
-        else:
-            st.bar_chart(
-                source_df,
-                x="Fonte",
-                y=["Qualificados", "Em revisao", "Desqualificados"],
-                horizontal=True,
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with insight_cols[1]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Ritmo da carteira</h3>", unsafe_allow_html=True)
-        st.caption("Entradas recentes e tracao comercial monitoradas dia a dia.")
-        if activity_df.empty:
-            st.info("Sem movimentacao recente suficiente para o grafico diario.")
-        else:
-            st.line_chart(activity_df, x="Dia", y="Casos")
-        st.caption(f"Taxa global de qualificacao: {conversion_rate:.1f}%")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    lower_cols = st.columns([1.08, 0.92], gap="large")
-    with lower_cols[0]:
-        st.markdown("<div class='pre-card pre-dataframe-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Mesa executiva da carteira</h3>", unsafe_allow_html=True)
-        st.caption("Leads mais recentes com etapa, score, documentos e honorario potencial.")
-        st.dataframe(case_df, hide_index=True, use_container_width=True)
-        quick_cases = pipeline_records[:4]
-        if quick_cases:
-            quick_cols = st.columns(len(quick_cases))
-            for col, item in zip(quick_cols, quick_cases):
-                with col:
-                    if st.button(
-                        f"Focar #{item['id']}",
-                        key=f"dashboard_quick_focus_{item['id']}",
-                        use_container_width=True,
-                    ):
-                        st.session_state.pending_dashboard_case_id = int(item["id"])
+                action_cols = st.columns(2, gap="small")
+                with action_cols[0]:
+                    if st.button("Abrir no CRM", key="dashboard_open_crm_focus", use_container_width=True):
+                        st.session_state.selected_crm_case_id = int(focus_record["id"])
+                        set_current_view("crm")
                         st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+                with action_cols[1]:
+                    secondary_label = "Abrir contratos" if normalized_status == "aprovado" else "Abrir dossiê"
+                    if st.button(secondary_label, key="dashboard_open_workspace_focus", use_container_width=True):
+                        if normalized_status == "aprovado":
+                            st.session_state.selected_contract_attendance_id = int(focus_record["id"])
+                            set_current_view("contratos")
+                        else:
+                            st.session_state.selected_attendance_id = int(focus_record["id"])
+                            st.session_state.selected_document_attendance_id = int(focus_record["id"])
+                            set_current_view("leads")
+                        st.rerun()
 
-    with lower_cols[1]:
-        st.markdown("<div class='pre-card pre-dataframe-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Risco documental</h3>", unsafe_allow_html=True)
-        st.caption("Casos com maior gap documental para atacar antes de perder timing juridico.")
-        if document_hotspot_df.empty:
-            st.info("Nao ha backlog documental relevante neste momento.")
-        else:
-            st.dataframe(document_hotspot_df, hide_index=True, use_container_width=True)
-        st.markdown(
-            (
-                "<div class='pre-meta-list' style='margin-top:1rem;'>"
-                f"<div class='pre-meta-item'><strong>Casos com estimativa</strong><span>{revenue_snapshot['tracked_cases']} caso(s) com potencial economico monitorado.</span></div>"
-                f"<div class='pre-meta-item'><strong>Receita mensal acompanhada</strong><span>{format_currency(float(revenue_snapshot['potential_monthly']))} em honorarios mensais potenciais.</span></div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+    with insight_tab:
+        insight_cols = st.columns(2, gap="medium")
+        with insight_cols[0]:
+            st.markdown("<h3 class='pre-section-title'>Origem e resultado</h3>", unsafe_allow_html=True)
+            st.caption("Conversão por fluxo monitorado no escritório.")
+            if source_df.empty:
+                st.info("Ainda não há volume suficiente para distribuir resultados por fluxo.")
+            else:
+                st.bar_chart(
+                    source_df,
+                    x="Fonte",
+                    y=["Qualificados", "Em revisao", "Desqualificados"],
+                    horizontal=True,
+                    color=["#42b83f", "#66b5e8", "#f22f5d"],
+                    height=205,
+                )
+        with insight_cols[1]:
+            st.markdown("<h3 class='pre-section-title'>Ritmo da carteira</h3>", unsafe_allow_html=True)
+            st.caption("Entradas recentes e tração comercial monitoradas dia a dia.")
+            if activity_df.empty:
+                st.info("Sem movimentação recente suficiente para o gráfico diário.")
+            else:
+                st.line_chart(activity_df, x="Dia", y="Casos", color="#2448a8", height=205)
+            st.caption(f"Taxa global de qualificação: {conversion_rate:.1f}%")
+
+    with portfolio_tab:
+        lower_cols = st.columns([1.08, 0.92], gap="medium")
+        with lower_cols[0]:
+            st.markdown("<h3 class='pre-section-title'>Mesa executiva da carteira</h3>", unsafe_allow_html=True)
+            st.caption("Leads recentes com etapa, score, documentos e honorário potencial.")
+            st.dataframe(case_df, hide_index=True, use_container_width=True, height=230)
+            quick_cases = pipeline_records[:4]
+            if quick_cases:
+                quick_cols = st.columns(len(quick_cases))
+                for col, item in zip(quick_cols, quick_cases):
+                    with col:
+                        if st.button(
+                            f"Focar #{item['id']}",
+                            key=f"dashboard_quick_focus_{item['id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.pending_dashboard_case_id = int(item["id"])
+                            st.rerun()
+
+        with lower_cols[1]:
+            st.markdown("<h3 class='pre-section-title'>Risco documental</h3>", unsafe_allow_html=True)
+            st.caption("Casos com maior gap documental para ação preventiva.")
+            if document_hotspot_df.empty:
+                st.info("Não há backlog documental relevante neste momento.")
+            else:
+                st.dataframe(document_hotspot_df, hide_index=True, use_container_width=True, height=230)
+            st.markdown(
+                (
+                    "<div class='law-pulse-inline'>"
+                    f"<span><strong>{revenue_snapshot['tracked_cases']}</strong> casos com estimativa</span>"
+                    f"<span><strong>{format_currency(float(revenue_snapshot['potential_monthly']))}</strong> receita mensal acompanhada</span>"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
 
 
 def render_crm_case_management(attendance_id: int, details: Any) -> None:
@@ -4071,29 +4216,25 @@ def render_operational_workspace() -> None:
     operational_tabs = st.tabs(["1. Nova triagem", "2. Documentos", "3. Casos salvos"])
     with operational_tabs[0]:
         render_operation_kpis()
-        st.divider()
-        left, center, right = st.columns([0.82, 1.42, 0.96], gap="large")
+        left, center, right = st.columns([0.78, 1.48, 0.94], gap="medium")
         with left:
-            st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-            render_recent_queue()
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                render_recent_queue()
         with center:
-            st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-            form_data = render_lead_form()
-            st.divider()
-            flow = FLOW_DEFINITIONS[st.session_state.selected_flow_id]
-            render_question_panel(flow, form_data)
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                form_data = render_lead_form()
+                st.divider()
+                flow = FLOW_DEFINITIONS[st.session_state.selected_flow_id]
+                render_question_panel(flow, form_data)
         with right:
             flow = FLOW_DEFINITIONS[st.session_state.selected_flow_id]
-            st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-            render_active_case_panel(flow, form_data)
-            st.divider()
-            if st.session_state.selected_flow_id == "salarioMaternidade":
-                render_salario_maternidade_calculator()
-                st.divider()
-            render_history(st.session_state.triage_state.history)
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                render_active_case_panel(flow, form_data)
+                if st.session_state.selected_flow_id == "salarioMaternidade":
+                    with st.expander("Calculadora de salário-maternidade", expanded=False):
+                        render_salario_maternidade_calculator()
+                with st.expander("Histórico da sessão", expanded=False):
+                    render_history(st.session_state.triage_state.history)
 
     with operational_tabs[1]:
         render_document_pipeline()
@@ -4126,41 +4267,20 @@ def render_leads_view() -> None:
         for column_id, label, subtitle, tone in PIPELINE_COLUMNS
     )
 
-    top_cols = st.columns([1.18, 0.82], gap="large")
-    with top_cols[0]:
-        st.markdown(
-            (
-                "<div class='pre-spotlight'>"
-                "<div class='eyebrow'>Fluxo de trabalho</div>"
-                "<h3>Comece um atendimento sem perder o contexto do caso.</h3>"
-                "<p>Use a primeira aba para a triagem. Quando o caso for qualificado ou ficar em revisão, os documentos aparecerão automaticamente na segunda aba.</p>"
-                "<div class='pre-inline-stats'>"
-                "<div class='pre-inline-stat'><strong>1</strong><span>cadastre e responda</span></div>"
-                "<div class='pre-inline-stat'><strong>2</strong><span>confira documentos</span></div>"
-                "<div class='pre-inline-stat'><strong>3</strong><span>acompanhe o caso</span></div>"
-                "</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-    with top_cols[1]:
+    with st.expander("Resumo do fluxo e da operação", expanded=False):
         next_priority = task_rows[0]["title"] if task_rows else "Sem fila critica imediata."
         st.markdown(
             (
-                "<div class='pre-card'>"
-                "<h3 class='pre-section-title'>Onde estou?</h3>"
-                "<div class='pre-meta-list'>"
-                f"<div class='pre-meta-item'><strong>Benefício selecionado</strong><span>{current_flow['name']}</span></div>"
-                f"<div class='pre-meta-item'><strong>Pergunta atual</strong><span>{current_step}</span></div>"
-                f"<div class='pre-meta-item'><strong>Próxima pendência</strong><span>{next_priority}</span></div>"
-                f"<div class='pre-meta-item'><strong>Casos qualificados</strong><span>{next((int(row['total']) for row in dashboard['by_status'] if row['status'] == 'aprovado'), 0)} caso(s).</span></div>"
-                "</div>"
+                "<div class='law-pulse-inline'>"
+                f"<span><strong>{current_flow['name']}</strong> benefício selecionado</span>"
+                f"<span><strong>{current_step}</strong> pergunta atual</span>"
+                f"<span><strong>{next((int(row['total']) for row in dashboard['by_status'] if row['status'] == 'aprovado'), 0)}</strong> casos qualificados</span>"
+                f"<span><strong>Próxima:</strong> {next_priority}</span>"
                 "</div>"
             ),
             unsafe_allow_html=True,
         )
-
-    st.markdown(f"<div class='pre-stage-strip'>{stage_cards_markup}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='pre-stage-strip'>{stage_cards_markup}</div>", unsafe_allow_html=True)
     render_operational_workspace()
 
 
@@ -4842,50 +4962,56 @@ def render_document_pipeline() -> None:
     )
 
     queue_rows = list_document_pipeline_attendances(status_filter=status_choice, limit=100)
-    left, right = st.columns([0.9, 1.4], gap="large")
+    queue_ids = [int(row["id"]) for row in queue_rows]
+    if queue_ids and st.session_state.selected_document_attendance_id not in queue_ids:
+        st.session_state.selected_document_attendance_id = queue_ids[0]
+    left, right = st.columns([0.72, 1.58], gap="medium")
 
     with left:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Fila de dossies</h3>", unsafe_allow_html=True)
-        st.caption("Casos prontos para leitura tecnica, consistencia e fechamento do dossie.")
-        if not queue_rows:
-            st.info("Ainda nao ha atendimentos prontos para a fase documental.")
-        else:
-            for row in queue_rows:
-                if int(row["required_total"] or 0) > 0:
-                    progress = f"{int(row['validated_total'] or 0)}/{int(row['required_total'] or 0)} obrigatorios"
-                else:
-                    progress = "Checklist aguardando inicializacao"
-                triage_status = "Em revisao" if row["triage_bucket"] == "revisao" else "Qualificado"
-                selected_class = (
-                    " selected"
-                    if int(st.session_state.selected_document_attendance_id or 0) == int(row["id"])
-                    else ""
+        with st.container(border=True):
+            st.markdown("<h3 class='pre-section-title'>Fila de dossiês</h3>", unsafe_allow_html=True)
+            st.caption("Escolha um caso para leitura técnica e fechamento documental.")
+            if not queue_rows:
+                st.info("Ainda não há atendimentos prontos para a fase documental.")
+            else:
+                selected_queue_id = st.selectbox(
+                    "Caso documental",
+                    options=queue_ids,
+                    format_func=lambda attendance_id: next(
+                        (
+                            f"#{row['id']} | {row['lead_name']} | {row['flow_name']}"
+                            for row in queue_rows
+                            if int(row["id"]) == int(attendance_id)
+                        ),
+                        f"Caso #{attendance_id}",
+                    ),
+                    key="selected_document_attendance_id",
+                    label_visibility="collapsed",
+                )
+                selected_row = next(
+                    row for row in queue_rows if int(row["id"]) == int(selected_queue_id)
+                )
+                progress = (
+                    f"{int(selected_row['validated_total'] or 0)}/{int(selected_row['required_total'] or 0)} obrigatórios"
+                    if int(selected_row["required_total"] or 0) > 0
+                    else "Checklist aguardando inicialização"
+                )
+                triage_status = (
+                    "Em revisão" if selected_row["triage_bucket"] == "revisao" else "Qualificado"
                 )
                 st.markdown(
                     (
-                        f"<div class='pre-lead-card{selected_class}'>"
-                        f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                        f"<p>{row['flow_name']}</p>"
+                        "<div class='pre-lead-card selected'>"
+                        f"<h5>#{selected_row['id']} - {selected_row['lead_name']}</h5>"
+                        f"<p>{selected_row['flow_name']}</p>"
                         f"<p>{progress}</p>"
-                        f"<p>{triage_status} | Ilegiveis: {int(row['illegible_total'] or 0)} | Inconsistentes: {int(row['inconsistent_total'] or 0)}</p>"
+                        f"<p>{triage_status} | Ilegíveis: {int(selected_row['illegible_total'] or 0)} | Inconsistentes: {int(selected_row['inconsistent_total'] or 0)}</p>"
                         "</div>"
                     ),
                     unsafe_allow_html=True,
                 )
-                if st.button(
-                    f"Operar dossie #{row['id']}",
-                    key=f"open_document_attendance_{row['id']}",
-                    use_container_width=True,
-                ):
-                    st.session_state.selected_document_attendance_id = int(row["id"])
-                    st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        if not st.session_state.selected_document_attendance_id and queue_rows:
-            st.session_state.selected_document_attendance_id = int(queue_rows[0]["id"])
-
         if not st.session_state.selected_document_attendance_id:
             st.info("Selecione um atendimento para operar o checklist documental.")
             return
@@ -5366,7 +5492,7 @@ def main() -> None:
         render_auth_screen()
         return
     render_admin_topbar()
-    shell_left, shell_right = st.columns([0.19, 0.81], gap="large")
+    shell_left, shell_right = st.columns([0.16, 0.84], gap="medium")
     with shell_left:
         with st.container(border=True):
             st.markdown("<span class='pre-sidebar-marker'></span>", unsafe_allow_html=True)
