@@ -7,6 +7,13 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from automation_orchestrator import (
+    EVENT_RULES,
+    process_event,
+    process_pending_events,
+    receive_and_process_event,
+    receive_event,
+)
 from auth_security import (
     credentials_configured,
     save_credentials,
@@ -20,6 +27,7 @@ from database import (
     complete_crm_task,
     create_crm_task,
     get_document_pipeline_summary,
+    get_integration_summary,
     get_crm_summary,
     get_crm_performance,
     get_attendance_details,
@@ -29,8 +37,12 @@ from database import (
     list_crm_activities,
     list_crm_tasks,
     list_document_pipeline_attendances,
+    list_integration_audit,
+    list_integration_events,
     list_recent_attendances,
     load_history,
+    retry_integration_event,
+    review_crm_task,
     save_attendance,
     search_attendances,
     update_crm_case,
@@ -208,6 +220,19 @@ PIPELINE_COLUMNS = [
     ("encerrado", "Encerrado", "Atendimento concluído", "soft-neutral"),
     ("perdido", "Perdido", "Sem contratação", "soft-red"),
 ]
+INTEGRATION_SOURCE_LABELS = {
+    "triagem_crm": "Triagem interna",
+    "whatsapp": "WhatsApp",
+    "datajud": "DataJud",
+    "publicacoes": "Publicações",
+    "meu_inss": "Meu INSS",
+}
+INTEGRATION_STATUS_LABELS = {
+    "pendente": "Na fila",
+    "processando": "Processando",
+    "concluido": "Concluído",
+    "falhou": "Falhou",
+}
 
 
 def inject_styles() -> None:
@@ -1922,6 +1947,8 @@ def ensure_session_defaults() -> None:
         st.session_state.auth_login_email = st.session_state.office_settings.get("responsavel_email", "")
     if "auth_login_password" not in st.session_state:
         st.session_state.auth_login_password = ""
+    if "last_automation_notice" not in st.session_state:
+        st.session_state.last_automation_notice = ""
 
 
 def render_panel_header(kicker: str, title: str, subtitle: str = "") -> None:
@@ -3453,16 +3480,28 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
         st.markdown("<h3 class='pre-section-title'>Tarefas abertas</h3>", unsafe_allow_html=True)
         with st.form(f"crm_task_{attendance_id}", clear_on_submit=True):
             task_title = st.text_input("Nova tarefa", placeholder="Ex.: Retornar ligação para a cliente")
+            task_description = st.text_area(
+                "Descrição da tarefa",
+                placeholder="Registre o objetivo, o contexto e o resultado esperado.",
+            )
             task_due = st.date_input("Prazo", value=date.today())
             task_owner = st.text_input("Responsável pela tarefa", value=str(details["assigned_to"] or ""))
+            task_priority = st.selectbox(
+                "Prioridade",
+                options=["baixa", "media", "alta", "critica"],
+                index=1,
+                format_func=lambda value: value.capitalize(),
+            )
             new_task = st.form_submit_button("Adicionar tarefa")
         if new_task:
             try:
                 create_crm_task(
                     attendance_id=attendance_id,
                     title=task_title,
+                    description=task_description,
                     due_at=task_due.isoformat(),
                     assigned_to=task_owner,
+                    priority=task_priority,
                 )
                 add_crm_activity(
                     attendance_id=attendance_id,
@@ -3476,20 +3515,62 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
         if not tasks:
             st.caption("Nenhuma tarefa aberta para este caso.")
         for task in tasks:
-            task_line, complete_line = st.columns([0.8, 0.2])
-            with task_line:
-                st.markdown(
-                    f"**{task['title']}**  \nPrazo: {task['due_at'] or 'Não definido'} · {task['assigned_to'] or 'Sem responsável'}"
+            priority_label = str(task["priority"] or "media").capitalize()
+            source_label = "Automática" if task["source_event_id"] is not None else "Manual"
+            st.markdown(
+                (
+                    f"**{task['title']}**  \n"
+                    f"{task['description'] or 'Sem descrição.'}  \n"
+                    f"Prazo operacional: {task['due_at'] or 'Não definido'} · "
+                    f"{task['assigned_to'] or 'Sem responsável'} · {priority_label} · {source_label}"
                 )
-            with complete_line:
+            )
+            if int(task["requires_review"] or 0) and str(task["review_status"]) == "pendente":
+                st.warning(
+                    "Revisão humana obrigatória: confirme o termo inicial, a contagem e o calendário antes de aprovar."
+                )
+                review_due = st.date_input(
+                    "Prazo confirmado",
+                    value=date.fromisoformat(str(task["due_at"])[:10]) if task["due_at"] else date.today(),
+                    key=f"crm_task_review_due_{task['id']}",
+                )
+                review_cols = st.columns(2)
+                with review_cols[0]:
+                    if st.button("Aprovar tarefa", key=f"crm_task_approve_{task['id']}", use_container_width=True):
+                        review_crm_task(
+                            task_id=int(task["id"]),
+                            approved=True,
+                            due_at=review_due.isoformat(),
+                        )
+                        add_crm_activity(
+                            attendance_id=attendance_id,
+                            activity_type="Revisão humana",
+                            body=f"Tarefa aprovada: {task['title']}. Prazo confirmado: {review_due.isoformat()}.",
+                        )
+                        st.rerun()
+                with review_cols[1]:
+                    if st.button("Descartar tarefa", key=f"crm_task_reject_{task['id']}", use_container_width=True):
+                        review_crm_task(task_id=int(task["id"]), approved=False)
+                        add_crm_activity(
+                            attendance_id=attendance_id,
+                            activity_type="Revisão humana",
+                            body=f"Tarefa automática descartada: {task['title']}.",
+                        )
+                        st.rerun()
+            else:
                 if st.button("Concluir", key=f"crm_task_done_{task['id']}"):
-                    complete_crm_task(int(task["id"]))
-                    add_crm_activity(
-                        attendance_id=attendance_id,
-                        activity_type="Tarefa concluída",
-                        body=str(task["title"]),
-                    )
-                    st.rerun()
+                    try:
+                        complete_crm_task(int(task["id"]))
+                    except ValueError as error:
+                        st.error(str(error))
+                    else:
+                        add_crm_activity(
+                            attendance_id=attendance_id,
+                            activity_type="Tarefa concluída",
+                            body=str(task["title"]),
+                        )
+                        st.rerun()
+            st.divider()
 
     with timeline_col:
         st.markdown("<h3 class='pre-section-title'>Histórico de relacionamento</h3>", unsafe_allow_html=True)
@@ -3519,6 +3600,184 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
             st.divider()
 
 
+def render_automation_center(pipeline_records: list[dict[str, Any]]) -> None:
+    summary = get_integration_summary()
+    st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
+    render_panel_header(
+        "Orquestração",
+        "Central de automações",
+        "Eventos idempotentes alimentam tarefas internas; prazos jurídicos permanecem sujeitos à validação humana.",
+    )
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Na fila", summary["pending"])
+    metric_cols[1].metric("Processando", summary["processing"])
+    metric_cols[2].metric("Concluídos", summary["completed"])
+    metric_cols[3].metric("Falhas", summary["failed"])
+    metric_cols[4].metric("Revisões humanas", summary["pending_review"])
+
+    action_cols = st.columns([0.34, 0.66], gap="medium")
+    with action_cols[0]:
+        if st.button("Processar fila agora", key="process_integration_queue", use_container_width=True):
+            results = process_pending_events(limit=50)
+            failed = len([result for result in results if result.status == "falhou"])
+            if failed:
+                st.error(f"{failed} evento(s) falharam. Consulte a trilha abaixo.")
+            else:
+                st.success(f"{len(results)} evento(s) processados com segurança.")
+            st.rerun()
+    with action_cols[1]:
+        st.info(
+            "Publicações, movimentações e exigências criam tarefas bloqueadas até um responsável confirmar o prazo."
+        )
+
+    with st.expander("Entrada assistida de evento", expanded=False):
+        st.caption(
+            "Use este formulário enquanto os conectores externos não estão habilitados. A referência evita duplicidade."
+        )
+        if not pipeline_records:
+            st.warning("Cadastre ao menos um atendimento antes de registrar eventos.")
+        else:
+            case_options = [int(record["id"]) for record in pipeline_records]
+            event_labels = {
+                event_type: str(rule["label"])
+                for event_type, rule in EVENT_RULES.items()
+                if event_type != "lead.qualified"
+            }
+            with st.form("manual_integration_event", clear_on_submit=True):
+                event_case_id = st.selectbox(
+                    "Caso vinculado",
+                    options=case_options,
+                    format_func=lambda case_id: next(
+                        (
+                            f"#{record['id']} | {record['lead_name']} | {record['flow_name']}"
+                            for record in pipeline_records
+                            if int(record["id"]) == int(case_id)
+                        ),
+                        f"Caso #{case_id}",
+                    ),
+                )
+                event_type = st.selectbox(
+                    "Tipo de evento",
+                    options=list(event_labels),
+                    format_func=lambda value: event_labels[value],
+                )
+                source = st.selectbox(
+                    "Origem",
+                    options=["publicacoes", "datajud", "meu_inss", "whatsapp"],
+                    format_func=lambda value: INTEGRATION_SOURCE_LABELS[value],
+                )
+                external_reference = st.text_input(
+                    "Referência única",
+                    placeholder="Ex.: publicação 12345 ou movimentação 85-2026",
+                )
+                event_summary = st.text_area(
+                    "Resumo recebido",
+                    placeholder="Cole o teor essencial para a triagem e para a tarefa.",
+                )
+                suggested_due_at = st.text_input(
+                    "Data operacional sugerida (opcional)",
+                    placeholder="AAAA-MM-DD — será confirmada por um responsável",
+                )
+                event_owner = st.text_input(
+                    "Responsável sugerido (opcional)",
+                    placeholder="Se vazio, usa o responsável do caso.",
+                )
+                submit_event = st.form_submit_button(
+                    "Registrar e processar evento", type="primary", use_container_width=True
+                )
+            if submit_event:
+                invalid_suggested_date = False
+                if suggested_due_at.strip():
+                    try:
+                        date.fromisoformat(suggested_due_at.strip())
+                    except ValueError:
+                        invalid_suggested_date = True
+                if not external_reference.strip() or not event_summary.strip():
+                    st.error("Informe a referência única e o resumo do evento.")
+                elif invalid_suggested_date:
+                    st.error("A data operacional sugerida deve usar o formato AAAA-MM-DD.")
+                else:
+                    receipt = receive_event(
+                        event_type=event_type,
+                        source=source,
+                        attendance_id=int(event_case_id),
+                        external_reference=external_reference,
+                        payload={
+                            "summary": event_summary,
+                            "suggested_due_at": suggested_due_at,
+                            "assigned_to": event_owner,
+                        },
+                    )
+                    if not receipt.created:
+                        st.warning("Esse evento já havia sido recebido; nenhuma tarefa duplicada foi criada.")
+                    else:
+                        result = process_event(receipt.event_id)
+                        if result.status == "concluido":
+                            st.success(f"Evento processado e tarefa #{result.task_id} criada.")
+                        else:
+                            st.error(f"O evento foi registrado, mas falhou: {result.error}")
+                    st.rerun()
+
+    events = list_integration_events(limit=20)
+    if events:
+        event_rows = [
+            {
+                "ID": int(event["id"]),
+                "Evento": str(EVENT_RULES.get(str(event["event_type"]), {}).get("label", event["event_type"])),
+                "Origem": INTEGRATION_SOURCE_LABELS.get(str(event["source"]), str(event["source"])),
+                "Caso": f"#{event['attendance_id']} | {event['lead_name'] or 'Não localizado'}",
+                "Prioridade": str(event["priority"]).capitalize(),
+                "Status": INTEGRATION_STATUS_LABELS.get(str(event["status"]), str(event["status"])),
+                "Revisão": str(event["task_review_status"] or "-").replace("_", " ").capitalize(),
+                "Recebido": str(event["received_at"]),
+            }
+            for event in events
+        ]
+        st.dataframe(pd.DataFrame(event_rows), hide_index=True, use_container_width=True)
+
+        failed_events = [event for event in events if str(event["status"]) == "falhou"]
+        if failed_events:
+            failed_id = st.selectbox(
+                "Evento com falha",
+                options=[int(event["id"]) for event in failed_events],
+                format_func=lambda event_id: next(
+                    f"#{event['id']} | {event['last_error']}"
+                    for event in failed_events
+                    if int(event["id"]) == event_id
+                ),
+            )
+            if st.button("Reenfileirar evento", key="retry_integration_event"):
+                retry_integration_event(int(failed_id))
+                st.success("Evento devolvido à fila.")
+                st.rerun()
+
+        with st.expander("Trilha de auditoria", expanded=False):
+            audit_event_id = st.selectbox(
+                "Evento",
+                options=[int(event["id"]) for event in events],
+                key="automation_audit_event_id",
+            )
+            audit_rows = list_integration_audit(int(audit_event_id))
+            if audit_rows:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Quando": row["created_at"],
+                                "Ação": str(row["action"]).replace("_", " ").capitalize(),
+                                "Detalhes": row["details_json"],
+                            }
+                            for row in audit_rows
+                        ]
+                    ),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+    else:
+        st.caption("Nenhum evento de integração foi recebido ainda.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def render_crm_view() -> None:
     render_shell_page_header(
         "CRM Juridico",
@@ -3541,6 +3800,7 @@ def render_crm_view() -> None:
             for row in crm_performance["by_source"]
         ]
         st.dataframe(pd.DataFrame(source_rows), hide_index=True, use_container_width=True)
+    render_automation_center(all_pipeline_records)
     search_value = ""
     stage_filter = "todos"
 
@@ -4093,64 +4353,9 @@ def render_contracts_view() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-def _legacy_render_onboarding_preview(settings: dict[str, Any]) -> None:
-    st.markdown(
-        f"""
-        <div class="pre-onboarding-shell">
-          <div class="pre-page-header" style="text-align:center;">
-            <h2 style="color:#2f5bea;">{BRAND_NAME}</h2>
-            <p>{AGENT_NAME} | {BRAND_SLOGAN}</p>
-          </div>
-          <div class="pre-stepper">
-            <div class="pre-step done">✓</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step done">✓</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step active">3</div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("<div class='pre-onboarding-card'>", unsafe_allow_html=True)
-    render_panel_header(
-        "Conta",
-        f"Dados do escritorio, plano e agente {AGENT_NAME}",
-        f"Parametrize o escritorio, responsavel pela conta e a politica comercial padrao da {BRAND_NAME}.",
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_onboarding_preview(settings: dict[str, Any]) -> None:
-    preview_markup = f"""
-        <div class="pre-onboarding-shell">
-          <div class="pre-page-header" style="text-align:center;">
-            <h2 style="color:#2f5bea;">{BRAND_NAME}</h2>
-            <p>{AGENT_NAME} | {BRAND_SLOGAN}</p>
-          </div>
-          <div class="pre-stepper">
-            <div class="pre-step done">&#10003;</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step done">&#10003;</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step active">3</div>
-          </div>
-        </div>
-    """
-    st.markdown(preview_markup, unsafe_allow_html=True)
-    st.markdown("<div class='pre-onboarding-card'>", unsafe_allow_html=True)
-    render_panel_header(
-        "Conta",
-        f"Dados do escritorio, plano e agente {AGENT_NAME}",
-        f"Parametrize o escritorio, responsavel pela conta e a politica comercial padrao da {BRAND_NAME}.",
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
 def render_settings_view() -> None:
     settings = st.session_state.office_settings
-    render_shell_page_header("Configuracoes do Escritorio", f"{AGENT_NAME} aplicada ao escritorio com honorarios, plano e materiais de assinatura.")
-    render_onboarding_preview(settings)
+    render_shell_page_header("Configuracoes do Escritorio", f"{AGENT_NAME} aplicada ao escritorio com honorarios e materiais de assinatura.")
 
     st.markdown("<div class='pre-two-column'>", unsafe_allow_html=True)
     left, right = st.columns(2, gap="large")
@@ -4176,10 +4381,6 @@ def render_settings_view() -> None:
 
     with right:
         st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        plano = render_plan_selector(settings.get("plano", "Essencial"))
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='pre-section-title'>Honorarios por beneficio (%)</h3>", unsafe_allow_html=True)
         fee_percentages = dict(settings.get("fee_percentages", {}))
         fee_cols = st.columns(2, gap="medium")
@@ -4199,7 +4400,6 @@ def render_settings_view() -> None:
         st.markdown("<h3 class='pre-section-title'>Resumo operacional</h3>", unsafe_allow_html=True)
         st.markdown(
             (
-                f"<p><strong>Plano atual:</strong> {plano}</p>"
                 f"<p><strong>Escritorio:</strong> {office_name or 'Nao configurado'}</p>"
                 f"<p><strong>Responsavel:</strong> {responsavel_nome or 'Nao configurado'}</p>"
             ),
@@ -4213,7 +4413,7 @@ def render_settings_view() -> None:
             "responsavel_nome": responsavel_nome.strip(),
             "responsavel_email": responsavel_email.strip(),
             "responsavel_whatsapp": responsavel_whatsapp.strip(),
-            "plano": plano,
+            "plano": settings.get("plano", "Essencial"),
             "office_name": office_name.strip(),
             "oab": oab.strip(),
             "tutorial_video_url": tutorial_video_url.strip(),
@@ -4221,7 +4421,6 @@ def render_settings_view() -> None:
         }
         save_office_settings(updated_settings)
         st.session_state.office_settings = load_office_settings()
-        st.session_state.settings_plan = updated_settings["plano"]
         st.success("Configuracoes salvas com sucesso.")
 
 
@@ -4524,6 +4723,25 @@ def render_result_panel(flow: dict[str, Any], form_data: dict[str, Any]) -> None
             st.session_state.saved_result_id = saved_id
             st.session_state.selected_attendance_id = saved_id
             st.session_state.selected_document_attendance_id = saved_id
+            if result["status"] == "aprovado":
+                automation_result = receive_and_process_event(
+                    event_type="lead.qualified",
+                    source="triagem_crm",
+                    attendance_id=saved_id,
+                    external_reference=f"triagem-{saved_id}",
+                    payload={
+                        "summary": result["summary"],
+                        "assigned_to": "Equipe de triagem",
+                    },
+                )
+                if automation_result.status == "concluido":
+                    st.session_state.last_automation_notice = (
+                        f"Automação concluída: tarefa #{automation_result.task_id} criada no CRM."
+                    )
+                elif automation_result.status == "falhou":
+                    st.session_state.last_automation_notice = (
+                        "O atendimento foi salvo, mas a automação ficou registrada com falha para reprocessamento."
+                    )
             st.rerun()
     with col2:
         if st.button("Nova triagem", use_container_width=True):
@@ -4532,6 +4750,9 @@ def render_result_panel(flow: dict[str, Any], form_data: dict[str, Any]) -> None
 
     if st.session_state.saved_result_id:
         st.success(f"Atendimento salvo com sucesso. Registro #{st.session_state.saved_result_id}.")
+        if st.session_state.last_automation_notice:
+            st.info(st.session_state.last_automation_notice)
+            st.session_state.last_automation_notice = ""
         if result["status"] in {"aprovado", "revisao"}:
             render_document_journey_preview(
                 attendance_id=int(st.session_state.saved_result_id),

@@ -4,6 +4,7 @@ Aplicacao local em Python + Streamlit para operacao previdenciaria com:
 
 - triagem guiada de leads
 - CRM jurídico com etapas, conflito de interesse, responsável, tarefas e histórico de interações
+- orquestrador interno de eventos com fila, idempotência, auditoria e revisão humana de tarefas críticas
 - checklist documental por beneficio
 - leitura tecnica local de PDF e imagem
 - preview de contratos e configuracoes do escritorio
@@ -65,3 +66,12 @@ Para leitura documental local mais completa, o ambiente pode exigir:
 - Faça a checagem de conflito antes de orientar juridicamente, enviar proposta ou liberar contrato.
 - Use o histórico de relacionamento para registrar ligações, WhatsApp, e-mails, reuniões e notas internas.
 - O contrato permanece bloqueado até que a checagem de conflito esteja marcada como liberada.
+- Eventos repetidos não criam tarefas duplicadas.
+- Publicações, movimentações e exigências geram datas operacionais sugeridas; um responsável deve confirmar qualquer prazo jurídico.
+- A integração com Astrea foi excluída. Kanban, tarefas, documentos e auditoria pertencem ao CRM próprio.
+
+## Testes
+
+```powershell
+py -m unittest discover -s tests -v
+```

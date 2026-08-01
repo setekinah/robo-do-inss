@@ -26,6 +26,7 @@ Hoje o sistema entrega cinco capacidades centrais:
 - persistencia local de atendimentos em SQLite
 - fase documental com checklist por beneficio, upload e leitura tecnica local
 - camada operacional com dashboard, CRM, contratos e configuracoes do escritorio
+- barramento interno de eventos com fila persistente, idempotencia, auditoria e tarefas automaticas
 
 O sistema ainda nao e um SaaS multiusuario real. Ele hoje funciona como um produto local com experiencia visual de SaaS.
 
@@ -54,6 +55,8 @@ Isso significa que a experiencia visual ja aponta para um produto comercial, mas
 - OCR local com `pytesseract` + executavel Tesseract quando disponivel
 - preview de contrato padrao de honorarios
 - calculadora de salario-maternidade
+- credencial local protegida por hash com salt
+- central de automacoes e bloqueio de tarefas juridicas ate revisao humana
 
 ### 3.3 O que hoje aparece mais como visao de produto do que como modulo pronto
 
@@ -79,10 +82,12 @@ flowchart LR
     B --> G["Armazenamento de uploads<br/>document_storage.py"]
     B --> H["Leitura tecnica local<br/>document_intelligence.py"]
     B --> I["Configuracoes do escritorio<br/>office_settings.py"]
+    B --> M["Orquestrador de eventos<br/>automation_orchestrator.py"]
 
     E --> J["data/triagem.db ou LOCALAPPDATA"]
     G --> K["data/uploads/"]
     I --> L["data/office_settings.json"]
+    M --> E
 ```
 
 Leitura pratica:
@@ -144,6 +149,9 @@ as dependencias documentais aparecem hoje como opcionais em comentario no `requi
 | `document_storage.py` | Gravacao local dos uploads anexados ao atendimento |
 | `document_intelligence.py` | Extracao local de texto, OCR e leitura heuristica dos campos criticos |
 | `office_settings.py` | Configuracoes do escritorio e percentuais de honorarios |
+| `auth_security.py` | Validacao e armazenamento local de credenciais protegidas por PBKDF2 |
+| `automation_orchestrator.py` | Recepcao idempotente, processamento e roteamento de eventos para tarefas do CRM |
+| `runtime_paths.py` | Diretorio unico e configuravel para todos os dados operacionais |
 | `iniciar_robo_inss.bat` | Inicializacao direta do Streamlit |
 | `iniciar_robo_inss_completo.bat` | Inicializacao com verificacao de ambiente e abertura automatica do navegador |
 
@@ -538,29 +546,17 @@ Risco:
 - maior chance de regressao visual e funcional
 - dificuldade para testes automatizados
 
-## 12.2 Inconsistencia de caminho de dados
+## 12.2 Diretorio operacional unificado
 
-Hoje existe um desalinhamento importante:
+`database.py`, `office_settings.py`, `document_storage.py` e `auth_security.py` usam o diretorio resolvido por `runtime_paths.py`.
 
-- `database.py` prefere `%LOCALAPPDATA%\\Robo do INSS\\data`
-- `office_settings.py` grava em `data/office_settings.json` dentro do repositorio
-- `document_storage.py` grava em `data/uploads/` dentro do repositorio
+Por padrao, o Windows utiliza `%LOCALAPPDATA%\\Robo do INSS\\data`. Testes podem definir `ROBO_INSS_DATA_DIR` para isolar totalmente os dados.
 
-Risco:
+## 12.3 Autenticacao local
 
-o sistema passa a ter multiplos "sources of truth" locais para dados operacionais.
+O login possui uma conta local persistida com PBKDF2-HMAC-SHA256, salt aleatorio e comparacao em tempo constante.
 
-Esse e um dos pontos mais importantes a corrigir na proxima fase.
-
-## 12.3 Autenticacao apenas de sessao
-
-O login/onboarding atual e visual e local.
-
-Na pratica:
-
-- nao ha usuario persistido em banco
-- nao ha hash de senha
-- nao ha controle real de acesso por escritorio
+Ainda nao ha multiusuario, identidade remota, recuperacao de senha ou permissao por perfil. A autenticacao atual e adequada ao MVP local, nao a um SaaS exposto na internet.
 
 ## 12.4 OCR depende de ambiente
 
@@ -684,7 +680,39 @@ Estas decisoes devem orientar novas implementacoes:
 
 ---
 
-## 16. Resumo executivo
+## 16. Orquestracao interna de eventos
+
+A primeira camada de integracao foi implementada sem dependencia do Astrea.
+
+### Eventos suportados
+
+- `lead.qualified`
+- `whatsapp.lead.qualified`
+- `process.movement.received`
+- `publication.received`
+- `inss.requirement.detected`
+
+### Persistencia
+
+- `integration_events`: fila, payload, origem, chave idempotente, tentativas e falhas
+- `integration_audit_log`: trilha cronologica de recepcao, tarefa, falha e revisao
+- `crm_tarefas.source_event_id`: vinculo unico que impede tarefas duplicadas
+
+### Garantias de negocio
+
+1. Eventos repetidos retornam o registro existente.
+2. Uma origem externa nao escreve diretamente nas telas ou nas tabelas de dominio.
+3. Publicacoes, movimentacoes e exigencias criam somente prioridade e data operacional sugerida.
+4. Tarefas juridicas criticas nao podem ser concluidas antes da revisao humana.
+5. Aprovacao e rejeicao entram na trilha de auditoria.
+6. Astrea nao integra nem faz parte da arquitetura alvo.
+7. Senhas GOV.BR e cookies de clientes nao devem ser armazenados pelo produto.
+
+Conectores futuros devem chamar `receive_event` e nunca contornar o orquestrador.
+
+---
+
+## 17. Resumo executivo
 
 O `SOFI.IA PREVI` ja tem uma espinha dorsal forte:
 
