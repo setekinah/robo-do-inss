@@ -1715,6 +1715,81 @@ def inject_styles() -> None:
     )
 
 
+def inject_lawfirm_admin_theme() -> None:
+    """Apply the visual language of the selected law-firm admin reference."""
+    st.markdown(
+        """
+        <style>
+        :root {
+            --admin-blue: #2448a8;
+            --admin-coral: #f22f5d;
+            --admin-green: #42b83f;
+            --admin-amber: #ffae19;
+            --admin-ink: #17243b;
+            --admin-muted: #8290a6;
+            --admin-bg: #f6f8fc;
+        }
+        .stApp { background: var(--admin-bg) !important; }
+        [data-testid="stHeader"] { background: rgba(255,255,255,.94) !important; border-bottom: 1px solid #edf0f6; }
+        [data-testid="stDecoration"], footer { display: none !important; }
+        .block-container { max-width: 1500px; padding-top: 1.1rem; padding-bottom: 3rem; }
+        .law-admin-topbar {
+            display:flex; align-items:center; justify-content:space-between; gap:1rem;
+            background:#fff; border:1px solid #edf0f6; border-radius:8px;
+            padding:.75rem 1rem; margin-bottom:1rem; box-shadow:0 4px 16px rgba(35,55,95,.05);
+        }
+        .law-admin-topbar strong { color:var(--admin-ink); font-size:1rem; }
+        .law-admin-topbar span { color:var(--admin-muted); font-size:.84rem; }
+        .law-admin-search { min-width:280px; background:#f7f8fb; border:1px solid #edf0f6; border-radius:6px; padding:.55rem .8rem; color:#9aa5b6; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) {
+            background:#fff !important; color:var(--admin-ink) !important; border:1px solid #edf0f6 !important;
+            border-radius:8px !important; box-shadow:0 4px 18px rgba(35,55,95,.06) !important;
+            min-height:calc(100vh - 7rem) !important; padding:1rem .8rem !important;
+        }
+        .pre-sidebar-marker { display:none; }
+        .pre-brand h1, .pre-sidebar-value { color:var(--admin-blue) !important; }
+        .pre-brand p, .pre-sidebar-label, .pre-sidebar-caption { color:var(--admin-muted) !important; }
+        .pre-sidebar-panel { background:#f7f8fb !important; border:1px solid #edf0f6 !important; border-radius:7px !important; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) .stButton > button { border-radius:6px !important; min-height:2.6rem !important; text-align:left !important; box-shadow:none !important; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) .stButton > button[kind="primary"] { background:var(--admin-blue) !important; color:#fff !important; border-color:var(--admin-blue) !important; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) .stButton > button[kind="secondary"] { background:#fff !important; color:#59667a !important; border-color:transparent !important; }
+        .pre-content { padding:0 !important; }
+        .pre-page-header { background:transparent !important; border:0 !important; box-shadow:none !important; padding:.3rem 0 1rem !important; }
+        .pre-page-header h2 { color:var(--admin-ink) !important; font-family:"Manrope", sans-serif !important; font-size:1.55rem !important; }
+        .pre-page-header p { color:var(--admin-muted) !important; }
+        .pre-card, .pre-metric-card, .pre-stage-card, .panel-box, .surface-card {
+            background:#fff !important; border:1px solid #edf0f6 !important; border-radius:8px !important;
+            box-shadow:0 5px 18px rgba(35,55,95,.07) !important;
+        }
+        .pre-metric-card h3 { color:var(--admin-blue) !important; font-family:"Manrope", sans-serif !important; }
+        .pre-metric-card.soft-green h3, .pre-stage-card.soft-green strong { color:var(--admin-green) !important; }
+        .pre-metric-card.soft-orange h3, .pre-stage-card.soft-orange strong { color:var(--admin-amber) !important; }
+        .pre-metric-card.soft-red h3, .pre-task-priority.alta { color:var(--admin-coral) !important; }
+        .pre-spotlight { background:linear-gradient(135deg,#2448a8,#18347f) !important; border-radius:8px !important; box-shadow:0 8px 24px rgba(36,72,168,.18) !important; }
+        .pre-kanban-column, [data-testid="stDataFrame"] { border-radius:8px !important; border-color:#edf0f6 !important; box-shadow:0 4px 14px rgba(35,55,95,.05) !important; }
+        [data-testid="stMetric"] { background:#fff; border:1px solid #edf0f6; padding:.8rem; border-radius:8px; box-shadow:0 4px 14px rgba(35,55,95,.05); }
+        .stTabs [data-baseweb="tab"] { border-radius:6px !important; }
+        button[kind="primary"] { background:var(--admin-blue) !important; border-color:var(--admin-blue) !important; }
+        @media (max-width: 900px) { .law-admin-search { display:none; } div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) { min-height:auto !important; } }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_admin_topbar() -> None:
+    st.markdown(
+        """
+        <div class="law-admin-topbar">
+          <div><strong>SOFI.IA PREVI</strong><br><span>Administração jurídica e relacionamento</span></div>
+          <div class="law-admin-search">Painel jurídico &nbsp;•&nbsp; CRM &nbsp;•&nbsp; Documentos</div>
+          <div><strong>Operação ativa</strong><br><span>Dados locais protegidos</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def ensure_session_defaults() -> None:
     if "selected_flow_id" not in st.session_state:
         st.session_state.selected_flow_id = next(iter(FLOW_DEFINITIONS.keys()))
@@ -4900,19 +4975,19 @@ def render_current_view() -> None:
 def main() -> None:
     init_database()
     inject_styles()
+    inject_lawfirm_admin_theme()
     ensure_session_defaults()
     if not st.session_state.is_authenticated:
         render_auth_screen()
         return
-    shell_left, shell_right = st.columns([0.18, 0.82], gap="large")
+    render_admin_topbar()
+    shell_left, shell_right = st.columns([0.19, 0.81], gap="large")
     with shell_left:
-        st.markdown("<div class='pre-sidebar'>", unsafe_allow_html=True)
-        render_previa_sidebar()
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<span class='pre-sidebar-marker'></span>", unsafe_allow_html=True)
+            render_previa_sidebar()
     with shell_right:
-        st.markdown("<div class='pre-content'>", unsafe_allow_html=True)
         render_current_view()
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
