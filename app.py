@@ -8,16 +8,23 @@ import pandas as pd
 import streamlit as st
 
 from database import (
+    add_crm_activity,
+    complete_crm_task,
+    create_crm_task,
     get_document_pipeline_summary,
+    get_crm_summary,
     get_attendance_details,
     get_dashboard_summary,
     init_database,
     list_attendance_documents,
+    list_crm_activities,
+    list_crm_tasks,
     list_document_pipeline_attendances,
     list_recent_attendances,
     load_history,
     save_attendance,
     search_attendances,
+    update_crm_case,
     update_attendance_document,
 )
 from document_intelligence import analyze_document_bundle
@@ -72,6 +79,23 @@ NAV_ITEMS = [
     ("contratos", "Contratos", "📄"),
     ("configuracoes", "Configurações", "⚙️"),
 ]
+
+CRM_STAGES = [
+    ("novo_contato", "Novo contato"),
+    ("conflito", "Conflito pendente"),
+    ("triagem", "Triagem"),
+    ("reuniao", "Reunião"),
+    ("proposta", "Proposta / contrato"),
+    ("documentos", "Documentos"),
+    ("caso_ativo", "Caso ativo"),
+    ("encerrado", "Encerrado"),
+    ("perdido", "Perdido"),
+]
+CONFLICT_STATUS = {
+    "pendente": "Pendente de checagem",
+    "liberado": "Liberado",
+    "conflito": "Conflito identificado",
+}
 
 FEATURE_CARDS = [
     (
@@ -165,12 +189,15 @@ AUTH_HIGHLIGHTS = [
     ("03", "Contrato sem friccao", "O escritorio aprova e a esteira segue para assinatura, coleta e acompanhamento."),
 ]
 PIPELINE_COLUMNS = [
-    ("em_triagem", "Em Triagem", "Respondendo questionario", "soft-yellow"),
-    ("aguardando_analise", "Aguardando Analise", "Validar beneficio", "soft-blue"),
-    ("contrato_enviado", "Contrato Enviado", "Aguardando assinatura", "soft-purple"),
-    ("contrato_assinado", "Contrato Assinado", "Iniciando coleta", "soft-green"),
-    ("coletando_documentos", "Coletando Documentos", "Aguardando docs do lead", "soft-orange"),
+    ("novo_contato", "Novo contato", "Entrada e retorno", "soft-blue"),
+    ("conflito", "Conflito", "Checagem obrigatória", "soft-yellow"),
+    ("triagem", "Triagem", "Entender o caso", "soft-purple"),
+    ("reuniao", "Reunião", "Análise com advogado", "soft-teal"),
+    ("proposta", "Proposta", "Contrato e contratação", "soft-green"),
+    ("documentos", "Documentos", "Checklist e validação", "soft-orange"),
     ("caso_ativo", "Caso Ativo", "Com o advogado", "soft-teal"),
+    ("encerrado", "Encerrado", "Atendimento concluído", "soft-neutral"),
+    ("perdido", "Perdido", "Sem contratação", "soft-red"),
 ]
 
 
@@ -2130,12 +2157,15 @@ def build_pipeline_records(limit: int = 200) -> list[dict[str, Any]]:
             for document in documents
         )
         score = build_document_case_score(documents)
-        stage = infer_pipeline_stage(
+        inferred_stage = infer_pipeline_stage(
             status=str(row["status"]),
             required_total=required_total,
             validated_total=validated_total,
             uploaded_total=uploaded_total,
         )
+        valid_stages = {column_id for column_id, *_ in PIPELINE_COLUMNS}
+        configured_stage = str(row["crm_stage"] or "")
+        stage = configured_stage if configured_stage in valid_stages else inferred_stage
         records.append(
             {
                 "id": int(row["id"]),
@@ -2153,6 +2183,10 @@ def build_pipeline_records(limit: int = 200) -> list[dict[str, Any]]:
                 "score": score["score"],
                 "score_label": score["label"],
                 "stage": stage,
+                "conflict_status": row["conflict_status"],
+                "assigned_to": row["assigned_to"],
+                "next_action": row["next_action"],
+                "next_action_at": row["next_action_at"],
             }
         )
     return records
@@ -2167,17 +2201,17 @@ def infer_pipeline_stage(
 ) -> str:
     normalized = normalize_triage_status(status)
     if normalized == "revisao":
-        return "aguardando_analise" if uploaded_total == 0 else "coletando_documentos"
+        return "documentos"
     if normalized == "desqualificado":
-        return "em_triagem"
+        return "perdido"
     if required_total == 0:
-        return "contrato_enviado"
+        return "triagem"
     if uploaded_total == 0:
-        return "contrato_enviado"
+        return "documentos"
     if validated_total == 0:
-        return "contrato_assinado"
+        return "documentos"
     if validated_total < required_total:
-        return "coletando_documentos"
+        return "documentos"
     return "caso_ativo"
 
 
@@ -2189,10 +2223,10 @@ def build_dashboard_metrics() -> list[dict[str, Any]]:
 
     return [
         {"label": "Total", "value": len(pipeline_records), "tone": "soft-neutral"},
-        {"label": "Em Triagem", "value": totals["em_triagem"], "tone": "soft-yellow"},
-        {"label": "Aguardando Analise", "value": totals["aguardando_analise"], "tone": "soft-blue"},
-        {"label": "Contratos", "value": totals["contrato_enviado"] + totals["contrato_assinado"], "tone": "soft-green"},
-        {"label": "Coletando Docs", "value": totals["coletando_documentos"], "tone": "soft-orange"},
+        {"label": "Conflitos", "value": totals["conflito"], "tone": "soft-yellow"},
+        {"label": "Triagem", "value": totals["triagem"], "tone": "soft-blue"},
+        {"label": "Propostas", "value": totals["proposta"], "tone": "soft-green"},
+        {"label": "Documentos", "value": totals["documentos"], "tone": "soft-orange"},
         {"label": "Casos Ativos", "value": totals["caso_ativo"], "tone": "soft-teal"},
     ]
 
@@ -2313,19 +2347,19 @@ def build_recent_task_rows(
         ]
         stage = str(item["stage"])
 
-        if stage == "aguardando_analise":
-            title = "Validar elegibilidade e tese inicial"
-            description = "Caso em revisao aguardando confirmacao juridica."
+        if stage == "conflito":
+            title = "Executar checagem de conflito"
+            description = "Não avance com orientação jurídica ou contrato antes da liberação."
             priority = "Alta"
-        elif stage == "contrato_enviado":
-            title = "Acompanhar contrato enviado"
-            description = "Confirmar aceite e preparar a proxima etapa do funil."
+        elif stage == "reuniao":
+            title = "Realizar reunião de análise"
+            description = "Confirmar fatos, estratégia inicial e próximos documentos."
             priority = "Alta"
-        elif stage == "contrato_assinado":
-            title = "Iniciar coleta documental"
-            description = "Contrato concluido; falta abrir o dossie operacional."
+        elif stage == "proposta":
+            title = "Acompanhar proposta ou contrato"
+            description = "Confirmar aceite antes de avançar para a coleta documental."
             priority = "Alta"
-        elif stage == "coletando_documentos":
+        elif stage == "documentos":
             missing_names = ", ".join(doc["document_name"] for doc in pending_required[:2])
             title = "Cobrar documentos obrigatorios"
             description = (
@@ -2337,9 +2371,13 @@ def build_recent_task_rows(
             title = "Conduzir estrategia do caso ativo"
             description = "Caso com triagem e documentos em nivel operacional."
             priority = "Media"
-        else:
+        elif stage in {"novo_contato", "triagem"}:
             title = "Concluir triagem inicial"
             description = "Lead ainda depende de respostas para sair do filtro inicial."
+            priority = "Baixa"
+        else:
+            title = "Registrar próximo passo"
+            description = "Atualize o histórico e defina a ação de acompanhamento do caso."
             priority = "Baixa"
 
         tasks.append(
@@ -3078,6 +3116,147 @@ def render_dashboard_view() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_crm_case_management(attendance_id: int, details: Any) -> None:
+    """Render the auditable operational controls for one legal CRM record."""
+    stage_ids = [stage_id for stage_id, _ in CRM_STAGES]
+    stage_labels = {stage_id: label for stage_id, label in CRM_STAGES}
+    current_stage = str(details["crm_stage"] or "triagem")
+    if current_stage not in stage_ids:
+        current_stage = "triagem"
+    current_conflict = str(details["conflict_status"] or "pendente")
+    if current_conflict not in CONFLICT_STATUS:
+        current_conflict = "pendente"
+
+    next_action_date = date.today()
+    stored_next_action_at = str(details["next_action_at"] or "")
+    try:
+        next_action_date = date.fromisoformat(stored_next_action_at[:10])
+    except ValueError:
+        pass
+
+    st.markdown("<h3 class='pre-section-title'>Gestão do caso</h3>", unsafe_allow_html=True)
+    if current_conflict != "liberado":
+        st.warning(
+            "Cheque conflito de interesse antes de orientar juridicamente, enviar proposta ou liberar contrato."
+        )
+
+    with st.form(f"crm_case_management_{attendance_id}"):
+        control_cols = st.columns(2, gap="medium")
+        with control_cols[0]:
+            selected_stage = st.selectbox(
+                "Etapa do caso",
+                stage_ids,
+                index=stage_ids.index(current_stage),
+                format_func=lambda item: stage_labels[item],
+            )
+            selected_conflict = st.selectbox(
+                "Checagem de conflito",
+                list(CONFLICT_STATUS),
+                index=list(CONFLICT_STATUS).index(current_conflict),
+                format_func=lambda item: CONFLICT_STATUS[item],
+            )
+            assigned_to = st.text_input(
+                "Responsável", value=str(details["assigned_to"] or "")
+            )
+        with control_cols[1]:
+            next_action = st.text_input(
+                "Próxima ação", value=str(details["next_action"] or "")
+            )
+            selected_next_date = st.date_input("Data da próxima ação", value=next_action_date)
+            lost_reason = st.text_input(
+                "Motivo da perda/encerramento", value=str(details["lost_reason"] or "")
+            )
+        saved_case = st.form_submit_button("Salvar gestão do caso", type="primary")
+
+    if saved_case:
+        update_crm_case(
+            attendance_id=attendance_id,
+            crm_stage=selected_stage,
+            conflict_status=selected_conflict,
+            assigned_to=assigned_to,
+            next_action=next_action,
+            next_action_at=selected_next_date.isoformat() if next_action else None,
+            lost_reason=lost_reason,
+        )
+        add_crm_activity(
+            attendance_id=attendance_id,
+            activity_type="Atualização do CRM",
+            body=f"Etapa: {stage_labels[selected_stage]}. Conflito: {CONFLICT_STATUS[selected_conflict]}.",
+        )
+        st.success("Gestão do caso atualizada.")
+        st.rerun()
+
+    task_col, timeline_col = st.columns([0.92, 1.08], gap="large")
+    with task_col:
+        st.markdown("<h3 class='pre-section-title'>Tarefas abertas</h3>", unsafe_allow_html=True)
+        with st.form(f"crm_task_{attendance_id}", clear_on_submit=True):
+            task_title = st.text_input("Nova tarefa", placeholder="Ex.: Retornar ligação para a cliente")
+            task_due = st.date_input("Prazo", value=date.today())
+            task_owner = st.text_input("Responsável pela tarefa", value=str(details["assigned_to"] or ""))
+            new_task = st.form_submit_button("Adicionar tarefa")
+        if new_task:
+            try:
+                create_crm_task(
+                    attendance_id=attendance_id,
+                    title=task_title,
+                    due_at=task_due.isoformat(),
+                    assigned_to=task_owner,
+                )
+                add_crm_activity(
+                    attendance_id=attendance_id,
+                    activity_type="Tarefa criada",
+                    body=task_title,
+                )
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
+        tasks = list_crm_tasks(attendance_id)
+        if not tasks:
+            st.caption("Nenhuma tarefa aberta para este caso.")
+        for task in tasks:
+            task_line, complete_line = st.columns([0.8, 0.2])
+            with task_line:
+                st.markdown(
+                    f"**{task['title']}**  \nPrazo: {task['due_at'] or 'Não definido'} · {task['assigned_to'] or 'Sem responsável'}"
+                )
+            with complete_line:
+                if st.button("Concluir", key=f"crm_task_done_{task['id']}"):
+                    complete_crm_task(int(task["id"]))
+                    add_crm_activity(
+                        attendance_id=attendance_id,
+                        activity_type="Tarefa concluída",
+                        body=str(task["title"]),
+                    )
+                    st.rerun()
+
+    with timeline_col:
+        st.markdown("<h3 class='pre-section-title'>Histórico de relacionamento</h3>", unsafe_allow_html=True)
+        with st.form(f"crm_activity_{attendance_id}", clear_on_submit=True):
+            activity_type = st.selectbox(
+                "Tipo de interação",
+                ["Ligação", "WhatsApp", "E-mail", "Reunião", "Nota interna"],
+            )
+            activity_body = st.text_area(
+                "Registro", placeholder="Registre o que foi combinado e o próximo contexto útil."
+            )
+            new_activity = st.form_submit_button("Registrar interação")
+        if new_activity:
+            add_crm_activity(
+                attendance_id=attendance_id,
+                activity_type=activity_type,
+                body=activity_body,
+            )
+            st.rerun()
+        activities = list_crm_activities(attendance_id)
+        if not activities:
+            st.caption("Nenhuma interação registrada ainda.")
+        for activity in activities:
+            st.markdown(
+                f"**{activity['activity_type']}** · {activity['created_at']}  \n{activity['body']}"
+            )
+            st.divider()
+
+
 def render_crm_view() -> None:
     render_shell_page_header(
         "CRM Juridico",
@@ -3085,6 +3264,11 @@ def render_crm_view() -> None:
     )
     office_settings = st.session_state.get("office_settings", load_office_settings())
     all_pipeline_records = build_pipeline_records(limit=200)
+    crm_summary = get_crm_summary()
+    crm_metrics = st.columns(3)
+    crm_metrics[0].metric("Tarefas abertas", crm_summary["open_tasks"])
+    crm_metrics[1].metric("Tarefas vencidas", crm_summary["overdue_tasks"])
+    crm_metrics[2].metric("Conflitos pendentes", crm_summary["pending_conflicts"])
     search_value = ""
     stage_filter = "todos"
 
@@ -3168,6 +3352,9 @@ def render_crm_view() -> None:
         record for record in filtered_records if int(record["id"]) == int(focus_case_id)
     )
     focus_details = get_attendance_details(int(focus_case_id))
+    if focus_details is None:
+        st.error("Não foi possível carregar o caso selecionado.")
+        return
     focus_documents = list_attendance_documents(int(focus_case_id))
     focus_required_total, focus_validated_total = get_document_progress(focus_documents)
     pending_required_names = [
@@ -3189,6 +3376,9 @@ def render_crm_view() -> None:
     )
     task_rows = build_recent_task_rows(filtered_records, limit=5)
     case_df = build_case_dataframe(filtered_records[:24], office_settings)
+
+    render_crm_case_management(int(focus_case_id), focus_details)
+    st.divider()
 
     tactical_cols = st.columns([0.92, 1.08], gap="large")
     with tactical_cols[0]:
@@ -3620,9 +3810,14 @@ def render_contracts_view() -> None:
             f"#{details['id']} - {details['lead_name']}",
             "Minuta automatica de honorarios com base nas configuracoes do escritorio.",
         )
-        flow = {"name": details["flow_name"]}
-        form_data = {"lead_name": details["lead_name"]}
-        render_contract_preview(flow, form_data)
+        if str(details["conflict_status"] or "pendente") != "liberado":
+            st.error(
+                "Minuta bloqueada: registre a checagem de conflito como liberada no CRM antes de avançar."
+            )
+        else:
+            flow = {"name": details["flow_name"]}
+            form_data = {"lead_name": details["lead_name"]}
+            render_contract_preview(flow, form_data)
         st.markdown("</div>", unsafe_allow_html=True)
 
 
