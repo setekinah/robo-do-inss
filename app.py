@@ -4093,64 +4093,9 @@ def render_contracts_view() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-def _legacy_render_onboarding_preview(settings: dict[str, Any]) -> None:
-    st.markdown(
-        f"""
-        <div class="pre-onboarding-shell">
-          <div class="pre-page-header" style="text-align:center;">
-            <h2 style="color:#2f5bea;">{BRAND_NAME}</h2>
-            <p>{AGENT_NAME} | {BRAND_SLOGAN}</p>
-          </div>
-          <div class="pre-stepper">
-            <div class="pre-step done">✓</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step done">✓</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step active">3</div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("<div class='pre-onboarding-card'>", unsafe_allow_html=True)
-    render_panel_header(
-        "Conta",
-        f"Dados do escritorio, plano e agente {AGENT_NAME}",
-        f"Parametrize o escritorio, responsavel pela conta e a politica comercial padrao da {BRAND_NAME}.",
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_onboarding_preview(settings: dict[str, Any]) -> None:
-    preview_markup = f"""
-        <div class="pre-onboarding-shell">
-          <div class="pre-page-header" style="text-align:center;">
-            <h2 style="color:#2f5bea;">{BRAND_NAME}</h2>
-            <p>{AGENT_NAME} | {BRAND_SLOGAN}</p>
-          </div>
-          <div class="pre-stepper">
-            <div class="pre-step done">&#10003;</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step done">&#10003;</div>
-            <div class="pre-step-line done"></div>
-            <div class="pre-step active">3</div>
-          </div>
-        </div>
-    """
-    st.markdown(preview_markup, unsafe_allow_html=True)
-    st.markdown("<div class='pre-onboarding-card'>", unsafe_allow_html=True)
-    render_panel_header(
-        "Conta",
-        f"Dados do escritorio, plano e agente {AGENT_NAME}",
-        f"Parametrize o escritorio, responsavel pela conta e a politica comercial padrao da {BRAND_NAME}.",
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
 def render_settings_view() -> None:
     settings = st.session_state.office_settings
-    render_shell_page_header("Configuracoes do Escritorio", f"{AGENT_NAME} aplicada ao escritorio com honorarios, plano e materiais de assinatura.")
-    render_onboarding_preview(settings)
+    render_shell_page_header("Configuracoes do Escritorio", f"{AGENT_NAME} aplicada ao escritorio com honorarios e materiais de assinatura.")
 
     st.markdown("<div class='pre-two-column'>", unsafe_allow_html=True)
     left, right = st.columns(2, gap="large")
@@ -4176,10 +4121,6 @@ def render_settings_view() -> None:
 
     with right:
         st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        plano = render_plan_selector(settings.get("plano", "Essencial"))
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='pre-section-title'>Honorarios por beneficio (%)</h3>", unsafe_allow_html=True)
         fee_percentages = dict(settings.get("fee_percentages", {}))
         fee_cols = st.columns(2, gap="medium")
@@ -4199,7 +4140,6 @@ def render_settings_view() -> None:
         st.markdown("<h3 class='pre-section-title'>Resumo operacional</h3>", unsafe_allow_html=True)
         st.markdown(
             (
-                f"<p><strong>Plano atual:</strong> {plano}</p>"
                 f"<p><strong>Escritorio:</strong> {office_name or 'Nao configurado'}</p>"
                 f"<p><strong>Responsavel:</strong> {responsavel_nome or 'Nao configurado'}</p>"
             ),
@@ -4213,7 +4153,7 @@ def render_settings_view() -> None:
             "responsavel_nome": responsavel_nome.strip(),
             "responsavel_email": responsavel_email.strip(),
             "responsavel_whatsapp": responsavel_whatsapp.strip(),
-            "plano": plano,
+            "plano": settings.get("plano", "Essencial"),
             "office_name": office_name.strip(),
             "oab": oab.strip(),
             "tutorial_video_url": tutorial_video_url.strip(),
@@ -4221,7 +4161,6 @@ def render_settings_view() -> None:
         }
         save_office_settings(updated_settings)
         st.session_state.office_settings = load_office_settings()
-        st.session_state.settings_plan = updated_settings["plano"]
         st.success("Configuracoes salvas com sucesso.")
 
 
