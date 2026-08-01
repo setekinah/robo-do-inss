@@ -11,10 +11,12 @@ BASE_DIR = Path(__file__).resolve().parent
 
 def resolve_data_dir() -> Path:
     """Return a writable user-data directory, falling back only when necessary."""
+    configured = os.environ.get("ROBO_INSS_DATA_DIR")
     preferred = Path(os.environ.get("LOCALAPPDATA", BASE_DIR)) / "Robo do INSS" / "data"
     fallback = BASE_DIR / "data"
+    candidates = (Path(configured).expanduser(),) if configured else (preferred, fallback)
 
-    for candidate in (preferred, fallback):
+    for candidate in candidates:
         try:
             candidate.mkdir(parents=True, exist_ok=True)
             probe = candidate / ".write_test"
