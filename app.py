@@ -7,6 +7,14 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from auth_security import (
+    credentials_configured,
+    save_credentials,
+    validate_email,
+    validate_password,
+    validate_whatsapp,
+    verify_credentials,
+)
 from database import (
     add_crm_activity,
     complete_crm_task,
@@ -1447,14 +1455,29 @@ def inject_styles() -> None:
             gap: 0.8rem;
             margin-bottom: 1rem;
         }
-        .auth-form-card {
-            border-radius: 30px;
-            padding: 1.35rem 1.4rem;
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(247,250,255,0.88) 100%);
-            box-shadow: 0 22px 70px rgba(15, 23, 42, 0.09);
-            backdrop-filter: blur(24px);
+        .auth-form-marker { display:none; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.auth-form-marker) {
+            border-radius:24px !important;
+            padding:1.35rem 1.4rem !important;
+            border:1px solid rgba(148,163,184,.20) !important;
+            background:linear-gradient(180deg,#ffffff 0%,#f8faff 100%) !important;
+            box-shadow:0 18px 54px rgba(15,23,42,.09) !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.auth-form-marker) [data-testid="stForm"] {
+            border:0 !important;
+            background:transparent !important;
+            padding:0 !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.auth-form-marker) button[kind="primary"],
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.auth-form-marker) button[kind="primaryFormSubmit"] {
+            background:#2448a8 !important;
+            color:#ffffff !important;
+            border-color:#2448a8 !important;
+            border-radius:8px !important;
+            box-shadow:none !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.auth-form-marker) button[kind="secondary"] {
+            border-radius:8px !important;
         }
         .auth-step-title {
             margin: 0.1rem 0 0.35rem;
@@ -1881,21 +1904,20 @@ def ensure_session_defaults() -> None:
     if "is_authenticated" not in st.session_state:
         st.session_state.is_authenticated = False
     if "auth_mode" not in st.session_state:
-        st.session_state.auth_mode = "signup"
+        st.session_state.auth_mode = "login" if credentials_configured() else "signup"
     if "auth_step" not in st.session_state:
         st.session_state.auth_step = 1
-    if "auth_responsavel_nome" not in st.session_state:
-        st.session_state.auth_responsavel_nome = st.session_state.office_settings.get("responsavel_nome", "")
-    if "auth_responsavel_email" not in st.session_state:
-        st.session_state.auth_responsavel_email = st.session_state.office_settings.get("responsavel_email", "")
-    if "auth_responsavel_whatsapp" not in st.session_state:
-        st.session_state.auth_responsavel_whatsapp = st.session_state.office_settings.get("responsavel_whatsapp", "")
-    if "auth_password" not in st.session_state:
-        st.session_state.auth_password = ""
-    if "auth_office_name" not in st.session_state:
-        st.session_state.auth_office_name = st.session_state.office_settings.get("office_name", "")
-    if "auth_oab" not in st.session_state:
-        st.session_state.auth_oab = st.session_state.office_settings.get("oab", "")
+    if "auth_signup_data" not in st.session_state:
+        st.session_state.auth_signup_data = {
+            "responsavel_nome": st.session_state.office_settings.get("responsavel_nome", ""),
+            "responsavel_email": st.session_state.office_settings.get("responsavel_email", ""),
+            "responsavel_whatsapp": st.session_state.office_settings.get("responsavel_whatsapp", ""),
+            "password": "",
+            "password_confirm": "",
+            "lgpd_consent": False,
+            "office_name": st.session_state.office_settings.get("office_name", ""),
+            "oab": st.session_state.office_settings.get("oab", ""),
+        }
     if "auth_login_email" not in st.session_state:
         st.session_state.auth_login_email = st.session_state.office_settings.get("responsavel_email", "")
     if "auth_login_password" not in st.session_state:
@@ -2651,17 +2673,22 @@ def render_plan_selector(selected_plan: str) -> str:
 
 
 def persist_auth_profile_to_settings(selected_plan: str) -> None:
+    signup_data = st.session_state.auth_signup_data
     updated_settings = {
-        "responsavel_nome": st.session_state.auth_responsavel_nome.strip(),
-        "responsavel_email": st.session_state.auth_responsavel_email.strip(),
-        "responsavel_whatsapp": st.session_state.auth_responsavel_whatsapp.strip(),
+        "responsavel_nome": signup_data["responsavel_nome"].strip(),
+        "responsavel_email": signup_data["responsavel_email"].strip(),
+        "responsavel_whatsapp": signup_data["responsavel_whatsapp"].strip(),
         "plano": selected_plan,
-        "office_name": st.session_state.auth_office_name.strip(),
-        "oab": st.session_state.auth_oab.strip(),
+        "office_name": signup_data["office_name"].strip(),
+        "oab": signup_data["oab"].strip(),
         "tutorial_video_url": st.session_state.office_settings.get("tutorial_video_url", ""),
         "fee_percentages": dict(st.session_state.office_settings.get("fee_percentages", {})),
     }
     save_office_settings(updated_settings)
+    save_credentials(
+        signup_data["responsavel_email"],
+        signup_data["password"],
+    )
     st.session_state.office_settings = load_office_settings()
     st.session_state.settings_plan = selected_plan
 
@@ -2671,7 +2698,7 @@ def render_auth_stepper(active_step: int) -> None:
     bar_parts: list[str] = []
     for index, _label in enumerate(labels, start=1):
         node_class = "done" if index < active_step else "active" if index == active_step else ""
-        node_label = "✓" if index < active_step else str(index)
+        node_label = "&#10003;" if index < active_step else str(index)
         bar_parts.append(f"<div class='auth-step-node {node_class}'>{node_label}</div>")
         if index < len(labels):
             line_class = "done" if index < active_step else ""
@@ -2736,13 +2763,15 @@ def render_auth_hero_panel() -> None:
 
 
 def render_auth_login() -> None:
-    st.markdown("<div class='auth-form-card'>", unsafe_allow_html=True)
     st.markdown("<div class='panel-kicker'>Acesso seguro</div>", unsafe_allow_html=True)
     st.markdown("<h2 class='auth-step-title'>Entrar no painel da Sofia</h2>", unsafe_allow_html=True)
     st.markdown(
-        "<p class='auth-step-copy'>Acesse o escritorio com sua identidade digital e retome a operacao previdenciaria exatamente de onde parou.</p>",
+        "<p class='auth-step-copy'>Acesse o escritório com suas credenciais locais protegidas e retome a operação exatamente de onde parou.</p>",
         unsafe_allow_html=True,
     )
+    account_ready = credentials_configured()
+    if not account_ready:
+        st.info("Nenhuma conta foi configurada neste computador. Use Criar conta para concluir o primeiro acesso.")
     with st.form("auth_login_form"):
         login_email = st.text_input(
             "Email profissional",
@@ -2759,97 +2788,145 @@ def render_auth_login() -> None:
             """
             <div class="auth-login-meta">
               <div class="auth-login-strip">
-                <strong>Contexto da conta</strong>
-                <span>Login local em ambiente de demonstracao. O foco aqui e validar a experiencia visual do produto com assinatura premium.</span>
+                <strong>Proteção das credenciais</strong>
+                <span>A senha é validada localmente por hash criptográfico e não é armazenada em texto aberto.</span>
               </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
         login_submit = st.form_submit_button("Entrar", use_container_width=True, type="primary")
-    login_cols = st.columns(2, gap="medium")
-    with login_cols[0]:
-        if st.button("Criar conta", key="auth_go_signup", use_container_width=True, type="secondary"):
-            st.session_state.auth_mode = "signup"
-            st.session_state.auth_step = 1
-            st.rerun()
     if login_submit:
+        email_error = validate_email(login_email)
         if not login_email.strip() or not login_password.strip():
-            st.warning("Preencha email e senha para acessar o painel.")
+            st.warning("Preencha e-mail e senha para acessar o painel.")
+        elif email_error:
+            st.warning(email_error)
+        elif not account_ready:
+            st.error("Não existe uma conta local configurada. Selecione Criar conta.")
+        elif not verify_credentials(login_email, login_password):
+            st.error("E-mail ou senha inválidos. Verifique os dados e tente novamente.")
         else:
             st.session_state.is_authenticated = True
             st.session_state.current_view = "dashboard"
             st.rerun()
-    st.markdown(
-        "<div class='auth-footer-note'>Ainda nao tem acesso? <a href='#'>Ative sua conta com a equipe comercial.</a></div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("Primeiro acesso? Use Criar conta no seletor acima.")
 
 
 def render_auth_signup() -> None:
     current_step = st.session_state.auth_step
-    st.markdown("<div class='auth-form-card'>", unsafe_allow_html=True)
+    signup_data = st.session_state.auth_signup_data
     st.markdown("<div class='panel-kicker'>Onboarding inteligente</div>", unsafe_allow_html=True)
-    st.markdown("<h2 class='auth-step-title'>Crie sua conta com visual do futuro</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='auth-step-title'>Configure o primeiro acesso</h2>", unsafe_allow_html=True)
     st.markdown(
-        f"<p class='auth-step-copy'>{AGENT_NAME} estrutura o seu ambiente em poucos passos: dados da conta, escritorio e plano operacional.</p>",
+        f"<p class='auth-step-copy'>{AGENT_NAME} prepara o ambiente em três passos: responsável, escritório e plano operacional.</p>",
         unsafe_allow_html=True,
     )
     render_auth_stepper(current_step)
 
     if current_step == 1:
+        step_one_defaults = {
+            "auth_signup_name_input": signup_data["responsavel_nome"],
+            "auth_signup_email_input": signup_data["responsavel_email"],
+            "auth_signup_whatsapp_input": signup_data["responsavel_whatsapp"],
+            "auth_signup_password_input": signup_data["password"],
+            "auth_signup_password_confirm_input": signup_data["password_confirm"],
+            "auth_signup_lgpd_input": signup_data["lgpd_consent"],
+        }
+        for widget_key, default_value in step_one_defaults.items():
+            if widget_key not in st.session_state:
+                st.session_state[widget_key] = default_value
         with st.form("auth_step_one_form"):
             responsavel_nome = st.text_input(
                 "Nome completo",
-                key="auth_responsavel_nome",
+                key="auth_signup_name_input",
                 placeholder="Seu nome completo",
             )
             responsavel_email = st.text_input(
                 "Email",
-                key="auth_responsavel_email",
+                key="auth_signup_email_input",
                 placeholder="voce@escritorio.com.br",
             )
             responsavel_whatsapp = st.text_input(
                 "WhatsApp",
-                key="auth_responsavel_whatsapp",
+                key="auth_signup_whatsapp_input",
                 placeholder="(11) 99999-9999",
             )
             auth_password = st.text_input(
                 "Senha",
-                key="auth_password",
+                key="auth_signup_password_input",
                 type="password",
-                placeholder="Crie uma senha forte",
+                placeholder="Mínimo de 10 caracteres",
             )
-            st.markdown("<div class='auth-note'>As credenciais iniciais definem quem opera a Sofia dentro do escritorio.</div>", unsafe_allow_html=True)
+            auth_password_confirm = st.text_input(
+                "Confirmar senha",
+                key="auth_signup_password_confirm_input",
+                type="password",
+                placeholder="Digite a senha novamente",
+            )
+            lgpd_consent = st.checkbox(
+                "Confirmo que os dados serão usados para configurar o acesso local ao CRM.",
+                key="auth_signup_lgpd_input",
+            )
+            st.markdown("<div class='auth-note'>Use uma senha com letras maiúsculas, minúsculas e número. Ela não será salva em texto aberto.</div>", unsafe_allow_html=True)
             submit_step_one = st.form_submit_button("Continuar", use_container_width=True, type="primary")
         if submit_step_one:
+            email_error = validate_email(responsavel_email)
+            whatsapp_error = validate_whatsapp(responsavel_whatsapp)
+            password_error = validate_password(auth_password)
             if not all(
                 [
                     responsavel_nome.strip(),
                     responsavel_email.strip(),
                     responsavel_whatsapp.strip(),
                     auth_password.strip(),
+                    auth_password_confirm.strip(),
                 ]
             ):
-                st.warning("Preencha todos os campos do responsavel para seguir.")
+                st.warning("Preencha todos os campos do responsável para seguir.")
+            elif email_error:
+                st.warning(email_error)
+            elif whatsapp_error:
+                st.warning(whatsapp_error)
+            elif password_error:
+                st.warning(password_error)
+            elif auth_password != auth_password_confirm:
+                st.warning("As senhas informadas não coincidem.")
+            elif not lgpd_consent:
+                st.warning("Confirme o uso dos dados para concluir a configuração local.")
             else:
+                st.session_state.auth_signup_data = {
+                    **signup_data,
+                    "responsavel_nome": responsavel_nome.strip(),
+                    "responsavel_email": responsavel_email.strip(),
+                    "responsavel_whatsapp": responsavel_whatsapp.strip(),
+                    "password": auth_password,
+                    "password_confirm": auth_password_confirm,
+                    "lgpd_consent": bool(lgpd_consent),
+                }
                 st.session_state.auth_step = 2
                 st.rerun()
 
     elif current_step == 2:
+        step_two_defaults = {
+            "auth_signup_office_input": signup_data["office_name"],
+            "auth_signup_oab_input": signup_data["oab"],
+        }
+        for widget_key, default_value in step_two_defaults.items():
+            if widget_key not in st.session_state:
+                st.session_state[widget_key] = default_value
         with st.form("auth_step_two_form"):
             auth_office_name = st.text_input(
-                "Nome do escritorio",
-                key="auth_office_name",
-                placeholder="Ex.: Nelson Wilians Previdenciario",
+                "Nome do escritório",
+                key="auth_signup_office_input",
+                placeholder="Ex.: Silva Advocacia Previdenciária",
             )
             auth_oab = st.text_input(
                 "Numero da OAB",
-                key="auth_oab",
+                key="auth_signup_oab_input",
                 placeholder="Ex.: OAB/SP 123456",
             )
-            st.markdown("<div class='auth-note'>Esses dados alimentam contratos, documentos e a camada institucional do produto.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='auth-note'>Esses dados alimentam contratos, documentos e a identificação institucional do produto.</div>", unsafe_allow_html=True)
             action_cols = st.columns(2, gap="medium")
             with action_cols[0]:
                 back_step_two = st.form_submit_button("Voltar", use_container_width=True, type="secondary")
@@ -2860,14 +2937,19 @@ def render_auth_signup() -> None:
             st.rerun()
         if submit_step_two:
             if not auth_office_name.strip() or not auth_oab.strip():
-                st.warning("Preencha nome do escritorio e numero da OAB para seguir.")
+                st.warning("Preencha o nome do escritório e o número da OAB para seguir.")
             else:
+                st.session_state.auth_signup_data = {
+                    **signup_data,
+                    "office_name": auth_office_name.strip(),
+                    "oab": auth_oab.strip(),
+                }
                 st.session_state.auth_step = 3
                 st.rerun()
 
     else:
         selected_plan = render_plan_selector(st.session_state.get("settings_plan", "Essencial"))
-        st.markdown("<div class='auth-note'>Escolha o plano que melhor combina com o volume e a sofisticacao da sua operacao.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='auth-note'>Escolha o plano compatível com o volume e a operação do escritório.</div>", unsafe_allow_html=True)
         action_cols = st.columns(2, gap="medium")
         with action_cols[0]:
             if st.button("Voltar", key="auth_step_3_back", use_container_width=True, type="secondary"):
@@ -2875,51 +2957,62 @@ def render_auth_signup() -> None:
                 st.rerun()
         with action_cols[1]:
             if st.button("Criar conta", key="auth_finish_signup", use_container_width=True, type="primary"):
-                persist_auth_profile_to_settings(selected_plan)
-                st.session_state.is_authenticated = True
-                st.session_state.current_view = "dashboard"
-                st.rerun()
+                try:
+                    persist_auth_profile_to_settings(selected_plan)
+                except ValueError as exc:
+                    st.error(str(exc))
+                except OSError:
+                    st.error("Não foi possível salvar a conta local. Verifique as permissões da pasta de dados.")
+                else:
+                    st.session_state.auth_signup_data = {
+                        **st.session_state.auth_signup_data,
+                        "password": "",
+                        "password_confirm": "",
+                    }
+                    st.session_state.is_authenticated = True
+                    st.session_state.current_view = "dashboard"
+                    st.rerun()
 
-    st.markdown(
-        "<div class='auth-footer-note'>Ja tem conta? <a href='#'>Entrar no painel</a></div>",
-        unsafe_allow_html=True,
-    )
-    login_link = st.button("Fazer login", key="auth_switch_to_login_footer", use_container_width=False, type="secondary")
-    if login_link:
-        st.session_state.auth_mode = "login"
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("Já possui uma conta configurada? Use Entrar no seletor acima.")
 
 
 def render_auth_screen() -> None:
+    account_ready = credentials_configured()
+    if account_ready and st.session_state.auth_mode == "signup":
+        st.session_state.auth_mode = "login"
+
     auth_left, auth_right = st.columns([1.08, 0.92], gap="large")
     with auth_left:
         render_auth_hero_panel()
     with auth_right:
-        switch_cols = st.columns(2, gap="medium")
-        with switch_cols[0]:
-            if st.button(
-                "Criar conta",
-                key="auth_switch_signup",
-                use_container_width=True,
-                type="primary" if st.session_state.auth_mode == "signup" else "secondary",
-            ):
-                st.session_state.auth_mode = "signup"
-                st.rerun()
-        with switch_cols[1]:
-            if st.button(
-                "Entrar",
-                key="auth_switch_login",
-                use_container_width=True,
-                type="primary" if st.session_state.auth_mode == "login" else "secondary",
-            ):
-                st.session_state.auth_mode = "login"
-                st.rerun()
+        with st.container(border=True):
+            st.markdown("<span class='auth-form-marker'></span>", unsafe_allow_html=True)
+            switch_cols = st.columns(2, gap="medium")
+            with switch_cols[0]:
+                if st.button(
+                    "Criar conta",
+                    key="auth_switch_signup",
+                    use_container_width=True,
+                    type="primary" if st.session_state.auth_mode == "signup" else "secondary",
+                    disabled=account_ready,
+                ):
+                    st.session_state.auth_mode = "signup"
+                    st.session_state.auth_step = 1
+                    st.rerun()
+            with switch_cols[1]:
+                if st.button(
+                    "Entrar",
+                    key="auth_switch_login",
+                    use_container_width=True,
+                    type="primary" if st.session_state.auth_mode == "login" else "secondary",
+                ):
+                    st.session_state.auth_mode = "login"
+                    st.rerun()
 
-        if st.session_state.auth_mode == "login":
-            render_auth_login()
-        else:
-            render_auth_signup()
+            if st.session_state.auth_mode == "login":
+                render_auth_login()
+            else:
+                render_auth_signup()
 
 
 def render_dashboard_view() -> None:
