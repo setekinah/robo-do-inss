@@ -1741,6 +1741,54 @@ def inject_lawfirm_admin_theme() -> None:
         .law-admin-topbar strong { color:var(--admin-ink); font-size:1rem; }
         .law-admin-topbar span { color:var(--admin-muted); font-size:.84rem; }
         .law-admin-search { min-width:280px; background:#f7f8fb; border:1px solid #edf0f6; border-radius:6px; padding:.55rem .8rem; color:#9aa5b6; }
+        .law-dashboard-primary {
+            display:grid; grid-template-columns:1.05fr 1fr 1fr; gap:1rem; margin:0 0 1rem;
+        }
+        .law-results-card {
+            display:grid; grid-template-columns:1fr 1fr; min-height:224px; overflow:hidden;
+            border-radius:8px; box-shadow:0 6px 20px rgba(35,55,95,.10);
+        }
+        .law-result-segment {
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            padding:1.25rem .75rem; color:#fff; text-align:center;
+        }
+        .law-result-segment.lost { background:var(--admin-coral); }
+        .law-result-segment.won { background:var(--admin-blue); }
+        .law-result-label { font-size:1.2rem; font-weight:600; letter-spacing:.01em; }
+        .law-result-icon { font-size:2rem; line-height:1; margin:.7rem 0; opacity:.9; }
+        .law-result-value { font-size:2rem; font-weight:800; line-height:1; }
+        .law-result-rate { font-size:.83rem; margin-top:.5rem; opacity:.72; }
+        .law-stat-panel, .law-funnel-panel, .law-revenue-panel {
+            background:#fff; border:1px solid #edf0f6; border-radius:8px;
+            box-shadow:0 5px 18px rgba(35,55,95,.07); padding:1.25rem 1.35rem;
+        }
+        .law-panel-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; }
+        .law-panel-heading h3 { margin:0; color:var(--admin-ink); font:700 1.05rem/1.25 "Manrope",sans-serif !important; }
+        .law-panel-heading span { color:var(--admin-muted); font-size:.76rem; }
+        .law-stat-value { color:var(--admin-ink); font-size:2.15rem; font-weight:800; margin-top:.9rem; }
+        .law-panel-legend { display:flex; flex-wrap:wrap; gap:.8rem; margin-top:.45rem; color:var(--admin-muted); font-size:.75rem; }
+        .law-panel-legend i { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:.3rem; }
+        .law-mini-chart { height:76px; display:flex; align-items:flex-end; gap:7px; margin-top:1rem; padding-top:.35rem; border-bottom:1px solid #edf0f6; }
+        .law-mini-chart span { flex:1; min-width:5px; border-radius:5px 5px 0 0; opacity:.86; }
+        .law-dashboard-secondary { display:grid; grid-template-columns:.72fr 1.48fr; gap:1rem; margin-bottom:1rem; }
+        .law-side-stack { display:grid; gap:1rem; }
+        .law-revenue-value { color:var(--admin-ink); font-size:1.8rem; font-weight:800; margin:.95rem 0 .15rem; }
+        .law-revenue-note { color:var(--admin-muted); font-size:.78rem; }
+        .law-alert-card {
+            display:flex; align-items:center; justify-content:space-between; gap:1rem;
+            min-height:92px; padding:1rem 1.2rem; border-radius:8px;
+            background:#dceeff; color:#24579a; border:1px solid #c9e3fc;
+        }
+        .law-alert-card strong { display:block; font-size:1.45rem; }
+        .law-alert-card span { font-size:.82rem; }
+        .law-alert-icon { font-size:1.45rem; opacity:.75; }
+        .law-funnel-panel { min-height:100%; }
+        .law-funnel-list { display:grid; gap:.67rem; margin-top:1.05rem; }
+        .law-funnel-row { display:grid; grid-template-columns:115px 1fr 32px; align-items:center; gap:.8rem; }
+        .law-funnel-label { color:#59667a; font-size:.77rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .law-funnel-track { height:15px; overflow:hidden; background:#f0f2f7; border-radius:3px; }
+        .law-funnel-fill { display:block; height:100%; min-width:0; border-radius:3px; }
+        .law-funnel-count { color:var(--admin-ink); font-size:.78rem; font-weight:700; text-align:right; }
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) {
             background:#fff !important; color:var(--admin-ink) !important; border:1px solid #edf0f6 !important;
             border-radius:8px !important; box-shadow:0 4px 18px rgba(35,55,95,.06) !important;
@@ -1757,6 +1805,7 @@ def inject_lawfirm_admin_theme() -> None:
         .pre-page-header { background:transparent !important; border:0 !important; box-shadow:none !important; padding:.3rem 0 1rem !important; }
         .pre-page-header h2 { color:var(--admin-ink) !important; font-family:"Manrope", sans-serif !important; font-size:1.55rem !important; }
         .pre-page-header p { color:var(--admin-muted) !important; }
+        .pre-section-title { font-family:"Manrope", sans-serif !important; }
         .pre-card, .pre-metric-card, .pre-stage-card, .panel-box, .surface-card {
             background:#fff !important; border:1px solid #edf0f6 !important; border-radius:8px !important;
             box-shadow:0 5px 18px rgba(35,55,95,.07) !important;
@@ -1770,7 +1819,20 @@ def inject_lawfirm_admin_theme() -> None:
         [data-testid="stMetric"] { background:#fff; border:1px solid #edf0f6; padding:.8rem; border-radius:8px; box-shadow:0 4px 14px rgba(35,55,95,.05); }
         .stTabs [data-baseweb="tab"] { border-radius:6px !important; }
         button[kind="primary"] { background:var(--admin-blue) !important; border-color:var(--admin-blue) !important; }
-        @media (max-width: 900px) { .law-admin-search { display:none; } div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) { min-height:auto !important; } }
+        @media (max-width: 1100px) {
+            .law-dashboard-primary { grid-template-columns:1fr 1fr; }
+            .law-results-card { grid-column:span 2; }
+            .law-dashboard-secondary { grid-template-columns:1fr; }
+        }
+        @media (max-width: 900px) {
+            .law-admin-search { display:none; }
+            div[data-testid="stVerticalBlockBorderWrapper"]:has(.pre-sidebar-marker) { min-height:auto !important; }
+        }
+        @media (max-width: 680px) {
+            .law-dashboard-primary { grid-template-columns:1fr; }
+            .law-results-card { grid-column:span 1; }
+            .law-funnel-row { grid-template-columns:92px 1fr 28px; gap:.5rem; }
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -2866,8 +2928,6 @@ def render_dashboard_view() -> None:
         "Comando executivo com carteira, priorizacao e risco documental da operacao previdenciaria.",
     )
     office_settings = st.session_state.get("office_settings", load_office_settings())
-    office_name = office_settings.get("office_name") or "Seu escritorio"
-    plan_name = office_settings.get("plano", "Essencial")
     dashboard = get_dashboard_summary()
     pipeline_records = build_pipeline_records(limit=200)
     revenue_snapshot = build_revenue_snapshot(pipeline_records, office_settings)
@@ -2896,81 +2956,89 @@ def render_dashboard_view() -> None:
         column_id: len([record for record in pipeline_records if record["stage"] == column_id])
         for column_id, *_ in PIPELINE_COLUMNS
     }
+    won_total = stage_totals.get("caso_ativo", 0) + stage_totals.get("encerrado", 0)
+    lost_total = stage_totals.get("perdido", 0)
+    settled_total = stage_totals.get("encerrado", 0)
+    active_total = max(total_cases - settled_total - lost_total, 0)
+    won_rate = (won_total / total_cases * 100) if total_cases else 0.0
+    lost_rate = (lost_total / total_cases * 100) if total_cases else 0.0
 
-    executive_metrics = [
-        {"label": "Carteira total", "value": total_cases, "tone": "soft-neutral"},
-        {"label": "Qualificados", "value": approved_total, "tone": "soft-green"},
-        {"label": "Em revisao", "value": revision_total, "tone": "soft-blue"},
-        {
-            "label": "Honorarios potenciais",
-            "value": format_currency(float(revenue_snapshot["potential_total"])),
-            "tone": "soft-purple",
-        },
-        {
-            "label": "Ticket medio",
-            "value": average_ticket,
-            "tone": "soft-yellow",
-        },
-        {
-            "label": "Backlog documental",
-            "value": int(dashboard["document_backlog"]),
-            "tone": "soft-orange",
-        },
-    ]
-    metric_markup = "".join(
+    recent_values = activity_df["Casos"].astype(int).tolist() if not activity_df.empty else []
+    activity_values = ([0] * 7 + recent_values)[-7:]
+    cumulative_values: list[int] = []
+    running_total = max(total_cases - sum(activity_values), 0)
+    for value in activity_values:
+        running_total += value
+        cumulative_values.append(running_total)
+
+    def render_mini_bars(values: list[int], color: str) -> str:
+        chart_max = max(values, default=0) or 1
+        return "".join(
+            f"<span style='height:{max(10, round(value / chart_max * 68))}px;background:{color}'></span>"
+            for value in values
+        )
+
+    activity_bars = render_mini_bars(activity_values, "#42b83f")
+    cumulative_bars = render_mini_bars(cumulative_values, "#3f9fe8")
+    revenue_bars = render_mini_bars(activity_values, "#f22f5d")
+    stage_palette = ["#2448a8", "#42b83f", "#ffae19", "#f22f5d"]
+    maximum_stage_total = max(stage_totals.values(), default=0) or 1
+    funnel_rows_markup = "".join(
         (
-            f"<div class='pre-metric-card {metric['tone']}'>"
-            f"<h3>{metric['value']}</h3>"
-            f"<p>{metric['label']}</p>"
+            "<div class='law-funnel-row'>"
+            f"<span class='law-funnel-label'>{label}</span>"
+            "<span class='law-funnel-track'>"
+            f"<span class='law-funnel-fill' style='width:{max(0, round(stage_totals[column_id] / maximum_stage_total * 100))}%;background:{stage_palette[index % len(stage_palette)]}'></span>"
+            "</span>"
+            f"<span class='law-funnel-count'>{stage_totals[column_id]}</span>"
             "</div>"
         )
-        for metric in executive_metrics
-    )
-    stage_cards_markup = "".join(
-        (
-            f"<div class='pre-stage-card {tone}'>"
-            f"<strong>{stage_totals[column_id]}</strong>"
-            f"<h4>{label}</h4>"
-            f"<span>{subtitle}</span>"
-            "</div>"
-        )
-        for column_id, label, subtitle, tone in PIPELINE_COLUMNS
+        for index, (column_id, label, _subtitle, _tone) in enumerate(PIPELINE_COLUMNS)
     )
 
-    spotlight_cols = st.columns([1.35, 0.95], gap="large")
-    with spotlight_cols[0]:
-        st.markdown(
-            (
-                "<div class='pre-spotlight'>"
-                "<div class='eyebrow'>Comando do escritorio</div>"
-                "<h3>A carteira certa precisa aparecer antes do trabalho tatico.</h3>"
-                f"<p>{AGENT_NAME} organiza triagem, documentos, contratos e proximos passos para que o escritorio decida rapido onde esta o melhor caso, o maior risco e o honorario mais quente da operacao.</p>"
-                "<div class='pre-inline-stats'>"
-                f"<div class='pre-inline-stat'><strong>{conversion_rate:.0f}%</strong><span>taxa de qualificacao</span></div>"
-                f"<div class='pre-inline-stat'><strong>{len(FLOW_DEFINITIONS)}</strong><span>fluxos ativos</span></div>"
-                f"<div class='pre-inline-stat'><strong>{average_ticket}</strong><span>ticket medio monitorado</span></div>"
-                "</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-    with spotlight_cols[1]:
-        st.markdown(
-            (
-                "<div class='pre-card'>"
-                "<h3 class='pre-section-title'>Panorama institucional</h3>"
-                "<div class='pre-meta-list'>"
-                f"<div class='pre-meta-item'><strong>Escritorio</strong><span>{office_name}</span></div>"
-                f"<div class='pre-meta-item'><strong>Responsavel</strong><span>{office_settings.get('responsavel_nome') or 'Nao configurado'}</span></div>"
-                f"<div class='pre-meta-item'><strong>Plano atual</strong><span>{plan_name}</span></div>"
-                f"<div class='pre-meta-item'><strong>Honorarios base</strong><span>{resolve_fee_percentage('Aposentadoria', office_settings)}% em aposentadoria programada e carteira monitorada com {AGENT_NAME}.</span></div>"
-                "</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-    st.markdown(f"<div class='pre-metric-grid'>{metric_markup}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='pre-stage-strip'>{stage_cards_markup}</div>", unsafe_allow_html=True)
+    st.markdown(
+        (
+            "<div class='law-dashboard-primary'>"
+            "<div class='law-results-card'>"
+            "<div class='law-result-segment lost'>"
+            "<span class='law-result-label'>Perdidos</span><span class='law-result-icon'>&#8595;</span>"
+            f"<span class='law-result-value'>{lost_total}</span><span class='law-result-rate'>{lost_rate:.1f}% da carteira</span>"
+            "</div>"
+            "<div class='law-result-segment won'>"
+            "<span class='law-result-label'>Contratados</span><span class='law-result-icon'>&#8593;</span>"
+            f"<span class='law-result-value'>{won_total}</span><span class='law-result-rate'>{won_rate:.1f}% da carteira</span>"
+            "</div></div>"
+            "<div class='law-stat-panel'>"
+            "<div class='law-panel-heading'><h3>Casos concluídos</h3><span>Últimos registros</span></div>"
+            f"<div class='law-stat-value'>{settled_total}</div>"
+            f"<div class='law-panel-legend'><span><i style='background:#42b83f'></i>Encerrados</span><span>{conversion_rate:.0f}% qualificados</span></div>"
+            f"<div class='law-mini-chart'>{activity_bars}</div>"
+            "</div>"
+            "<div class='law-stat-panel'>"
+            "<div class='law-panel-heading'><h3>Carteira total</h3><span>Visão consolidada</span></div>"
+            f"<div class='law-stat-value'>{total_cases}</div>"
+            f"<div class='law-panel-legend'><span><i style='background:#3f9fe8'></i>{active_total} em andamento</span><span><i style='background:#42b83f'></i>{settled_total} encerrados</span></div>"
+            f"<div class='law-mini-chart'>{cumulative_bars}</div>"
+            "</div></div>"
+            "<div class='law-dashboard-secondary'>"
+            "<div class='law-side-stack'>"
+            "<div class='law-revenue-panel'>"
+            "<div class='law-panel-heading'><h3>Honorários em carteira</h3><span>Potencial</span></div>"
+            f"<div class='law-revenue-value'>{format_currency(float(revenue_snapshot['potential_total']))}</div>"
+            f"<div class='law-revenue-note'>Ticket médio {average_ticket}</div>"
+            f"<div class='law-mini-chart'>{revenue_bars}</div>"
+            "</div>"
+            "<div class='law-alert-card'>"
+            f"<div><span>Pendências documentais</span><strong>{int(dashboard['document_backlog'])}</strong></div>"
+            "<div class='law-alert-icon'>&#9888;</div>"
+            "</div></div>"
+            "<div class='law-funnel-panel'>"
+            "<div class='law-panel-heading'><h3>Desempenho do funil jurídico</h3><span>Casos por etapa</span></div>"
+            f"<div class='law-funnel-list'>{funnel_rows_markup}</div>"
+            "</div></div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
     if not pipeline_records:
         st.markdown(
