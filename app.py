@@ -2985,6 +2985,9 @@ def render_dashboard_view() -> None:
         return
 
     available_case_ids = [int(record["id"]) for record in pipeline_records]
+    pending_focus_case_id = st.session_state.pop("pending_dashboard_case_id", None)
+    if pending_focus_case_id in available_case_ids:
+        st.session_state.selected_dashboard_case_id = int(pending_focus_case_id)
     if st.session_state.selected_dashboard_case_id not in available_case_ids:
         st.session_state.selected_dashboard_case_id = available_case_ids[0]
 
@@ -3071,7 +3074,7 @@ def render_dashboard_view() -> None:
                     key=f"dashboard_focus_task_{task['case_id']}",
                     use_container_width=True,
                 ):
-                    st.session_state.selected_dashboard_case_id = int(task["case_id"])
+                    st.session_state.pending_dashboard_case_id = int(task["case_id"])
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -3176,7 +3179,7 @@ def render_dashboard_view() -> None:
                         key=f"dashboard_quick_focus_{item['id']}",
                         use_container_width=True,
                     ):
-                        st.session_state.selected_dashboard_case_id = int(item["id"])
+                        st.session_state.pending_dashboard_case_id = int(item["id"])
                         st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
