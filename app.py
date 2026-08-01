@@ -3155,6 +3155,14 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
                 index=list(CONFLICT_STATUS).index(current_conflict),
                 format_func=lambda item: CONFLICT_STATUS[item],
             )
+            conflict_parties = st.text_area(
+                "Partes verificadas no conflito",
+                value=str(details["conflict_checked_parties"] or ""),
+                placeholder="Cliente, parte contrária, empresa e demais envolvidos.",
+            )
+            conflict_notes = st.text_area(
+                "Registro da checagem", value=str(details["conflict_notes"] or "")
+            )
             assigned_to = st.text_input(
                 "Responsável", value=str(details["assigned_to"] or "")
             )
@@ -3169,15 +3177,21 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
         saved_case = st.form_submit_button("Salvar gestão do caso", type="primary")
 
     if saved_case:
-        update_crm_case(
-            attendance_id=attendance_id,
-            crm_stage=selected_stage,
-            conflict_status=selected_conflict,
-            assigned_to=assigned_to,
-            next_action=next_action,
-            next_action_at=selected_next_date.isoformat() if next_action else None,
-            lost_reason=lost_reason,
-        )
+        try:
+            update_crm_case(
+                attendance_id=attendance_id,
+                crm_stage=selected_stage,
+                conflict_status=selected_conflict,
+                assigned_to=assigned_to,
+                next_action=next_action,
+                next_action_at=selected_next_date.isoformat() if next_action else None,
+                lost_reason=lost_reason,
+                conflict_checked_parties=conflict_parties,
+                conflict_notes=conflict_notes,
+            )
+        except ValueError as error:
+            st.error(str(error))
+            return
         add_crm_activity(
             attendance_id=attendance_id,
             activity_type="Atualização do CRM",
@@ -3265,10 +3279,12 @@ def render_crm_view() -> None:
     office_settings = st.session_state.get("office_settings", load_office_settings())
     all_pipeline_records = build_pipeline_records(limit=200)
     crm_summary = get_crm_summary()
-    crm_metrics = st.columns(3)
+    crm_metrics = st.columns(5)
     crm_metrics[0].metric("Tarefas abertas", crm_summary["open_tasks"])
     crm_metrics[1].metric("Tarefas vencidas", crm_summary["overdue_tasks"])
     crm_metrics[2].metric("Conflitos pendentes", crm_summary["pending_conflicts"])
+    crm_metrics[3].metric("Vencem hoje", crm_summary["due_today"])
+    crm_metrics[4].metric("Leads sem próxima ação", crm_summary["stalled_leads"])
     search_value = ""
     stage_filter = "todos"
 

@@ -52,6 +52,12 @@ def init_database() -> None:
         ensure_column(conn, "next_action", "TEXT")
         ensure_column(conn, "next_action_at", "TEXT")
         ensure_column(conn, "lost_reason", "TEXT")
+        ensure_column(conn, "lead_email", "TEXT")
+        ensure_column(conn, "lead_source", "TEXT")
+        ensure_column(conn, "conflict_checked_parties", "TEXT")
+        ensure_column(conn, "conflict_notes", "TEXT")
+        ensure_column(conn, "contracted_at", "TEXT")
+        ensure_column(conn, "crm_stage_updated_at", "TEXT")
         conn.execute(
             """
             UPDATE atendimentos
@@ -271,7 +277,12 @@ def search_attendances(
                 assigned_to,
                 next_action,
                 next_action_at,
-                lost_reason
+                lost_reason,
+                lead_email,
+                lead_source,
+                conflict_checked_parties,
+                conflict_notes,
+                contracted_at
             FROM atendimentos
             {where_sql}
             ORDER BY id DESC
@@ -307,7 +318,12 @@ def get_attendance_details(attendance_id: int) -> sqlite3.Row | None:
                 assigned_to,
                 next_action,
                 next_action_at,
-                lost_reason
+                lost_reason,
+                lead_email,
+                lead_source,
+                conflict_checked_parties,
+                conflict_notes,
+                contracted_at
             FROM atendimentos
             WHERE id = ?
             """,
@@ -639,8 +655,18 @@ def update_crm_case(
     next_action: str,
     next_action_at: str | None,
     lost_reason: str = "",
+    conflict_checked_parties: str = "",
+    conflict_notes: str = "",
 ) -> None:
     with get_connection() as conn:
+        current = conn.execute(
+            "SELECT crm_stage FROM atendimentos WHERE id = ?", (attendance_id,)
+        ).fetchone()
+        stage_changed = current is not None and current["crm_stage"] != crm_stage
+        if stage_changed and (not next_action.strip() or not next_action_at):
+            raise ValueError("Defina a próxima ação e a data antes de mudar a etapa do caso.")
+        if conflict_status == "liberado" and not conflict_checked_parties.strip():
+            raise ValueError("Informe as partes verificadas antes de liberar o conflito.")
         conn.execute(
             """
             UPDATE atendimentos
@@ -651,6 +677,10 @@ def update_crm_case(
                 next_action = ?,
                 next_action_at = ?,
                 lost_reason = ?
+                ,conflict_checked_parties = ?
+                ,conflict_notes = ?
+                ,crm_stage_updated_at = CASE WHEN crm_stage != ? THEN CURRENT_TIMESTAMP ELSE crm_stage_updated_at END
+                ,contracted_at = CASE WHEN ? = 'caso_ativo' AND contracted_at IS NULL THEN CURRENT_TIMESTAMP ELSE contracted_at END
             WHERE id = ?
             """,
             (
@@ -660,6 +690,10 @@ def update_crm_case(
                 next_action.strip(),
                 next_action_at,
                 lost_reason.strip(),
+                conflict_checked_parties.strip(),
+                conflict_notes.strip(),
+                crm_stage,
+                crm_stage,
                 attendance_id,
             ),
         )
@@ -754,8 +788,18 @@ def get_crm_summary() -> dict[str, int]:
         pending_conflicts = conn.execute(
             "SELECT COUNT(*) AS total FROM atendimentos WHERE conflict_status = 'pendente'"
         ).fetchone()["total"]
+        due_today = conn.execute(
+            "SELECT COUNT(*) AS total FROM crm_tarefas WHERE status = 'aberta' AND DATE(due_at) = DATE('now')"
+        ).fetchone()["total"]
+        stalled_leads = conn.execute(
+            """SELECT COUNT(*) AS total FROM atendimentos
+               WHERE crm_stage NOT IN ('encerrado', 'perdido')
+                 AND (next_action IS NULL OR TRIM(next_action) = '' OR next_action_at IS NULL)"""
+        ).fetchone()["total"]
     return {
         "open_tasks": int(open_tasks or 0),
         "overdue_tasks": int(overdue_tasks or 0),
         "pending_conflicts": int(pending_conflicts or 0),
+        "due_today": int(due_today or 0),
+        "stalled_leads": int(stalled_leads or 0),
     }
