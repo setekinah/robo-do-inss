@@ -13,6 +13,7 @@ from database import (
     create_crm_task,
     get_document_pipeline_summary,
     get_crm_summary,
+    get_crm_performance,
     get_attendance_details,
     get_dashboard_summary,
     init_database,
@@ -1953,8 +1954,14 @@ def render_lead_form() -> dict[str, Any]:
     with col1:
         name = st.text_input("Nome do lead", key="lead_name", placeholder="Ex.: Maria da Silva")
         phone = st.text_input("Telefone", key="lead_phone", placeholder="(11) 99999-9999")
+        email = st.text_input("E-mail", key="lead_email", placeholder="cliente@email.com")
     with col2:
         chosen_flow_name = st.selectbox("Tipo de atendimento", flow_names, index=current_index)
+        source = st.selectbox(
+            "Origem do lead",
+            ["WhatsApp", "Site", "Indicação", "E-mail", "Outro"],
+            key="lead_source",
+        )
         notes = st.text_area("Observacoes", key="lead_notes", placeholder="Contexto rapido do caso", height=103)
 
     selected_flow_id = options[chosen_flow_name]
@@ -1965,6 +1972,8 @@ def render_lead_form() -> dict[str, Any]:
     return {
         "lead_name": name.strip(),
         "lead_phone": phone.strip(),
+        "lead_email": email.strip(),
+        "lead_source": source,
         "lead_notes": notes.strip(),
         "flow_id": selected_flow_id,
     }
@@ -3279,12 +3288,20 @@ def render_crm_view() -> None:
     office_settings = st.session_state.get("office_settings", load_office_settings())
     all_pipeline_records = build_pipeline_records(limit=200)
     crm_summary = get_crm_summary()
+    crm_performance = get_crm_performance()
     crm_metrics = st.columns(5)
     crm_metrics[0].metric("Tarefas abertas", crm_summary["open_tasks"])
     crm_metrics[1].metric("Tarefas vencidas", crm_summary["overdue_tasks"])
     crm_metrics[2].metric("Conflitos pendentes", crm_summary["pending_conflicts"])
     crm_metrics[3].metric("Vencem hoje", crm_summary["due_today"])
     crm_metrics[4].metric("Leads sem próxima ação", crm_summary["stalled_leads"])
+    st.caption(f"Tempo médio até contratação: {crm_performance['average_days_to_contract']:.1f} dia(s).")
+    if crm_performance["by_source"]:
+        source_rows = [
+            {"Origem": row["source"], "Leads": int(row["total"]), "Contratados": int(row["contracted"] or 0)}
+            for row in crm_performance["by_source"]
+        ]
+        st.dataframe(pd.DataFrame(source_rows), hide_index=True, use_container_width=True)
     search_value = ""
     stage_filter = "todos"
 
@@ -4240,14 +4257,19 @@ def render_result_panel(flow: dict[str, Any], form_data: dict[str, Any]) -> None
         )
 
     if result["status"] == "aprovado":
-        render_contract_preview(flow, form_data)
+        st.info("A minuta ficará disponível no CRM após a checagem de conflito ser liberada.")
 
     col1, col2 = st.columns([1.3, 1])
     with col1:
         if st.button("Salvar atendimento", use_container_width=True):
+            if not all([form_data["lead_name"], form_data["lead_phone"], form_data["lead_email"], form_data["lead_source"]]):
+                st.error("Informe nome, telefone, e-mail e origem do lead antes de salvar.")
+                return
             saved_id = save_attendance(
                 lead_name=form_data["lead_name"] or "Lead sem nome",
                 lead_phone=form_data["lead_phone"],
+                lead_email=form_data["lead_email"],
+                lead_source=form_data["lead_source"],
                 flow_id=flow["id"],
                 flow_name=flow["name"],
                 status=result["status"],

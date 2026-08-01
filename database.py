@@ -164,6 +164,8 @@ def save_attendance(
     next_step: str,
     notes: str,
     history: list[dict[str, Any]],
+    lead_email: str = "",
+    lead_source: str = "",
     benefit_category: str | None = None,
     estimated_monthly_value: float | None = None,
     estimated_total_value: float | None = None,
@@ -187,8 +189,10 @@ def save_attendance(
                 estimated_total_value,
                 crm_stage,
                 conflict_status
+                ,lead_email,
+                lead_source
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lead_name,
@@ -206,6 +210,8 @@ def save_attendance(
                 estimated_total_value,
                 "triagem",
                 "pendente",
+                lead_email.strip(),
+                lead_source.strip(),
             ),
         )
         attendance_id = int(cursor.lastrowid)
@@ -803,3 +809,24 @@ def get_crm_summary() -> dict[str, int]:
         "due_today": int(due_today or 0),
         "stalled_leads": int(stalled_leads or 0),
     }
+
+
+def get_crm_performance() -> dict[str, Any]:
+    with get_connection() as conn:
+        by_source = conn.execute(
+            """
+            SELECT COALESCE(NULLIF(lead_source, ''), 'Não informado') AS source,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN contracted_at IS NOT NULL THEN 1 ELSE 0 END) AS contracted
+            FROM atendimentos
+            GROUP BY COALESCE(NULLIF(lead_source, ''), 'Não informado')
+            ORDER BY total DESC, source ASC
+            """
+        ).fetchall()
+        average_days = conn.execute(
+            """
+            SELECT AVG(JULIANDAY(contracted_at) - JULIANDAY(created_at)) AS days
+            FROM atendimentos WHERE contracted_at IS NOT NULL
+            """
+        ).fetchone()["days"]
+    return {"by_source": by_source, "average_days_to_contract": float(average_days or 0)}
