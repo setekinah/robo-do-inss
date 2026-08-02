@@ -89,7 +89,7 @@ EXTRACTION_STATUS_STYLE = {
 
 SALARIO_MINIMO_2026 = 1621.00
 TETO_INSS_2026 = 8537.55
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.1.0"
 BRAND_NAME = "SOFI.IA PREVI"
 AGENT_NAME = "Sofia"
 BRAND_SLOGAN = "o seu conhecimento juridico no mundo previdenciario"
@@ -100,6 +100,13 @@ NAV_ITEMS = [
     ("contratos", "Contratos", "📄"),
     ("configuracoes", "Configurações", "⚙️"),
 ]
+NAV_MATERIAL_ICONS = {
+    "dashboard": ":material/dashboard:",
+    "leads": ":material/groups:",
+    "crm": ":material/view_kanban:",
+    "contratos": ":material/description:",
+    "configuracoes": ":material/settings:",
+}
 
 CRM_STAGES = [
     ("novo_contato", "Novo contato"),
@@ -220,6 +227,39 @@ PIPELINE_COLUMNS = [
     ("encerrado", "Encerrado", "Atendimento concluído", "soft-neutral"),
     ("perdido", "Perdido", "Sem contratação", "soft-red"),
 ]
+PIPELINE_PHASES = {
+    "entrada": {
+        "label": "Entrada e qualificação",
+        "icon": "🧭",
+        "stages": ["novo_contato", "conflito", "triagem"],
+    },
+    "conversao": {
+        "label": "Conversão e contratação",
+        "icon": "🤝",
+        "stages": ["reuniao", "proposta", "documentos"],
+    },
+    "gestao": {
+        "label": "Gestão e encerramento",
+        "icon": "⚖️",
+        "stages": ["caso_ativo", "encerrado", "perdido"],
+    },
+}
+PRIVACY_LEGAL_BASES = {
+    "procedimentos_preliminares": "Procedimentos preliminares ou contrato a pedido do titular",
+    "exercicio_regular_direitos": "Exercício regular de direitos em processo judicial ou administrativo",
+    "consentimento": "Consentimento específico do titular",
+}
+PIPELINE_STAGE_ICONS = {
+    "novo_contato": ":material/person_add:",
+    "conflito": ":material/gpp_maybe:",
+    "triagem": ":material/fact_check:",
+    "reuniao": ":material/event:",
+    "proposta": ":material/handshake:",
+    "documentos": ":material/folder_open:",
+    "caso_ativo": ":material/work:",
+    "encerrado": ":material/check_circle:",
+    "perdido": ":material/cancel:",
+}
 INTEGRATION_SOURCE_LABELS = {
     "triagem_crm": "Triagem interna",
     "whatsapp": "WhatsApp",
@@ -241,18 +281,18 @@ def inject_styles() -> None:
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
         :root {
-            --bg: #f3f0ea;
+            --bg: #f6f8fc;
             --panel: rgba(255, 255, 255, 0.94);
-            --panel-strong: #fcfbf8;
+            --panel-strong: #fbfdff;
             --border: rgba(27, 38, 52, 0.11);
             --text: #1f2430;
-            --muted: #6d6254;
+            --muted: #68758b;
             --navy: #152235;
             --navy-soft: #22324a;
             --navy-deep: #0f1827;
-            --gold: #b58b47;
-            --gold-soft: #d7bf92;
-            --gold-pale: #f5ecdb;
+            --gold: #2f5bea;
+            --gold-soft: #a9c2ff;
+            --gold-pale: #edf3ff;
             --success-bg: #edf7f0;
             --success-text: #1f6a3d;
             --warning-bg: #fff7e8;
@@ -261,8 +301,7 @@ def inject_styles() -> None:
             --danger-text: #a23a31;
         }
         .stApp {
-            background:
-                linear-gradient(180deg, #f6f3ee 0%, #eee7db 100%);
+            background: #f6f8fc;
             color: var(--text);
         }
         html, body, [class*="css"], [data-testid="stAppViewContainer"] {
@@ -1789,6 +1828,30 @@ def inject_lawfirm_admin_theme() -> None:
         .law-admin-topbar strong { color:var(--admin-ink); font-size:1rem; }
         .law-admin-topbar span { color:var(--admin-muted); font-size:.84rem; }
         .law-admin-search { min-width:280px; background:#f7f8fb; border:1px solid #edf0f6; border-radius:6px; padding:.55rem .8rem; color:#9aa5b6; }
+        .law-admin-nav-marker { display:none !important; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.law-admin-nav-marker) {
+            background:#ffffff !important;
+            border:1px solid #edf0f6 !important;
+            border-radius:8px !important;
+            padding:.45rem .6rem !important;
+            margin-bottom:.55rem !important;
+            box-shadow:0 4px 16px rgba(35,55,95,.05) !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.law-admin-nav-marker) [data-testid="stVerticalBlock"] {
+            gap:.25rem !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.law-admin-nav-marker) .stButton > button {
+            min-height:2.3rem !important;
+            padding:.35rem .55rem !important;
+            justify-content:center;
+            font-size:.76rem;
+            white-space:nowrap;
+        }
+        .law-admin-brand-compact strong { display:block; color:var(--admin-blue); font-size:.88rem; }
+        .law-admin-brand-compact span { color:var(--admin-muted); font-size:.7rem; }
+        .law-admin-status-compact { text-align:right; }
+        .law-admin-status-compact strong { display:block; color:#268c3a; font-size:.78rem; }
+        .law-admin-status-compact span { color:var(--admin-muted); font-size:.68rem; }
         .law-dashboard-primary {
             display:grid; grid-template-columns:1.05fr 1fr 1fr; gap:1rem; margin:0 0 1rem;
         }
@@ -1867,6 +1930,216 @@ def inject_lawfirm_admin_theme() -> None:
         [data-testid="stMetric"] { background:#fff; border:1px solid #edf0f6; padding:.8rem; border-radius:8px; box-shadow:0 4px 14px rgba(35,55,95,.05); }
         .stTabs [data-baseweb="tab"] { border-radius:6px !important; }
         button[kind="primary"] { background:var(--admin-blue) !important; border-color:var(--admin-blue) !important; }
+
+        /* Controles nativos e popovers ficam na mesma paleta fria do painel. */
+        [data-baseweb="popover"],
+        [data-baseweb="popover"] > div,
+        [data-baseweb="menu"],
+        [role="listbox"] {
+            background:#ffffff !important;
+            color:var(--admin-ink) !important;
+            border-color:#dfe6f1 !important;
+        }
+        [data-baseweb="popover"] {
+            border:1px solid #dfe6f1 !important;
+            border-radius:8px !important;
+            box-shadow:0 12px 28px rgba(35,55,95,.14) !important;
+        }
+        [role="option"] {
+            background:#ffffff !important;
+            color:#44516a !important;
+        }
+        [role="option"]:hover,
+        [role="option"][aria-selected="true"] {
+            background:#edf3ff !important;
+            color:var(--admin-blue) !important;
+        }
+
+        /* Densidade operacional: mais informacao visivel e menos rolagem. */
+        .stApp:has(.law-admin-topbar) .block-container {
+            max-width:1580px !important;
+            padding-top:.55rem !important;
+            padding-bottom:1.25rem !important;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stVerticalBlock"] { gap:.72rem; }
+        .stApp:has(.law-admin-topbar) [data-testid="stHorizontalBlock"] { gap:.8rem; }
+        .stApp:has(.law-admin-topbar) .law-admin-topbar {
+            padding:.5rem .75rem;
+            margin-bottom:.55rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-page-header {
+            margin:.05rem 0 .65rem !important;
+            padding:.1rem 0 .35rem !important;
+        }
+        .stApp:has(.law-admin-topbar) .pre-page-header h2 { font-size:1.35rem !important; }
+        .stApp:has(.law-admin-topbar) .pre-page-header p { margin-top:.1rem; font-size:.84rem; }
+        .stApp:has(.law-admin-topbar) .panel-heading { margin-bottom:.55rem; }
+        .stApp:has(.law-admin-topbar) .panel-title { font-size:1.35rem; }
+        .stApp:has(.law-admin-topbar) .panel-subtitle { margin-top:.2rem; font-size:.82rem; }
+        .stApp:has(.law-admin-topbar) .pre-section-title {
+            font-size:1.12rem !important;
+            margin-bottom:.35rem !important;
+        }
+        .stApp:has(.law-admin-topbar) .pre-card,
+        .stApp:has(.law-admin-topbar) .panel-box,
+        .stApp:has(.law-admin-topbar) .surface-card { padding:.8rem .9rem !important; }
+        .stApp:has(.law-admin-topbar) .pre-metric-grid { gap:.65rem; margin-bottom:.55rem; }
+        .stApp:has(.law-admin-topbar) .pre-metric-card {
+            min-height:68px;
+            padding:.65rem .75rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-metric-card h3 { font-size:1.45rem; }
+        .stApp:has(.law-admin-topbar) .pre-metric-card p { margin-top:.18rem; font-size:.78rem; }
+        .stApp:has(.law-admin-topbar) .workspace-kpis { gap:.65rem; margin-bottom:.25rem; }
+        .stApp:has(.law-admin-topbar) .kpi-card { border-radius:8px; padding:.65rem .75rem; }
+        .stApp:has(.law-admin-topbar) .kpi-value { font:800 1.45rem/1 "Manrope",sans-serif; }
+        .stApp:has(.law-admin-topbar) .kpi-label { margin-bottom:.2rem; }
+        .stApp:has(.law-admin-topbar) .kpi-note { font-size:.75rem; line-height:1.35; }
+        .stApp:has(.law-admin-topbar) .pre-lead-card {
+            border-radius:8px;
+            padding:.65rem .7rem;
+            margin-bottom:.5rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-focus-hero {
+            border-radius:8px;
+            padding:.75rem .85rem;
+            margin-bottom:.6rem;
+        }
+        .stApp:has(.law-admin-topbar) .pre-focus-hero h3 { font-size:1.35rem; }
+        .stApp:has(.law-admin-topbar) .pre-focus-grid { gap:.55rem; margin:.55rem 0; }
+        .stApp:has(.law-admin-topbar) .pre-focus-stat { border-radius:8px; padding:.6rem .7rem; }
+        .stApp:has(.law-admin-topbar) .pre-detail-list { gap:.45rem; margin:.55rem 0 0; }
+        .stApp:has(.law-admin-topbar) .pre-detail-row { border-radius:8px; padding:.55rem .65rem; }
+        .stApp:has(.law-admin-topbar) .pre-task-list { gap:.5rem; }
+        .stApp:has(.law-admin-topbar) .pre-task-item { border-radius:8px; padding:.65rem .7rem; }
+        .stApp:has(.law-admin-topbar) .status-chip { margin-bottom:.45rem; padding:.3rem .6rem; }
+        .stApp:has(.law-admin-topbar) .stButton > button { min-height:2.25rem; border-radius:6px !important; }
+        .stApp:has(.law-admin-topbar) .stTextInput input,
+        .stApp:has(.law-admin-topbar) .stNumberInput input,
+        .stApp:has(.law-admin-topbar) .stSelectbox div[data-baseweb="select"] > div {
+            min-height:2.35rem !important;
+            border-radius:6px !important;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stMetric"] { padding:.55rem .65rem; }
+        .stApp:has(.law-admin-topbar) [data-testid="stDataFrame"] { min-height:0 !important; }
+        .stApp:has(.law-admin-topbar) [data-testid="stVegaLiteChart"] {
+            background:#ffffff !important;
+            border:1px solid #edf0f6;
+            border-radius:8px;
+            padding:.35rem;
+        }
+
+        /* O HTML aberto em uma chamada e fechado em outra vira um card vazio no Streamlit. */
+        .pre-card:empty,
+        .panel-box:empty,
+        div[data-testid="stMarkdown"]:has(.pre-card:empty),
+        div[data-testid="stMarkdown"]:has(.panel-box:empty) {
+            display:none !important;
+            margin:0 !important;
+            padding:0 !important;
+            min-height:0 !important;
+        }
+
+        .stApp:has(.law-admin-topbar) .law-dashboard-primary { gap:.7rem; margin-bottom:.65rem; }
+        .stApp:has(.law-admin-topbar) .law-results-card { min-height:150px; }
+        .stApp:has(.law-admin-topbar) .law-result-segment { padding:.75rem .55rem; }
+        .stApp:has(.law-admin-topbar) .law-result-icon { font-size:1.35rem; margin:.35rem 0; }
+        .stApp:has(.law-admin-topbar) .law-result-value { font-size:1.55rem; }
+        .stApp:has(.law-admin-topbar) .law-stat-panel,
+        .stApp:has(.law-admin-topbar) .law-funnel-panel,
+        .stApp:has(.law-admin-topbar) .law-revenue-panel { padding:.8rem .9rem; }
+        .stApp:has(.law-admin-topbar) .law-stat-value { font-size:1.55rem; margin-top:.5rem; }
+        .stApp:has(.law-admin-topbar) .law-mini-chart { height:48px; margin-top:.5rem; }
+        .stApp:has(.law-admin-topbar) .law-dashboard-secondary { gap:.7rem; margin-bottom:.1rem; }
+        .stApp:has(.law-admin-topbar) .law-side-stack { gap:.7rem; }
+        .stApp:has(.law-admin-topbar) .law-alert-card { min-height:64px; padding:.65rem .8rem; }
+        .stApp:has(.law-admin-topbar) .law-funnel-list { gap:.42rem; margin-top:.65rem; }
+        .stApp:has(.law-admin-topbar) .stTabs [data-baseweb="tab-list"] {
+            gap:.35rem;
+            padding-bottom:.35rem;
+        }
+        .stApp:has(.law-admin-topbar) .stTabs [data-baseweb="tab"] {
+            min-height:2.2rem;
+            padding:.32rem .7rem;
+            font-size:.8rem;
+        }
+        .law-dashboard-details {
+            margin:0 0 .65rem;
+            border:1px solid #e5ebf4;
+            border-radius:8px;
+            background:#ffffff;
+        }
+        .law-dashboard-details summary {
+            padding:.65rem .8rem;
+            color:#40506a;
+            font-size:.83rem;
+            font-weight:700;
+            cursor:pointer;
+            list-style-position:inside;
+        }
+        .law-dashboard-details[open] summary { border-bottom:1px solid #edf0f6; }
+        .law-dashboard-details .law-dashboard-secondary { padding:.7rem; }
+        .law-pulse-inline {
+            display:flex;
+            flex-wrap:wrap;
+            gap:.45rem .7rem;
+            margin:-.15rem 0 .45rem;
+        }
+        .law-pulse-inline span {
+            display:inline-flex;
+            align-items:center;
+            gap:.3rem;
+            padding:.34rem .55rem;
+            border:1px solid #dfe7f4;
+            border-radius:999px;
+            background:#ffffff;
+            color:#647089;
+            font-size:.76rem;
+        }
+        .law-pulse-inline strong { color:var(--admin-blue); }
+        .crm-stage-heading {
+            min-height:72px;
+            border-radius:8px 8px 0 0;
+            padding:.65rem .7rem;
+            border:1px solid #e5ebf4;
+            border-bottom:0;
+        }
+        .crm-stage-heading strong { display:block; color:#17243b; font-size:.9rem; }
+        .crm-stage-heading span { color:#68758b; font-size:.72rem; line-height:1.35; }
+        .crm-stage-heading b {
+            float:right;
+            min-width:24px;
+            height:24px;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            border-radius:999px;
+            background:rgba(255,255,255,.84);
+            color:#17243b;
+            font-size:.72rem;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.crm-stage-scroll-marker) {
+            border-radius:0 0 8px 8px !important;
+            border-color:#e5ebf4 !important;
+            background:#ffffff !important;
+            padding:.55rem !important;
+        }
+        .crm-stage-scroll-marker { display:none; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.crm-stage-scroll-marker) .stButton > button {
+            align-items:flex-start;
+            justify-content:flex-start;
+            text-align:left;
+            min-height:2.75rem !important;
+            padding:.48rem .58rem !important;
+            white-space:normal;
+            line-height:1.25;
+        }
+        .stApp:has(.law-admin-topbar) .stMarkdown h1 a,
+        .stApp:has(.law-admin-topbar) .stMarkdown h2 a,
+        .stApp:has(.law-admin-topbar) .stMarkdown h3 a,
+        .stApp:has(.law-admin-topbar) [data-testid="stHeaderActionElements"] {
+            display:none !important;
+        }
         @media (max-width: 1100px) {
             .law-dashboard-primary { grid-template-columns:1fr 1fr; }
             .law-results-card { grid-column:span 2; }
@@ -1888,16 +2161,47 @@ def inject_lawfirm_admin_theme() -> None:
 
 
 def render_admin_topbar() -> None:
-    st.markdown(
-        """
-        <div class="law-admin-topbar">
-          <div><strong>SOFI.IA PREVI</strong><br><span>Administração jurídica e relacionamento</span></div>
-          <div class="law-admin-search">Painel jurídico &nbsp;•&nbsp; CRM &nbsp;•&nbsp; Documentos</div>
-          <div><strong>Operação ativa</strong><br><span>Dados locais protegidos</span></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    with st.container(border=True):
+        st.markdown(
+            "<span class='law-admin-topbar law-admin-nav-marker'></span>",
+            unsafe_allow_html=True,
+        )
+        nav_columns = st.columns([1.45, 1, 1.08, 1, 1, 1.08, 0.78, 0.58], gap="small")
+        with nav_columns[0]:
+            st.markdown(
+                "<div class='law-admin-brand-compact'><strong>SOFI.IA PREVI</strong><span>Administração jurídica</span></div>",
+                unsafe_allow_html=True,
+            )
+        for column, (view_id, label, _emoji) in zip(nav_columns[1:6], NAV_ITEMS):
+            with column:
+                if st.button(
+                    label,
+                    key=f"topnav_{view_id}",
+                    icon=NAV_MATERIAL_ICONS[view_id],
+                    type="primary" if st.session_state.current_view == view_id else "tertiary",
+                    help=f"Abrir {label.lower()}",
+                    use_container_width=True,
+                ):
+                    set_current_view(view_id)
+                    st.rerun()
+        with nav_columns[6]:
+            st.markdown(
+                "<div class='law-admin-status-compact'><strong>● Ativo</strong><span>Dados locais</span></div>",
+                unsafe_allow_html=True,
+            )
+        with nav_columns[7]:
+            if st.button(
+                "Sair",
+                key="auth_logout_top",
+                icon=":material/logout:",
+                type="tertiary",
+                help="Sair da conta",
+                use_container_width=True,
+            ):
+                st.session_state.is_authenticated = False
+                st.session_state.auth_mode = "login"
+                st.session_state.auth_login_password = ""
+                st.rerun()
 
 
 def ensure_session_defaults() -> None:
@@ -1949,6 +2253,14 @@ def ensure_session_defaults() -> None:
         st.session_state.auth_login_password = ""
     if "last_automation_notice" not in st.session_state:
         st.session_state.last_automation_notice = ""
+    if "crm_section" not in st.session_state:
+        st.session_state.crm_section = "funil"
+    if "crm_pipeline_phase" not in st.session_state:
+        st.session_state.crm_pipeline_phase = "entrada"
+    if "crm_pipeline_page" not in st.session_state:
+        st.session_state.crm_pipeline_page = 1
+    if "crm_stage_filter" not in st.session_state:
+        st.session_state.crm_stage_filter = "todos"
 
 
 def render_panel_header(kicker: str, title: str, subtitle: str = "") -> None:
@@ -2003,7 +2315,7 @@ def render_operation_kpis() -> None:
 
 def render_recent_queue() -> None:
     render_panel_header("Fila", "Atendimentos recentes", "Acesso rapido aos ultimos registros salvos.")
-    recent_rows = list_recent_attendances(limit=5)
+    recent_rows = list_recent_attendances(limit=3)
     if not recent_rows:
         st.info("Ainda nao ha atendimentos salvos.")
         return
@@ -2155,6 +2467,75 @@ def render_lead_form() -> dict[str, Any]:
         reset_triage(selected_flow_id)
         st.rerun()
 
+    triage_profile: dict[str, Any] = {}
+    if selected_flow_id == "aposentadoria":
+        with st.expander("Dados previdenciários essenciais", expanded=False):
+            st.caption(
+                "Registre o mínimo necessário para cálculo e estratégia. A triagem não substitui a análise do CNIS."
+            )
+            profile_left, profile_right = st.columns(2, gap="medium")
+            with profile_left:
+                birth_date = st.date_input(
+                    "Data de nascimento",
+                    value=None,
+                    key="retirement_birth_date",
+                )
+                calculation_criterion = st.selectbox(
+                    "Critério de cálculo a verificar",
+                    ["Não informado", "Mulher", "Homem", "Análise individualizada"],
+                    key="retirement_calculation_criterion",
+                )
+                contribution_estimate = st.text_input(
+                    "Tempo de contribuição estimado",
+                    key="retirement_contribution_estimate",
+                    placeholder="Ex.: 28 anos e 6 meses",
+                )
+            with profile_right:
+                cnis_status = st.selectbox(
+                    "Situação do CNIS",
+                    [
+                        "Não analisado",
+                        "Não apresentado",
+                        "Sem divergências aparentes",
+                        "Com divergências",
+                    ],
+                    key="retirement_cnis_status",
+                )
+                relevant_periods = st.multiselect(
+                    "Períodos ou vínculos relevantes",
+                    ["Urbano", "Rural", "Especial", "RPPS/CTC", "Professor", "PCD", "Militar", "Exterior"],
+                    key="retirement_relevant_periods",
+                )
+                retirement_objective = st.text_area(
+                    "Objetivo previdenciário",
+                    key="retirement_objective",
+                    placeholder="Benefício imediato, planejamento, acerto de CNIS ou averbação.",
+                    height=82,
+                )
+        triage_profile = {
+            "birth_date": birth_date.isoformat() if birth_date else "",
+            "calculation_criterion": calculation_criterion,
+            "contribution_estimate": contribution_estimate.strip(),
+            "cnis_status": cnis_status,
+            "relevant_periods": relevant_periods,
+            "objective": retirement_objective.strip(),
+        }
+
+    privacy_left, privacy_right = st.columns([1.1, 0.9], gap="medium")
+    with privacy_left:
+        privacy_notice_acknowledged = st.checkbox(
+            "Confirmo que o titular foi informado sobre finalidade, acesso restrito e retenção dos dados.",
+            key="lead_privacy_notice_acknowledged",
+        )
+        st.caption("Colete somente dados necessários ao atendimento e à análise jurídica solicitada.")
+    with privacy_right:
+        privacy_legal_basis = st.selectbox(
+            "Base legal do tratamento",
+            options=list(PRIVACY_LEGAL_BASES),
+            format_func=lambda value: PRIVACY_LEGAL_BASES[value],
+            key="lead_privacy_legal_basis",
+        )
+
     return {
         "lead_name": name.strip(),
         "lead_phone": phone.strip(),
@@ -2162,6 +2543,9 @@ def render_lead_form() -> dict[str, Any]:
         "lead_source": source,
         "lead_notes": notes.strip(),
         "flow_id": selected_flow_id,
+        "privacy_notice_acknowledged": bool(privacy_notice_acknowledged),
+        "privacy_legal_basis": privacy_legal_basis,
+        "triage_profile": triage_profile,
     }
 
 
@@ -2342,6 +2726,55 @@ def get_all_attendance_rows(limit: int = 200) -> list[Any]:
     return search_attendances(limit=limit)
 
 
+def parse_triage_profile(raw_profile: Any) -> dict[str, Any]:
+    """Return a safe structured profile from the persisted JSON payload."""
+    if isinstance(raw_profile, dict):
+        return raw_profile
+    try:
+        parsed = json.loads(str(raw_profile or "{}"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def get_contract_block_reasons(row: Any) -> list[str]:
+    """Describe every governance gate preventing a contract from being released."""
+    reasons: list[str] = []
+    triage_status = normalize_triage_status(str(row["status"] or ""))
+    conflict_status = str(row["conflict_status"] or "pendente")
+    if triage_status != "aprovado":
+        reasons.append(
+            "Triagem pendente de revisão jurídica"
+            if triage_status == "revisao"
+            else "Triagem não qualificada para contratação"
+        )
+    if conflict_status != "liberado":
+        reasons.append(
+            "Conflito de interesse identificado"
+            if conflict_status == "conflito"
+            else "Checagem de conflito pendente"
+        )
+    if not bool(int(row["privacy_notice_acknowledged"] or 0)):
+        reasons.append("Aviso de privacidade/LGPD não registrado")
+    return reasons
+
+
+def summarize_triage_profile(profile: dict[str, Any]) -> str:
+    """Build a compact lawyer-facing summary of structured previdentiary facts."""
+    if not profile:
+        return "Perfil previdenciário estruturado ainda não preenchido."
+    relevant_periods = profile.get("relevant_periods") or []
+    parts = [
+        f"Nascimento: {profile.get('birth_date') or 'não informado'}",
+        f"Critério: {profile.get('calculation_criterion') or 'não informado'}",
+        f"Contribuição estimada: {profile.get('contribution_estimate') or 'não informada'}",
+        f"CNIS: {profile.get('cnis_status') or 'não analisado'}",
+        f"Períodos: {', '.join(str(item) for item in relevant_periods) if relevant_periods else 'nenhum indicado'}",
+        f"Objetivo: {profile.get('objective') or 'não informado'}",
+    ]
+    return " · ".join(parts)
+
+
 def build_pipeline_records(limit: int = 200) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for row in get_all_attendance_rows(limit=limit):
@@ -2382,6 +2815,11 @@ def build_pipeline_records(limit: int = 200) -> list[dict[str, Any]]:
                 "assigned_to": row["assigned_to"],
                 "next_action": row["next_action"],
                 "next_action_at": row["next_action_at"],
+                "privacy_notice_acknowledged": bool(
+                    int(row["privacy_notice_acknowledged"] or 0)
+                ),
+                "privacy_legal_basis": row["privacy_legal_basis"],
+                "triage_profile": parse_triage_profile(row["triage_profile_json"]),
             }
         )
     return records
@@ -2541,10 +2979,19 @@ def build_recent_task_rows(
             if int(doc["required"]) == 1 and doc["status"] != "validado"
         ]
         stage = str(item["stage"])
+        conflict_status = str(item.get("conflict_status") or "pendente")
+        triage_status = normalize_triage_status(str(item.get("status") or ""))
+        registered_next_action = str(item.get("next_action") or "").strip()
 
-        if stage == "conflito":
-            title = "Executar checagem de conflito"
-            description = "Não avance com orientação jurídica ou contrato antes da liberação."
+        if conflict_status != "liberado" and stage not in {"encerrado", "perdido"}:
+            title = (
+                "Resolver conflito de interesse identificado"
+                if conflict_status == "conflito"
+                else "Concluir checagem de conflito"
+            )
+            description = registered_next_action or (
+                "Verifique cliente, partes, empresas e interessados antes de orientar ou contratar."
+            )
             priority = "Alta"
         elif stage == "reuniao":
             title = "Realizar reunião de análise"
@@ -2566,7 +3013,23 @@ def build_recent_task_rows(
             title = "Conduzir estrategia do caso ativo"
             description = "Caso com triagem e documentos em nivel operacional."
             priority = "Media"
-        elif stage in {"novo_contato", "triagem"}:
+        elif stage == "novo_contato":
+            title = "Concluir triagem inicial"
+            description = "Lead ainda depende de respostas para sair do filtro inicial."
+            priority = "Baixa"
+        elif stage == "triagem" and triage_status == "revisao":
+            title = "Revisar estratégia e pendências da triagem"
+            description = registered_next_action or (
+                "A triagem foi concluída em revisão; complemente fatos, documentos e cálculo."
+            )
+            priority = "Alta"
+        elif stage == "triagem" and triage_status == "aprovado":
+            title = "Validar parecer inicial e encaminhamento"
+            description = registered_next_action or (
+                "A triagem foi concluída; confirme a estratégia jurídica e o próximo movimento."
+            )
+            priority = "Media"
+        elif stage == "triagem":
             title = "Concluir triagem inicial"
             description = "Lead ainda depende de respostas para sair do filtro inicial."
             priority = "Baixa"
@@ -3054,7 +3517,7 @@ def render_dashboard_view() -> None:
     source_df = build_source_breakdown_dataframe(dashboard)
     activity_df = build_recent_activity_dataframe(dashboard)
     case_df = build_case_dataframe(pipeline_records[:18], office_settings)
-    task_rows = build_recent_task_rows(pipeline_records, limit=5)
+    task_rows = build_recent_task_rows(pipeline_records, limit=3)
     document_hotspot_df = build_document_hotspot_dataframe(pipeline_records, limit=6)
 
     approved_total = next(
@@ -3140,6 +3603,8 @@ def render_dashboard_view() -> None:
             f"<div class='law-panel-legend'><span><i style='background:#3f9fe8'></i>{active_total} em andamento</span><span><i style='background:#42b83f'></i>{settled_total} encerrados</span></div>"
             f"<div class='law-mini-chart'>{cumulative_bars}</div>"
             "</div></div>"
+            "<details class='law-dashboard-details'>"
+            "<summary>Honorários e desempenho do funil</summary>"
             "<div class='law-dashboard-secondary'>"
             "<div class='law-side-stack'>"
             "<div class='law-revenue-panel'>"
@@ -3152,6 +3617,7 @@ def render_dashboard_view() -> None:
             f"<div><span>Pendências documentais</span><strong>{int(dashboard['document_backlog'])}</strong></div>"
             "<div class='law-alert-icon'>&#9888;</div>"
             "</div></div>"
+            "</details>"
             "<div class='law-funnel-panel'>"
             "<div class='law-panel-heading'><h3>Desempenho do funil jurídico</h3><span>Casos por etapa</span></div>"
             f"<div class='law-funnel-list'>{funnel_rows_markup}</div>"
@@ -3179,34 +3645,29 @@ def render_dashboard_view() -> None:
     if st.session_state.selected_dashboard_case_id not in available_case_ids:
         st.session_state.selected_dashboard_case_id = available_case_ids[0]
 
-    focus_toolbar_left, focus_toolbar_right = st.columns([1.2, 0.8], gap="medium")
-    with focus_toolbar_left:
-        focus_case_id = st.selectbox(
-            "Caso-chave da carteira",
-            options=available_case_ids,
-            format_func=lambda case_id: next(
-                (
-                    f"#{item['id']} | {item['lead_name']} | {item['flow_name']}"
-                    for item in pipeline_records
-                    if int(item["id"]) == int(case_id)
-                ),
-                f"Caso #{case_id}",
-            ),
-            key="selected_dashboard_case_id",
-        )
-    with focus_toolbar_right:
-        st.markdown(
+    focus_case_id = st.selectbox(
+        "Caso-chave da carteira",
+        options=available_case_ids,
+        format_func=lambda case_id: next(
             (
-                "<div class='pre-card'>"
-                "<h3 class='pre-section-title'>Pulso da carteira</h3>"
-                f"<div class='pre-meta-list'>"
-                f"<div class='pre-meta-item'><strong>Desqualificados</strong><span>{disqualified_total} caso(s) fora da tese principal, úteis para redirecionamento comercial.</span></div>"
-                f"<div class='pre-meta-item'><strong>Casos monitorados</strong><span>{len(pipeline_records)} casos ativos no radar e {int(dashboard['document_backlog'])} pendencias documentais abertas.</span></div>"
-                "</div>"
-                "</div>"
+                f"#{item['id']} | {item['lead_name']} | {item['flow_name']}"
+                for item in pipeline_records
+                if int(item["id"]) == int(case_id)
             ),
-            unsafe_allow_html=True,
-        )
+            f"Caso #{case_id}",
+        ),
+        key="selected_dashboard_case_id",
+    )
+    st.markdown(
+        (
+            "<div class='law-pulse-inline'>"
+            f"<span><strong>{len(pipeline_records)}</strong> casos monitorados</span>"
+            f"<span><strong>{int(dashboard['document_backlog'])}</strong> pendências documentais</span>"
+            f"<span><strong>{disqualified_total}</strong> desqualificados</span>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
     focus_record = next(
         record for record in pipeline_records if int(record["id"]) == int(focus_case_id)
@@ -3232,163 +3693,143 @@ def render_dashboard_view() -> None:
         if focus_details and focus_details["benefit_category"]
         else str(focus_record["flow_name"])
     )
+    action_tab, insight_tab, portfolio_tab = st.tabs(
+        ["Ação prioritária", "Indicadores", "Carteira e risco"]
+    )
 
-    tactical_cols = st.columns([0.92, 1.08], gap="large")
-    with tactical_cols[0]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Fila prioritaria</h3>", unsafe_allow_html=True)
-        st.caption(
-            "O que merece acao humana agora, ordenado por urgencia operacional dentro da carteira."
-        )
-        if not task_rows:
-            st.info("Nenhuma tarefa critica foi identificada nesta carteira.")
-        else:
-            st.markdown("<div class='pre-task-list'>", unsafe_allow_html=True)
-            for task in task_rows:
-                priority_class = str(task["priority"]).lower()
+    with action_tab:
+        tactical_cols = st.columns([0.92, 1.08], gap="medium")
+        with tactical_cols[0]:
+            with st.container(border=True):
+                st.markdown("<h3 class='pre-section-title'>Fila prioritária</h3>", unsafe_allow_html=True)
+                st.caption("O que merece ação humana agora, ordenado por urgência operacional.")
+                if not task_rows:
+                    st.info("Nenhuma tarefa crítica foi identificada nesta carteira.")
+                else:
+                    for task in task_rows:
+                        priority_class = str(task["priority"]).lower()
+                        st.markdown(
+                            (
+                                "<div class='pre-task-item'>"
+                                f"<div class='pre-task-priority {priority_class}'>{task['priority']}</div>"
+                                f"<h4>#{task['case_id']} | {task['lead_name']}</h4>"
+                                f"<p><strong>{task['title']}</strong></p>"
+                                f"<p>{task['description']}</p>"
+                                "</div>"
+                            ),
+                            unsafe_allow_html=True,
+                        )
+                        if st.button(
+                            f"Trazer para o centro #{task['case_id']}",
+                            key=f"dashboard_focus_task_{task['case_id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.pending_dashboard_case_id = int(task["case_id"])
+                            st.rerun()
+
+        with tactical_cols[1]:
+            with st.container(border=True):
                 st.markdown(
                     (
-                        "<div class='pre-task-item'>"
-                        f"<div class='pre-task-priority {priority_class}'>{task['priority']}</div>"
-                        f"<h4>#{task['case_id']} | {task['lead_name']}</h4>"
-                        f"<p><strong>{task['title']}</strong></p>"
-                        f"<p>{task['description']}</p>"
+                        "<div class='pre-focus-hero'>"
+                        f"<div class='eyebrow'>{get_stage_label(str(focus_record['stage']))}</div>"
+                        f"<h3>#{focus_record['id']} | {focus_record['lead_name']}</h3>"
+                        f"<p>{focus_record['flow_name']} | {status_label}</p>"
+                        "</div>"
+                        "<div class='pre-focus-grid'>"
+                        f"<div class='pre-focus-stat'><strong>{focus_record['score']}/100</strong><span>Score documental atual</span></div>"
+                        f"<div class='pre-focus-stat'><strong>{focus_validated_total}/{focus_required_total}</strong><span>Obrigatórios validados</span></div>"
+                        f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_total) if potential_fee_total > 0 else '-'}</strong><span>Honorário potencial</span></div>"
+                        f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_monthly) if potential_fee_monthly > 0 else '-'}</strong><span>Recorrência mensal estimada</span></div>"
+                        "</div>"
+                        f"<div class='status-chip' style='background:{status_background}; color:{status_color};'>{status_label}</div>"
+                        "<div class='pre-detail-list'>"
+                        f"<div class='pre-detail-row'><strong>Benefício dominante</strong><span>{focus_benefit_label}</span></div>"
+                        f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{focus_details['summary'] if focus_details and focus_details['summary'] else 'Caso pronto para leitura executiva dentro do painel.'}</span></div>"
+                        f"<div class='pre-detail-row'><strong>Próximo passo</strong><span>{focus_details['next_step'] if focus_details and focus_details['next_step'] else 'Sem orientação registrada ainda.'}</span></div>"
+                        f"<div class='pre-detail-row'><strong>Risco documental</strong><span>{', '.join(pending_required_names[:3]) if pending_required_names else 'Sem pendências críticas nos documentos obrigatórios.'}</span></div>"
                         "</div>"
                     ),
                     unsafe_allow_html=True,
                 )
-                if st.button(
-                    f"Trazer para o centro #{task['case_id']}",
-                    key=f"dashboard_focus_task_{task['case_id']}",
-                    use_container_width=True,
-                ):
-                    st.session_state.pending_dashboard_case_id = int(task["case_id"])
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with tactical_cols[1]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown(
-            (
-                "<div class='pre-focus-hero'>"
-                f"<div class='eyebrow'>{get_stage_label(str(focus_record['stage']))}</div>"
-                f"<h3>#{focus_record['id']} | {focus_record['lead_name']}</h3>"
-                f"<p>{focus_record['flow_name']} | {status_label}</p>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            (
-                "<div class='pre-focus-grid'>"
-                f"<div class='pre-focus-stat'><strong>{focus_record['score']}/100</strong><span>Score documental atual</span></div>"
-                f"<div class='pre-focus-stat'><strong>{focus_validated_total}/{focus_required_total}</strong><span>Obrigatorios validados</span></div>"
-                f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_total) if potential_fee_total > 0 else '-'}</strong><span>Honorario potencial</span></div>"
-                f"<div class='pre-focus-stat'><strong>{format_currency(potential_fee_monthly) if potential_fee_monthly > 0 else '-'}</strong><span>Recorrencia mensal estimada</span></div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f"<div class='status-chip' style='background:{status_background}; color:{status_color};'>{status_label}</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            (
-                "<div class='pre-detail-list'>"
-                f"<div class='pre-detail-row'><strong>Beneficio dominante</strong><span>{focus_benefit_label}</span></div>"
-                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{focus_details['summary'] if focus_details and focus_details['summary'] else 'Caso pronto para leitura executiva dentro do painel.'}</span></div>"
-                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{focus_details['next_step'] if focus_details and focus_details['next_step'] else 'Sem orientacao registrada ainda.'}</span></div>"
-                f"<div class='pre-detail-row'><strong>Risco documental</strong><span>{', '.join(pending_required_names[:3]) if pending_required_names else 'Sem pendencias criticas nos documentos obrigatorios.'}</span></div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        action_cols = st.columns(2, gap="small")
-        with action_cols[0]:
-            if st.button("Abrir no CRM", key="dashboard_open_crm_focus", use_container_width=True):
-                st.session_state.selected_crm_case_id = int(focus_record["id"])
-                set_current_view("crm")
-                st.rerun()
-        with action_cols[1]:
-            secondary_label = "Abrir contratos" if normalized_status == "aprovado" else "Abrir dossie"
-            if st.button(secondary_label, key="dashboard_open_workspace_focus", use_container_width=True):
-                if normalized_status == "aprovado":
-                    st.session_state.selected_contract_attendance_id = int(focus_record["id"])
-                    set_current_view("contratos")
-                else:
-                    st.session_state.selected_attendance_id = int(focus_record["id"])
-                    st.session_state.selected_document_attendance_id = int(focus_record["id"])
-                    set_current_view("leads")
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    insight_cols = st.columns([1.0, 1.0], gap="large")
-    with insight_cols[0]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Origem e resultado</h3>", unsafe_allow_html=True)
-        st.caption("Leitura gerencial da conversao por fluxo monitorado no escritorio.")
-        if source_df.empty:
-            st.info("Ainda nao ha volume suficiente para distribuir resultados por fluxo.")
-        else:
-            st.bar_chart(
-                source_df,
-                x="Fonte",
-                y=["Qualificados", "Em revisao", "Desqualificados"],
-                horizontal=True,
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with insight_cols[1]:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Ritmo da carteira</h3>", unsafe_allow_html=True)
-        st.caption("Entradas recentes e tracao comercial monitoradas dia a dia.")
-        if activity_df.empty:
-            st.info("Sem movimentacao recente suficiente para o grafico diario.")
-        else:
-            st.line_chart(activity_df, x="Dia", y="Casos")
-        st.caption(f"Taxa global de qualificacao: {conversion_rate:.1f}%")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    lower_cols = st.columns([1.08, 0.92], gap="large")
-    with lower_cols[0]:
-        st.markdown("<div class='pre-card pre-dataframe-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Mesa executiva da carteira</h3>", unsafe_allow_html=True)
-        st.caption("Leads mais recentes com etapa, score, documentos e honorario potencial.")
-        st.dataframe(case_df, hide_index=True, use_container_width=True)
-        quick_cases = pipeline_records[:4]
-        if quick_cases:
-            quick_cols = st.columns(len(quick_cases))
-            for col, item in zip(quick_cols, quick_cases):
-                with col:
-                    if st.button(
-                        f"Focar #{item['id']}",
-                        key=f"dashboard_quick_focus_{item['id']}",
-                        use_container_width=True,
-                    ):
-                        st.session_state.pending_dashboard_case_id = int(item["id"])
+                action_cols = st.columns(2, gap="small")
+                with action_cols[0]:
+                    if st.button("Abrir no CRM", key="dashboard_open_crm_focus", use_container_width=True):
+                        st.session_state.selected_crm_case_id = int(focus_record["id"])
+                        set_current_view("crm")
                         st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+                with action_cols[1]:
+                    secondary_label = "Abrir contratos" if normalized_status == "aprovado" else "Abrir dossiê"
+                    if st.button(secondary_label, key="dashboard_open_workspace_focus", use_container_width=True):
+                        if normalized_status == "aprovado":
+                            st.session_state.selected_contract_attendance_id = int(focus_record["id"])
+                            set_current_view("contratos")
+                        else:
+                            st.session_state.selected_attendance_id = int(focus_record["id"])
+                            st.session_state.selected_document_attendance_id = int(focus_record["id"])
+                            set_current_view("leads")
+                        st.rerun()
 
-    with lower_cols[1]:
-        st.markdown("<div class='pre-card pre-dataframe-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Risco documental</h3>", unsafe_allow_html=True)
-        st.caption("Casos com maior gap documental para atacar antes de perder timing juridico.")
-        if document_hotspot_df.empty:
-            st.info("Nao ha backlog documental relevante neste momento.")
-        else:
-            st.dataframe(document_hotspot_df, hide_index=True, use_container_width=True)
-        st.markdown(
-            (
-                "<div class='pre-meta-list' style='margin-top:1rem;'>"
-                f"<div class='pre-meta-item'><strong>Casos com estimativa</strong><span>{revenue_snapshot['tracked_cases']} caso(s) com potencial economico monitorado.</span></div>"
-                f"<div class='pre-meta-item'><strong>Receita mensal acompanhada</strong><span>{format_currency(float(revenue_snapshot['potential_monthly']))} em honorarios mensais potenciais.</span></div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+    with insight_tab:
+        insight_cols = st.columns(2, gap="medium")
+        with insight_cols[0]:
+            st.markdown("<h3 class='pre-section-title'>Origem e resultado</h3>", unsafe_allow_html=True)
+            st.caption("Conversão por fluxo monitorado no escritório.")
+            if source_df.empty:
+                st.info("Ainda não há volume suficiente para distribuir resultados por fluxo.")
+            else:
+                st.bar_chart(
+                    source_df,
+                    x="Fonte",
+                    y=["Qualificados", "Em revisao", "Desqualificados"],
+                    horizontal=True,
+                    color=["#42b83f", "#66b5e8", "#f22f5d"],
+                    height=205,
+                )
+        with insight_cols[1]:
+            st.markdown("<h3 class='pre-section-title'>Ritmo da carteira</h3>", unsafe_allow_html=True)
+            st.caption("Entradas recentes e tração comercial monitoradas dia a dia.")
+            if activity_df.empty:
+                st.info("Sem movimentação recente suficiente para o gráfico diário.")
+            else:
+                st.line_chart(activity_df, x="Dia", y="Casos", color="#2448a8", height=205)
+            st.caption(f"Taxa global de qualificação: {conversion_rate:.1f}%")
+
+    with portfolio_tab:
+        lower_cols = st.columns([1.08, 0.92], gap="medium")
+        with lower_cols[0]:
+            st.markdown("<h3 class='pre-section-title'>Mesa executiva da carteira</h3>", unsafe_allow_html=True)
+            st.caption("Leads recentes com etapa, score, documentos e honorário potencial.")
+            st.dataframe(case_df, hide_index=True, use_container_width=True, height=230)
+            quick_cases = pipeline_records[:4]
+            if quick_cases:
+                quick_cols = st.columns(len(quick_cases))
+                for col, item in zip(quick_cols, quick_cases):
+                    with col:
+                        if st.button(
+                            f"Focar #{item['id']}",
+                            key=f"dashboard_quick_focus_{item['id']}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.pending_dashboard_case_id = int(item["id"])
+                            st.rerun()
+
+        with lower_cols[1]:
+            st.markdown("<h3 class='pre-section-title'>Risco documental</h3>", unsafe_allow_html=True)
+            st.caption("Casos com maior gap documental para ação preventiva.")
+            if document_hotspot_df.empty:
+                st.info("Não há backlog documental relevante neste momento.")
+            else:
+                st.dataframe(document_hotspot_df, hide_index=True, use_container_width=True, height=230)
+            st.markdown(
+                (
+                    "<div class='law-pulse-inline'>"
+                    f"<span><strong>{revenue_snapshot['tracked_cases']}</strong> casos com estimativa</span>"
+                    f"<span><strong>{format_currency(float(revenue_snapshot['potential_monthly']))}</strong> receita mensal acompanhada</span>"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
 
 
 def render_crm_case_management(attendance_id: int, details: Any) -> None:
@@ -3401,6 +3842,12 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
     current_conflict = str(details["conflict_status"] or "pendente")
     if current_conflict not in CONFLICT_STATUS:
         current_conflict = "pendente"
+    current_privacy_ack = bool(int(details["privacy_notice_acknowledged"] or 0))
+    current_privacy_basis = str(
+        details["privacy_legal_basis"] or "procedimentos_preliminares"
+    )
+    if current_privacy_basis not in PRIVACY_LEGAL_BASES:
+        current_privacy_basis = "procedimentos_preliminares"
 
     next_action_date = date.today()
     stored_next_action_at = str(details["next_action_at"] or "")
@@ -3413,6 +3860,10 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
     if current_conflict != "liberado":
         st.warning(
             "Cheque conflito de interesse antes de orientar juridicamente, enviar proposta ou liberar contrato."
+        )
+    if not current_privacy_ack:
+        st.warning(
+            "Registre a entrega do aviso de privacidade e a base legal antes da contratação."
         )
 
     with st.form(f"crm_case_management_{attendance_id}"):
@@ -3449,6 +3900,25 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
             lost_reason = st.text_input(
                 "Motivo da perda/encerramento", value=str(details["lost_reason"] or "")
             )
+        st.markdown("**Privacidade e LGPD**")
+        privacy_cols = st.columns([1.15, 0.85], gap="medium")
+        with privacy_cols[0]:
+            selected_privacy_ack = st.checkbox(
+                "Aviso de privacidade apresentado ao titular",
+                value=current_privacy_ack,
+                help=(
+                    "Registra ciência sobre finalidade, dados necessários, acesso restrito, "
+                    "retenção e canais para exercício de direitos."
+                ),
+            )
+        with privacy_cols[1]:
+            privacy_basis_ids = list(PRIVACY_LEGAL_BASES)
+            selected_privacy_basis = st.selectbox(
+                "Base legal predominante",
+                privacy_basis_ids,
+                index=privacy_basis_ids.index(current_privacy_basis),
+                format_func=lambda value: PRIVACY_LEGAL_BASES[value],
+            )
         saved_case = st.form_submit_button("Salvar gestão do caso", type="primary")
 
     if saved_case:
@@ -3463,6 +3933,8 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
                 lost_reason=lost_reason,
                 conflict_checked_parties=conflict_parties,
                 conflict_notes=conflict_notes,
+                privacy_notice_acknowledged=selected_privacy_ack,
+                privacy_legal_basis=selected_privacy_basis,
             )
         except ValueError as error:
             st.error(str(error))
@@ -3470,7 +3942,11 @@ def render_crm_case_management(attendance_id: int, details: Any) -> None:
         add_crm_activity(
             attendance_id=attendance_id,
             activity_type="Atualização do CRM",
-            body=f"Etapa: {stage_labels[selected_stage]}. Conflito: {CONFLICT_STATUS[selected_conflict]}.",
+            body=(
+                f"Etapa: {stage_labels[selected_stage]}. "
+                f"Conflito: {CONFLICT_STATUS[selected_conflict]}. "
+                f"Privacidade: {'aviso registrado' if selected_privacy_ack else 'pendente'}."
+            ),
         )
         st.success("Gestão do caso atualizada.")
         st.rerun()
@@ -3778,6 +4254,146 @@ def render_automation_center(pipeline_records: list[dict[str, Any]]) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_crm_indicators(crm_summary: dict[str, Any], crm_performance: dict[str, Any]) -> None:
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Tarefas abertas", crm_summary["open_tasks"])
+    metric_cols[1].metric("Tarefas vencidas", crm_summary["overdue_tasks"])
+    metric_cols[2].metric("Conflitos pendentes", crm_summary["pending_conflicts"])
+    metric_cols[3].metric("Vencem hoje", crm_summary["due_today"])
+    metric_cols[4].metric("Sem próxima ação", crm_summary["stalled_leads"])
+    st.caption(
+        f"Tempo médio até contratação: {crm_performance['average_days_to_contract']:.1f} dia(s)."
+    )
+    if crm_performance["by_source"]:
+        source_rows = [
+            {
+                "Origem": row["source"],
+                "Leads": int(row["total"]),
+                "Contratados": int(row["contracted"] or 0),
+            }
+            for row in crm_performance["by_source"]
+        ]
+        st.dataframe(
+            pd.DataFrame(source_rows),
+            hide_index=True,
+            use_container_width=True,
+            height=min(300, 42 + len(source_rows) * 36),
+        )
+
+
+def render_crm_pipeline_board(
+    filtered_records: list[dict[str, Any]],
+    all_pipeline_records: list[dict[str, Any]],
+) -> None:
+    stage_filter = str(st.session_state.get("crm_stage_filter", "todos"))
+    if stage_filter != "todos":
+        for phase_id, phase in PIPELINE_PHASES.items():
+            if stage_filter in phase["stages"]:
+                st.session_state.crm_pipeline_phase = phase_id
+                break
+
+    phase_id = st.radio(
+        "Fase do funil",
+        options=list(PIPELINE_PHASES),
+        format_func=lambda value: (
+            f"{PIPELINE_PHASES[value]['icon']} {PIPELINE_PHASES[value]['label']}"
+        ),
+        key="crm_pipeline_phase",
+        horizontal=True,
+        label_visibility="collapsed",
+        width="stretch",
+    )
+    phase_stage_ids = list(PIPELINE_PHASES[phase_id]["stages"])
+    stage_definition = {
+        column_id: (label, subtitle, tone)
+        for column_id, label, subtitle, tone in PIPELINE_COLUMNS
+    }
+
+    if stage_filter == "todos":
+        phase_records = [
+            record for record in filtered_records if str(record["stage"]) in phase_stage_ids
+        ]
+    else:
+        phase_records = [
+            record for record in filtered_records if str(record["stage"]) == stage_filter
+        ]
+
+    page_size = 9
+    page_count = max(1, (len(phase_records) + page_size - 1) // page_size)
+    if int(st.session_state.get("crm_pipeline_page", 1)) > page_count:
+        st.session_state.crm_pipeline_page = 1
+
+    page_tools = st.columns([0.62, 0.23, 0.15], gap="small")
+    with page_tools[0]:
+        if stage_filter == "todos":
+            st.caption(
+                f"{len(phase_records)} cliente(s) nesta fase. Clique em uma etapa ou em um cliente para abrir o recorte."
+            )
+        elif st.button(
+            "Mostrar as três etapas da fase",
+            key="crm_clear_stage_filter",
+            icon=":material/filter_alt_off:",
+            use_container_width=True,
+        ):
+            st.session_state.pending_crm_stage_filter = "todos"
+            st.rerun()
+    with page_tools[1]:
+        st.caption(f"{len(phase_records)} cliente(s) · {page_count} página(s)")
+    with page_tools[2]:
+        selected_page = st.selectbox(
+            "Página",
+            options=list(range(1, page_count + 1)),
+            key="crm_pipeline_page",
+            label_visibility="collapsed",
+        )
+
+    page_start = (int(selected_page) - 1) * page_size
+    page_records = phase_records[page_start : page_start + page_size]
+    stage_columns = st.columns(3, gap="medium")
+    for stage_column, stage_id in zip(stage_columns, phase_stage_ids):
+        label, subtitle, tone = stage_definition[stage_id]
+        total_in_stage = len(
+            [record for record in all_pipeline_records if str(record["stage"]) == stage_id]
+        )
+        visible_items = [
+            record for record in page_records if str(record["stage"]) == stage_id
+        ]
+        with stage_column:
+            if st.button(
+                f"{label} · {total_in_stage}",
+                key=f"crm_filter_stage_{stage_id}",
+                icon=PIPELINE_STAGE_ICONS[stage_id],
+                type="primary" if stage_filter == stage_id else "secondary",
+                help=f"Filtrar por {label.lower()}: {subtitle}",
+                use_container_width=True,
+            ):
+                st.session_state.pending_crm_stage_filter = stage_id
+                st.rerun()
+            st.caption(subtitle)
+            with st.container(border=True, height=315):
+                st.markdown(
+                    "<span class='crm-stage-scroll-marker'></span>",
+                    unsafe_allow_html=True,
+                )
+                if not visible_items:
+                    st.caption("Nenhum cliente nesta página.")
+                for item in visible_items:
+                    if st.button(
+                        f"#{item['id']} · {item['lead_name']}",
+                        key=f"crm_open_pipeline_case_{phase_id}_{selected_page}_{item['id']}",
+                        icon=":material/person:",
+                        help=f"Abrir {item['flow_name']} no caso em foco",
+                        use_container_width=True,
+                    ):
+                        st.session_state.pending_crm_case_id = int(item["id"])
+                        st.session_state.pending_crm_section = "caso"
+                        st.rerun()
+                    st.caption(
+                        f"{item['flow_name']} · Score {item['score']}/100 · "
+                        f"{item['validated_total']}/{item['required_total']} documentos"
+                    )
+
+
 def render_crm_view() -> None:
     render_shell_page_header(
         "CRM Juridico",
@@ -3787,20 +4403,38 @@ def render_crm_view() -> None:
     all_pipeline_records = build_pipeline_records(limit=200)
     crm_summary = get_crm_summary()
     crm_performance = get_crm_performance()
-    crm_metrics = st.columns(5)
-    crm_metrics[0].metric("Tarefas abertas", crm_summary["open_tasks"])
-    crm_metrics[1].metric("Tarefas vencidas", crm_summary["overdue_tasks"])
-    crm_metrics[2].metric("Conflitos pendentes", crm_summary["pending_conflicts"])
-    crm_metrics[3].metric("Vencem hoje", crm_summary["due_today"])
-    crm_metrics[4].metric("Leads sem próxima ação", crm_summary["stalled_leads"])
-    st.caption(f"Tempo médio até contratação: {crm_performance['average_days_to_contract']:.1f} dia(s).")
-    if crm_performance["by_source"]:
-        source_rows = [
-            {"Origem": row["source"], "Leads": int(row["total"]), "Contratados": int(row["contracted"] or 0)}
-            for row in crm_performance["by_source"]
-        ]
-        st.dataframe(pd.DataFrame(source_rows), hide_index=True, use_container_width=True)
-    render_automation_center(all_pipeline_records)
+    pending_section = st.session_state.pop("pending_crm_section", None)
+    if pending_section in {"funil", "caso", "automacoes", "indicadores"}:
+        st.session_state.crm_section = pending_section
+    pending_case_id = st.session_state.pop("pending_crm_case_id", None)
+    if pending_case_id is not None:
+        st.session_state.selected_crm_case_id = int(pending_case_id)
+    pending_stage_filter = st.session_state.pop("pending_crm_stage_filter", None)
+    if pending_stage_filter in {"todos", *[column_id for column_id, *_ in PIPELINE_COLUMNS]}:
+        st.session_state.crm_stage_filter = pending_stage_filter
+        st.session_state.crm_pipeline_page = 1
+
+    crm_section = st.radio(
+        "Área do CRM",
+        options=["funil", "caso", "automacoes", "indicadores"],
+        format_func=lambda value: {
+            "funil": "🗂️ Funil e clientes",
+            "caso": "👤 Caso em foco",
+            "automacoes": "⚡ Automações",
+            "indicadores": "📈 Indicadores",
+        }[value],
+        key="crm_section",
+        horizontal=True,
+        label_visibility="collapsed",
+        width="stretch",
+    )
+    if crm_section == "automacoes":
+        render_automation_center(all_pipeline_records)
+        return
+    if crm_section == "indicadores":
+        render_crm_indicators(crm_summary, crm_performance)
+        return
+
     search_value = ""
     stage_filter = "todos"
 
@@ -3833,22 +4467,6 @@ def render_crm_view() -> None:
             record for record in filtered_records if str(record["stage"]) == stage_filter
         ]
 
-    stage_totals = {
-        column_id: len([record for record in all_pipeline_records if record["stage"] == column_id])
-        for column_id, *_ in PIPELINE_COLUMNS
-    }
-    stage_cards_markup = "".join(
-        (
-            f"<div class='pre-stage-card {tone}'>"
-            f"<strong>{stage_totals[column_id]}</strong>"
-            f"<h4>{label}</h4>"
-            f"<span>{subtitle}</span>"
-            "</div>"
-        )
-        for column_id, label, subtitle, tone in PIPELINE_COLUMNS
-    )
-    st.markdown(f"<div class='pre-stage-strip'>{stage_cards_markup}</div>", unsafe_allow_html=True)
-
     if not all_pipeline_records:
         st.markdown(
             "<div class='pre-empty-state'>Ainda nao ha leads no CRM. Assim que a operacao registrar os primeiros atendimentos, a mesa juridica aparece aqui.</div>",
@@ -3868,7 +4486,7 @@ def render_crm_view() -> None:
         st.session_state.selected_crm_case_id = available_case_ids[0]
 
     focus_case_id = st.selectbox(
-        "Caso em foco",
+        "Cliente no recorte",
         options=available_case_ids,
         format_func=lambda case_id: next(
             (
@@ -3883,6 +4501,10 @@ def render_crm_view() -> None:
     focus_record = next(
         record for record in filtered_records if int(record["id"]) == int(focus_case_id)
     )
+    if crm_section == "funil":
+        render_crm_pipeline_board(filtered_records, all_pipeline_records)
+        return
+
     focus_details = get_attendance_details(int(focus_case_id))
     if focus_details is None:
         st.error("Não foi possível carregar o caso selecionado.")
@@ -3906,6 +4528,15 @@ def render_crm_view() -> None:
         if focus_details and focus_details["benefit_category"]
         else str(focus_record["flow_name"])
     )
+    focus_triage_profile = parse_triage_profile(focus_details["triage_profile_json"])
+    privacy_basis_id = str(focus_details["privacy_legal_basis"] or "")
+    privacy_status = (
+        "Aviso registrado"
+        if bool(int(focus_details["privacy_notice_acknowledged"] or 0))
+        else "Pendente de registro"
+    )
+    if privacy_basis_id in PRIVACY_LEGAL_BASES:
+        privacy_status = f"{privacy_status} · {PRIVACY_LEGAL_BASES[privacy_basis_id]}"
     task_rows = build_recent_task_rows(filtered_records, limit=5)
     case_df = build_case_dataframe(filtered_records[:24], office_settings)
 
@@ -3981,6 +4612,8 @@ def render_crm_view() -> None:
                 f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{focus_details['summary'] if focus_details and focus_details['summary'] else 'Caso pronto para leitura operacional dentro do CRM.'}</span></div>"
                 f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{focus_details['next_step'] if focus_details and focus_details['next_step'] else 'Sem orientacao registrada ainda.'}</span></div>"
                 f"<div class='pre-detail-row'><strong>Pendencia documental</strong><span>{', '.join(pending_required_names[:3]) if pending_required_names else 'Nenhuma pendencia critica nos documentos obrigatorios.'}</span></div>"
+                f"<div class='pre-detail-row'><strong>Perfil previdenciario</strong><span>{summarize_triage_profile(focus_triage_profile)}</span></div>"
+                f"<div class='pre-detail-row'><strong>Privacidade e LGPD</strong><span>{privacy_status}</span></div>"
                 f"<div class='pre-detail-row'><strong>Telefone e contato</strong><span>{focus_record['lead_phone'] or 'Nao informado'}</span></div>"
                 "</div>"
             ),
@@ -4022,78 +4655,29 @@ def render_crm_view() -> None:
                 st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-    columns_markup = []
-    for column_id, label, subtitle, tone in PIPELINE_COLUMNS:
-        items = [record for record in filtered_records if record["stage"] == column_id]
-        body_parts = []
-        if not items:
-            body_parts.append(
-                "<div class='pre-empty-state' style='padding:2rem 0.8rem;font-size:0.95rem;'>Nenhum lead</div>"
-            )
-        else:
-            for item in items[:5]:
-                selected_class = " selected" if int(item["id"]) == int(focus_case_id) else ""
-                body_parts.append(
-                    (
-                        f"<div class='pre-lead-card{selected_class}'>"
-                        f"<h5>#{item['id']} - {item['lead_name']}</h5>"
-                        f"<p>{item['flow_name']}</p>"
-                        f"<p>Score documental: {item['score']}/100</p>"
-                        f"<p>{item['validated_total']}/{item['required_total']} obrigatorios validados</p>"
-                        "</div>"
-                    )
-                )
-            if len(items) > 5:
-                body_parts.append(
-                    f"<div class='pre-empty-state' style='padding:0.6rem 0.2rem 0.2rem;font-size:0.82rem;'>+ {len(items) - 5} caso(s) nesta etapa</div>"
-                )
-        columns_markup.append(
-            (
-                "<div class='pre-kanban-column'>"
-                f"<div class='pre-kanban-header {tone}'>"
-                f"<div class='pre-kanban-header-top'><span>{label}</span><span>{len(items)}</span></div>"
-                f"<div class='pre-kanban-subtitle'>{subtitle}</div>"
-                "</div>"
-                f"<div class='pre-kanban-body'>{''.join(body_parts)}</div>"
-                "</div>"
-            )
-        )
-
-    render_panel_header(
-        "Quadro",
-        "Quadro do funil",
-        "Visualizacao consolidada das etapas para leitura gerencial da carteira em andamento.",
-    )
-    st.markdown(f"<div class='pre-kanban-grid'>{''.join(columns_markup)}</div>", unsafe_allow_html=True)
-
-
 def render_operational_workspace() -> None:
     operational_tabs = st.tabs(["1. Nova triagem", "2. Documentos", "3. Casos salvos"])
     with operational_tabs[0]:
         render_operation_kpis()
-        st.divider()
-        left, center, right = st.columns([0.82, 1.42, 0.96], gap="large")
+        left, center, right = st.columns([0.78, 1.48, 0.94], gap="medium")
         with left:
-            st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-            render_recent_queue()
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                render_recent_queue()
         with center:
-            st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-            form_data = render_lead_form()
-            st.divider()
-            flow = FLOW_DEFINITIONS[st.session_state.selected_flow_id]
-            render_question_panel(flow, form_data)
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                form_data = render_lead_form()
+                st.divider()
+                flow = FLOW_DEFINITIONS[st.session_state.selected_flow_id]
+                render_question_panel(flow, form_data)
         with right:
             flow = FLOW_DEFINITIONS[st.session_state.selected_flow_id]
-            st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-            render_active_case_panel(flow, form_data)
-            st.divider()
-            if st.session_state.selected_flow_id == "salarioMaternidade":
-                render_salario_maternidade_calculator()
-                st.divider()
-            render_history(st.session_state.triage_state.history)
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                render_active_case_panel(flow, form_data)
+                if st.session_state.selected_flow_id == "salarioMaternidade":
+                    with st.expander("Calculadora de salário-maternidade", expanded=False):
+                        render_salario_maternidade_calculator()
+                with st.expander("Histórico da sessão", expanded=False):
+                    render_history(st.session_state.triage_state.history)
 
     with operational_tabs[1]:
         render_document_pipeline()
@@ -4126,41 +4710,20 @@ def render_leads_view() -> None:
         for column_id, label, subtitle, tone in PIPELINE_COLUMNS
     )
 
-    top_cols = st.columns([1.18, 0.82], gap="large")
-    with top_cols[0]:
-        st.markdown(
-            (
-                "<div class='pre-spotlight'>"
-                "<div class='eyebrow'>Fluxo de trabalho</div>"
-                "<h3>Comece um atendimento sem perder o contexto do caso.</h3>"
-                "<p>Use a primeira aba para a triagem. Quando o caso for qualificado ou ficar em revisão, os documentos aparecerão automaticamente na segunda aba.</p>"
-                "<div class='pre-inline-stats'>"
-                "<div class='pre-inline-stat'><strong>1</strong><span>cadastre e responda</span></div>"
-                "<div class='pre-inline-stat'><strong>2</strong><span>confira documentos</span></div>"
-                "<div class='pre-inline-stat'><strong>3</strong><span>acompanhe o caso</span></div>"
-                "</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-    with top_cols[1]:
+    with st.expander("Resumo do fluxo e da operação", expanded=False):
         next_priority = task_rows[0]["title"] if task_rows else "Sem fila critica imediata."
         st.markdown(
             (
-                "<div class='pre-card'>"
-                "<h3 class='pre-section-title'>Onde estou?</h3>"
-                "<div class='pre-meta-list'>"
-                f"<div class='pre-meta-item'><strong>Benefício selecionado</strong><span>{current_flow['name']}</span></div>"
-                f"<div class='pre-meta-item'><strong>Pergunta atual</strong><span>{current_step}</span></div>"
-                f"<div class='pre-meta-item'><strong>Próxima pendência</strong><span>{next_priority}</span></div>"
-                f"<div class='pre-meta-item'><strong>Casos qualificados</strong><span>{next((int(row['total']) for row in dashboard['by_status'] if row['status'] == 'aprovado'), 0)} caso(s).</span></div>"
-                "</div>"
+                "<div class='law-pulse-inline'>"
+                f"<span><strong>{current_flow['name']}</strong> benefício selecionado</span>"
+                f"<span><strong>{current_step}</strong> pergunta atual</span>"
+                f"<span><strong>{next((int(row['total']) for row in dashboard['by_status'] if row['status'] == 'aprovado'), 0)}</strong> casos qualificados</span>"
+                f"<span><strong>Próxima:</strong> {next_priority}</span>"
                 "</div>"
             ),
             unsafe_allow_html=True,
         )
-
-    st.markdown(f"<div class='pre-stage-strip'>{stage_cards_markup}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='pre-stage-strip'>{stage_cards_markup}</div>", unsafe_allow_html=True)
     render_operational_workspace()
 
 
@@ -4169,10 +4732,56 @@ def render_contracts_view() -> None:
         "Contratos",
         "Fila de contratos pronta para validacao, assinatura e avancos comerciais do escritorio.",
     )
-    rows = [row for row in get_all_attendance_rows(limit=200) if normalize_triage_status(row["status"]) == "aprovado"]
+    all_rows = get_all_attendance_rows(limit=200)
+    contract_candidates = [
+        row
+        for row in all_rows
+        if normalize_triage_status(str(row["status"])) in {"aprovado", "revisao"}
+        and str(row["crm_stage"] or "triagem") not in {"encerrado", "perdido"}
+    ]
+    blocked_cases = [
+        (row, get_contract_block_reasons(row))
+        for row in contract_candidates
+        if get_contract_block_reasons(row)
+    ]
+    rows = [row for row in contract_candidates if not get_contract_block_reasons(row)]
+
+    with st.expander(
+        f"Casos bloqueados para contratação ({len(blocked_cases)})",
+        expanded=bool(blocked_cases) and not rows,
+        icon=":material/lock:",
+    ):
+        if not blocked_cases:
+            st.success("Nenhum caso está retido pelos controles de triagem, conflito ou privacidade.")
+        for blocked_row, reasons in blocked_cases:
+            blocker_left, blocker_right = st.columns([1.55, 0.45], gap="medium")
+            with blocker_left:
+                st.markdown(
+                    f"**#{blocked_row['id']} · {blocked_row['lead_name']}** — {blocked_row['flow_name']}  \n"
+                    f"Bloqueios: {'; '.join(reasons)}.  \n"
+                    f"Próxima ação: {blocked_row['next_action'] or 'definir providência e responsável no CRM'}."
+                )
+            with blocker_right:
+                if st.button(
+                    f"Regularizar no CRM #{blocked_row['id']}",
+                    key=f"contract_resolve_{blocked_row['id']}",
+                    icon=":material/rule:",
+                    use_container_width=True,
+                ):
+                    st.session_state.selected_crm_case_id = int(blocked_row["id"])
+                    st.session_state.pending_crm_case_id = int(blocked_row["id"])
+                    st.session_state.pending_crm_section = "caso"
+                    set_current_view("crm")
+                    st.rerun()
+            st.divider()
+
     if not rows:
         st.markdown(
-            "<div class='pre-empty-state'>Nenhum contrato disponivel ainda. Os casos aprovados vao aparecer aqui.</div>",
+            (
+                "<div class='pre-empty-state'>Nenhuma minuta está liberada. "
+                "Regularize a triagem, a checagem de conflito e o aviso de privacidade "
+                "nos casos listados acima.</div>"
+            ),
             unsafe_allow_html=True,
         )
         return
@@ -4182,7 +4791,7 @@ def render_contracts_view() -> None:
 
     approved_records = [
         record for record in build_pipeline_records(limit=200)
-        if normalize_triage_status(str(record["status"])) == "aprovado"
+        if int(record["id"]) in {int(row["id"]) for row in rows}
     ]
     total_fee_potential = 0.0
     avg_fee_potential = 0.0
@@ -4196,10 +4805,10 @@ def render_contracts_view() -> None:
         avg_fee_potential = total_fee_potential / len(approved_records)
 
     contract_metrics = [
-        {"label": "Contratos na fila", "value": len(rows), "tone": "soft-neutral"},
+        {"label": "Minutas liberadas", "value": len(rows), "tone": "soft-green"},
+        {"label": "Casos bloqueados", "value": len(blocked_cases), "tone": "soft-red"},
         {"label": "Honorarios potenciais", "value": format_currency(total_fee_potential), "tone": "soft-purple"},
-        {"label": "Ticket medio", "value": format_currency(avg_fee_potential) if approved_records else "-", "tone": "soft-yellow"},
-        {"label": "Dossies completos", "value": ready_document_total, "tone": "soft-green"},
+        {"label": "Dossies completos", "value": ready_document_total, "tone": "soft-yellow"},
     ]
     metric_markup = "".join(
         (
@@ -4342,9 +4951,10 @@ def render_contracts_view() -> None:
             f"#{details['id']} - {details['lead_name']}",
             "Minuta automatica de honorarios com base nas configuracoes do escritorio.",
         )
-        if str(details["conflict_status"] or "pendente") != "liberado":
+        contract_block_reasons = get_contract_block_reasons(details)
+        if contract_block_reasons:
             st.error(
-                "Minuta bloqueada: registre a checagem de conflito como liberada no CRM antes de avançar."
+                f"Minuta bloqueada: {'; '.join(contract_block_reasons)}. Regularize o caso no CRM antes de avançar."
             )
         else:
             flow = {"name": details["flow_name"]}
@@ -4703,6 +5313,16 @@ def render_result_panel(flow: dict[str, Any], form_data: dict[str, Any]) -> None
             if not all([form_data["lead_name"], form_data["lead_phone"], form_data["lead_email"], form_data["lead_source"]]):
                 st.error("Informe nome, telefone, e-mail e origem do lead antes de salvar.")
                 return
+            if not form_data["privacy_notice_acknowledged"]:
+                st.error("Registre a ciência do aviso de privacidade antes de salvar o atendimento.")
+                return
+            if flow["id"] == "aposentadoria":
+                retirement_profile = form_data.get("triage_profile", {})
+                if not retirement_profile.get("birth_date") or not retirement_profile.get("objective"):
+                    st.error(
+                        "Na aposentadoria, informe a data de nascimento e o objetivo previdenciário antes de salvar."
+                    )
+                    return
             saved_id = save_attendance(
                 lead_name=form_data["lead_name"] or "Lead sem nome",
                 lead_phone=form_data["lead_phone"],
@@ -4719,6 +5339,9 @@ def render_result_panel(flow: dict[str, Any], form_data: dict[str, Any]) -> None
                 benefit_category=sm_estimate["category"] if sm_estimate else None,
                 estimated_monthly_value=sm_estimate["monthly_value"] if sm_estimate else None,
                 estimated_total_value=sm_estimate["total_value"] if sm_estimate else None,
+                privacy_notice_acknowledged=form_data["privacy_notice_acknowledged"],
+                privacy_legal_basis=form_data["privacy_legal_basis"],
+                triage_profile=form_data.get("triage_profile", {}),
             )
             st.session_state.saved_result_id = saved_id
             st.session_state.selected_attendance_id = saved_id
@@ -4842,50 +5465,56 @@ def render_document_pipeline() -> None:
     )
 
     queue_rows = list_document_pipeline_attendances(status_filter=status_choice, limit=100)
-    left, right = st.columns([0.9, 1.4], gap="large")
+    queue_ids = [int(row["id"]) for row in queue_rows]
+    if queue_ids and st.session_state.selected_document_attendance_id not in queue_ids:
+        st.session_state.selected_document_attendance_id = queue_ids[0]
+    left, right = st.columns([0.72, 1.58], gap="medium")
 
     with left:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Fila de dossies</h3>", unsafe_allow_html=True)
-        st.caption("Casos prontos para leitura tecnica, consistencia e fechamento do dossie.")
-        if not queue_rows:
-            st.info("Ainda nao ha atendimentos prontos para a fase documental.")
-        else:
-            for row in queue_rows:
-                if int(row["required_total"] or 0) > 0:
-                    progress = f"{int(row['validated_total'] or 0)}/{int(row['required_total'] or 0)} obrigatorios"
-                else:
-                    progress = "Checklist aguardando inicializacao"
-                triage_status = "Em revisao" if row["triage_bucket"] == "revisao" else "Qualificado"
-                selected_class = (
-                    " selected"
-                    if int(st.session_state.selected_document_attendance_id or 0) == int(row["id"])
-                    else ""
+        with st.container(border=True):
+            st.markdown("<h3 class='pre-section-title'>Fila de dossiês</h3>", unsafe_allow_html=True)
+            st.caption("Escolha um caso para leitura técnica e fechamento documental.")
+            if not queue_rows:
+                st.info("Ainda não há atendimentos prontos para a fase documental.")
+            else:
+                selected_queue_id = st.selectbox(
+                    "Caso documental",
+                    options=queue_ids,
+                    format_func=lambda attendance_id: next(
+                        (
+                            f"#{row['id']} | {row['lead_name']} | {row['flow_name']}"
+                            for row in queue_rows
+                            if int(row["id"]) == int(attendance_id)
+                        ),
+                        f"Caso #{attendance_id}",
+                    ),
+                    key="selected_document_attendance_id",
+                    label_visibility="collapsed",
+                )
+                selected_row = next(
+                    row for row in queue_rows if int(row["id"]) == int(selected_queue_id)
+                )
+                progress = (
+                    f"{int(selected_row['validated_total'] or 0)}/{int(selected_row['required_total'] or 0)} obrigatórios"
+                    if int(selected_row["required_total"] or 0) > 0
+                    else "Checklist aguardando inicialização"
+                )
+                triage_status = (
+                    "Em revisão" if selected_row["triage_bucket"] == "revisao" else "Qualificado"
                 )
                 st.markdown(
                     (
-                        f"<div class='pre-lead-card{selected_class}'>"
-                        f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                        f"<p>{row['flow_name']}</p>"
+                        "<div class='pre-lead-card selected'>"
+                        f"<h5>#{selected_row['id']} - {selected_row['lead_name']}</h5>"
+                        f"<p>{selected_row['flow_name']}</p>"
                         f"<p>{progress}</p>"
-                        f"<p>{triage_status} | Ilegiveis: {int(row['illegible_total'] or 0)} | Inconsistentes: {int(row['inconsistent_total'] or 0)}</p>"
+                        f"<p>{triage_status} | Ilegíveis: {int(selected_row['illegible_total'] or 0)} | Inconsistentes: {int(selected_row['inconsistent_total'] or 0)}</p>"
                         "</div>"
                     ),
                     unsafe_allow_html=True,
                 )
-                if st.button(
-                    f"Operar dossie #{row['id']}",
-                    key=f"open_document_attendance_{row['id']}",
-                    use_container_width=True,
-                ):
-                    st.session_state.selected_document_attendance_id = int(row["id"])
-                    st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        if not st.session_state.selected_document_attendance_id and queue_rows:
-            st.session_state.selected_document_attendance_id = int(queue_rows[0]["id"])
-
         if not st.session_state.selected_document_attendance_id:
             st.info("Selecione um atendimento para operar o checklist documental.")
             return
@@ -5304,43 +5933,6 @@ def render_attendance_consultation() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_previa_sidebar() -> None:
-    office_settings = st.session_state.get("office_settings", {})
-    office_name = office_settings.get("office_name") or "Operacao demonstracao"
-    responsavel = office_settings.get("responsavel_nome") or "Responsavel principal"
-    plan_name = st.session_state.get("settings_plan", office_settings.get("plano", "Essencial"))
-    st.markdown(
-        f"""
-        <div class="pre-brand">
-          <h1>{BRAND_NAME}</h1>
-          <p>{AGENT_NAME} | {BRAND_SLOGAN}</p>
-        </div>
-        <div class="pre-sidebar-panel">
-          <div class="pre-sidebar-label">Escritorio</div>
-          <div class="pre-sidebar-value">{office_name}</div>
-          <div class="pre-sidebar-caption">{responsavel} | Plano {plan_name}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    for view_id, label, icon in NAV_ITEMS:
-        active = st.session_state.current_view == view_id
-        if st.button(
-            f"{icon}  {label}",
-            key=f"nav_{view_id}",
-            use_container_width=True,
-            type="primary" if active else "secondary",
-        ):
-            set_current_view(view_id)
-            st.rerun()
-    st.markdown("<div style='height:0.8rem;'></div>", unsafe_allow_html=True)
-    if st.button("Sair da conta", key="auth_logout", use_container_width=True, type="secondary"):
-        st.session_state.is_authenticated = False
-        st.session_state.auth_mode = "login"
-        st.session_state.auth_login_password = ""
-        st.rerun()
-
-
 def render_current_view() -> None:
     current_view = st.session_state.current_view
     if current_view == "dashboard":
@@ -5366,13 +5958,7 @@ def main() -> None:
         render_auth_screen()
         return
     render_admin_topbar()
-    shell_left, shell_right = st.columns([0.19, 0.81], gap="large")
-    with shell_left:
-        with st.container(border=True):
-            st.markdown("<span class='pre-sidebar-marker'></span>", unsafe_allow_html=True)
-            render_previa_sidebar()
-    with shell_right:
-        render_current_view()
+    render_current_view()
 
 
 if __name__ == "__main__":

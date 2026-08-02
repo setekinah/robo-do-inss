@@ -17,6 +17,7 @@ uploads/
 # Local environment
 .venv/
 venv/
+.codex-test-temp/
 .env
 .env.*
 
