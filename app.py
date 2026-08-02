@@ -89,7 +89,7 @@ EXTRACTION_STATUS_STYLE = {
 
 SALARIO_MINIMO_2026 = 1621.00
 TETO_INSS_2026 = 8537.55
-APP_VERSION = "v1.2.0"
+APP_VERSION = "v1.2.1"
 BRAND_NAME = "SOFI.IA PREVI"
 AGENT_NAME = "Sofia"
 BRAND_SLOGAN = "o seu conhecimento juridico no mundo previdenciario"

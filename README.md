@@ -43,7 +43,7 @@ O `requirements.txt` instala o pipeline documental completo:
 - `pypdf` como leitor alternativo de PDFs nativos
 - `pytesseract` como fallback quando o aplicativo Tesseract está instalado no Windows
 
-O sistema não considera OCR como validação jurídica. Resultados com baixa confiança ou campos críticos ausentes permanecem sujeitos à comparação humana com o original.
+O sistema não considera OCR como validação jurídica. Resultados com baixa confiança ou campos críticos ausentes permanecem sujeitos à comparação humana com o original. CPF/CNPJ e NIT/NIS/PIS/PASEP passam por validação de dígitos, e datas civis completas não são classificadas como competências contributivas.
 
 Variáveis opcionais de ambiente:
 

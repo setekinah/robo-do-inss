@@ -122,6 +122,30 @@ class DocumentIntelligenceTests(unittest.TestCase):
         self.assertEqual(result["cpf"], "")
         self.assertEqual(result["data_nascimento"], "")
 
+    def test_nit_requires_a_valid_check_digit(self) -> None:
+        valid = intelligence.extract_structured_fields(
+            "NIT/PIS: 123.45678.90-0",
+            ["nit"],
+        )
+        invalid = intelligence.extract_structured_fields(
+            "NIT/PIS: 123.45678.90-1",
+            ["nit"],
+        )
+
+        self.assertEqual(valid["nit"], "123.45678.90-0")
+        self.assertEqual(invalid["nit"], "")
+
+    def test_competencies_do_not_capture_birth_or_issue_dates(self) -> None:
+        text = (
+            "Data de nascimento: 15/03/1958\n"
+            "Data de emissao: 02/08/2026\n"
+            "Competencia: 01/2020 a 12/2024"
+        )
+
+        result = intelligence.extract_structured_fields(text, ["competencias"])
+
+        self.assertEqual(result["competencias"], "01/2020 | 12/2024")
+
     def test_corrupted_pdf_reports_hard_failure_without_crashing(self) -> None:
         target = self.temp_dir / "corrupted.pdf"
         target.write_bytes(b"not a valid pdf")

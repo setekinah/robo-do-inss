@@ -572,7 +572,7 @@ O pipeline documental usa cinco níveis coordenados:
 4. Imagens de baixa confiança recebem uma segunda tentativa com escala, autocontraste, CLAHE, redução de ruído e nitidez.
 5. `pytesseract` usa Tesseract em português e inglês como fallback quando o executável está disponível.
 
-O pipeline possui limite de tamanho e de páginas, cache por arquivo inalterado, confiança ponderada, validação de CPF/CNPJ/data e indicação explícita dos campos críticos ausentes. Nenhuma leitura documental é enviada à nuvem e nenhum resultado automático libera o documento sem revisão humana.
+O pipeline possui limite de tamanho e de páginas, cache por arquivo inalterado, confiança ponderada, validação de CPF/CNPJ/NIT/NIS/PIS/PASEP/data, separação entre datas civis e competências contributivas e indicação explícita dos campos críticos ausentes. Nenhuma leitura documental é enviada à nuvem e nenhum resultado automático libera o documento sem revisão humana.
 
 ## 12.5 Claims de produto adiantados em relacao ao backend
 
