@@ -89,7 +89,7 @@ EXTRACTION_STATUS_STYLE = {
 
 SALARIO_MINIMO_2026 = 1621.00
 TETO_INSS_2026 = 8537.55
-APP_VERSION = "v1.2.1"
+APP_VERSION = "v1.2.2"
 BRAND_NAME = "SOFI.IA PREVI"
 AGENT_NAME = "Sofia"
 BRAND_SLOGAN = "o seu conhecimento juridico no mundo previdenciario"
@@ -1930,6 +1930,42 @@ def inject_lawfirm_admin_theme() -> None:
         [data-testid="stMetric"] { background:#fff; border:1px solid #edf0f6; padding:.8rem; border-radius:8px; box-shadow:0 4px 14px rgba(35,55,95,.05); }
         .stTabs [data-baseweb="tab"] { border-radius:6px !important; }
         button[kind="primary"] { background:var(--admin-blue) !important; border-color:var(--admin-blue) !important; }
+
+        /* O Streamlit nao oferece configuracao nativa para traduzir o dropzone. */
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzone"] {
+            background:#f8faff !important;
+            border:1px dashed #9aafe4 !important;
+            min-height:5rem !important;
+            cursor:pointer !important;
+            transition:border-color .16s ease, background .16s ease, box-shadow .16s ease;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzone"]:hover,
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzone"]:focus-within {
+            background:#f1f5ff !important;
+            border-color:var(--admin-blue) !important;
+            box-shadow:0 0 0 3px rgba(36,72,168,.08) !important;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzoneInstructions"] > div > span:first-child,
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzoneInstructions"] > div > span:last-child,
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzone"] button {
+            font-size:0 !important;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzoneInstructions"] > div > span:first-child::after {
+            content:"Arraste e solte os arquivos aqui";
+            color:var(--admin-ink);
+            font-size:.88rem;
+            font-weight:700;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzoneInstructions"] > div > span:last-child::after {
+            content:"Limite de 200 MB por arquivo · PDF, PNG, JPG, JPEG, TIF, TIFF, BMP ou WEBP";
+            color:var(--admin-muted);
+            font-size:.72rem;
+        }
+        .stApp:has(.law-admin-topbar) [data-testid="stFileUploaderDropzone"] button::after {
+            content:"Selecionar arquivos";
+            font-size:.78rem;
+            font-weight:700;
+        }
 
         /* Controles nativos e popovers ficam na mesma paleta fria do painel. */
         [data-baseweb="popover"],
@@ -5694,6 +5730,7 @@ def render_document_pipeline() -> None:
                     "Anexar PDF ou imagem",
                     type=["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp"],
                     accept_multiple_files=True,
+                    help="Arraste os documentos para a área de envio ou clique em Selecionar arquivos.",
                     key=f"document_upload_{row['id']}",
                 )
 
