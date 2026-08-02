@@ -48,7 +48,7 @@ from database import (
     update_crm_case,
     update_attendance_document,
 )
-from document_intelligence import analyze_document_bundle
+from document_intelligence import analyze_document_bundle, get_ocr_capabilities
 from document_rules import get_flow_document_strategy
 from document_storage import save_uploaded_document
 from flows_data import FLOW_DEFINITIONS
@@ -89,7 +89,7 @@ EXTRACTION_STATUS_STYLE = {
 
 SALARIO_MINIMO_2026 = 1621.00
 TETO_INSS_2026 = 8537.55
-APP_VERSION = "v1.1.0"
+APP_VERSION = "v1.2.0"
 BRAND_NAME = "SOFI.IA PREVI"
 AGENT_NAME = "Sofia"
 BRAND_SLOGAN = "o seu conhecimento juridico no mundo previdenciario"
@@ -5453,6 +5453,33 @@ def render_document_pipeline() -> None:
     )
     st.markdown(f"<div class='pre-metric-grid'>{metric_markup}</div>", unsafe_allow_html=True)
 
+    ocr_capabilities = get_ocr_capabilities()
+    if ocr_capabilities["neural_ready"]:
+        fallback_label = (
+            "fallback Tesseract ativo"
+            if ocr_capabilities["tesseract_ready"]
+            else "fallback Tesseract opcional"
+        )
+        st.success(
+            "OCR neural local ativo · PyMuPDF + RapidOCR/ONNX · "
+            f"{fallback_label} · nenhum documento é enviado para a nuvem."
+        )
+    else:
+        st.error(
+            "OCR neural incompleto. Reinstale as dependências de requirements.txt antes de processar documentos."
+        )
+    with st.expander("Diagnóstico do motor documental", expanded=False):
+        package_summary = " · ".join(
+            f"{name} {package_version}"
+            for name, package_version in ocr_capabilities["packages"].items()
+        )
+        st.caption(package_summary)
+        st.caption(
+            f"PDF escaneado: {ocr_capabilities['pdf_ocr_dpi']} DPI · "
+            f"limite de {ocr_capabilities['max_ocr_pages']} páginas OCR por arquivo · "
+            "processamento local com revisão humana obrigatória."
+        )
+
     status_choice = st.selectbox(
         "Fila documental",
         ["Todos", "aprovado", "revisao"],
@@ -5625,6 +5652,14 @@ def render_document_pipeline() -> None:
 
                 if row["technical_notes"]:
                     st.caption(f"Leitura tecnica: {row['technical_notes']}")
+                if row["extraction_status"] in {"erro", "dependencia_ausente", "sem_texto"}:
+                    st.error(
+                        "A leitura automática não produziu texto confiável. Confira o arquivo e o diagnóstico técnico."
+                    )
+                elif row["raw_text"] and float(row["extraction_confidence"] or 0) < 0.70:
+                    st.warning(
+                        "Baixa confiança: não valide este documento sem comparação visual com o original."
+                    )
 
                 if extracted_data:
                     st.markdown("**Campos detectados**")
@@ -5657,7 +5692,7 @@ def render_document_pipeline() -> None:
                 )
                 uploaded_batch = st.file_uploader(
                     "Anexar PDF ou imagem",
-                    type=["pdf", "png", "jpg", "jpeg"],
+                    type=["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp"],
                     accept_multiple_files=True,
                     key=f"document_upload_{row['id']}",
                 )
@@ -5696,11 +5731,14 @@ def render_document_pipeline() -> None:
                             current_files=uploaded_files,
                             uploaded_batch=uploaded_batch,
                         )
-                        analysis = analyze_document_bundle(
-                            document_code=str(row["document_code"]),
-                            uploaded_files=stored_files,
-                            critical_fields=critical_fields,
-                        )
+                        with st.spinner(
+                            "Lendo texto nativo e aplicando OCR neural somente nas páginas necessárias..."
+                        ):
+                            analysis = analyze_document_bundle(
+                                document_code=str(row["document_code"]),
+                                uploaded_files=stored_files,
+                                critical_fields=critical_fields,
+                            )
                         auto_status = new_status
                         if stored_files and auto_status == "pendente":
                             auto_status = "em_validacao"
