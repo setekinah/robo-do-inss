@@ -723,8 +723,7 @@ def extract_field_value(field_name: str, text: str) -> str:
         match = re.search(r"\bCRM(?:\s*[/|-]\s*[A-Z]{2})?[\s:-]*\d{4,10}\b", text, flags=re.IGNORECASE)
         return match.group(0).strip() if match else ""
     if lowered in {"nit", "nis", "pis", "pasep"}:
-        match = re.search(r"\b\d{3}[.\s-]?\d{5}[.\s-]?\d{2}[-\s]?\d\b|\b\d{11}\b", text)
-        return match.group(0).strip() if match else ""
+        return first_valid_nit(text)
     if lowered == "nb":
         match = re.search(r"\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d\b", text)
         return match.group(0).strip() if match else ""
@@ -738,8 +737,7 @@ def extract_field_value(field_name: str, text: str) -> str:
         dates = valid_dates_in_text(text)
         return " a ".join(dates[:2]) if dates else summarize_keywords(text, "periodos")
     if lowered in {"competencia", "competencias"}:
-        matches = re.findall(r"\b(?:0[1-9]|1[0-2])/\d{4}\b", text)
-        return " | ".join(dict.fromkeys(matches[:6]))
+        return extract_competencies(text)
     if lowered in {"renda_total", "renda_per_capita", "valor"}:
         match = re.search(r"R\$\s*[\d.]+,\d{2}", text, flags=re.IGNORECASE)
         return match.group(0).strip() if match else ""
@@ -786,6 +784,41 @@ def first_valid_identifier(text: str, kind: str) -> str:
         if len(digits) == size and validate_identifier_digits(digits):
             return candidate.strip()
     return ""
+
+
+def first_valid_nit(text: str) -> str:
+    candidates = re.findall(
+        r"(?<!\d)\d{3}[.\s-]?\d{5}[.\s-]?\d{2}[-\s]?\d(?!\d)|(?<!\d)\d{11}(?!\d)",
+        text,
+    )
+    for candidate in candidates:
+        digits = re.sub(r"\D", "", candidate)
+        if validate_nit_digits(digits):
+            return candidate.strip()
+    return ""
+
+
+def validate_nit_digits(digits: str) -> bool:
+    if len(digits) != 11 or len(set(digits)) == 1:
+        return False
+    weights = (3, 2, 9, 8, 7, 6, 5, 4, 3, 2)
+    total = sum(int(value) * weight for value, weight in zip(digits[:10], weights))
+    check_digit = 11 - (total % 11)
+    if check_digit in {10, 11}:
+        check_digit = 0
+    return int(digits[-1]) == check_digit
+
+
+def extract_competencies(text: str) -> str:
+    # Datas civis completas, como nascimento e emissao, nao sao competencias.
+    without_full_dates = re.sub(r"\b\d{2}/\d{2}/\d{4}\b", " ", text)
+    current_year = datetime.now().year
+    competencies = [
+        match.group(0)
+        for match in re.finditer(r"\b(?:0[1-9]|1[0-2])/\d{4}\b", without_full_dates)
+        if 1900 <= int(match.group(0)[-4:]) <= current_year + 2
+    ]
+    return " | ".join(dict.fromkeys(competencies[:6]))
 
 
 def validate_identifier_digits(digits: str) -> bool:
