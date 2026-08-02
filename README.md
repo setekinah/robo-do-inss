@@ -33,14 +33,24 @@ Ou usar o launcher:
 
 Os dados operacionais (banco SQLite, configurações e documentos enviados) são armazenados localmente em `%LOCALAPPDATA%\Robo do INSS\data` e não devem ser adicionados ao Git.
 
-## Dependencias opcionais da fase documental
+## Inteligência documental e OCR
 
-Para leitura documental local mais completa, o ambiente pode exigir:
+O `requirements.txt` instala o pipeline documental completo:
 
-- `pypdf`
-- `pillow`
-- `pytesseract`
-- instalacao do `tesseract.exe` no Windows
+- `PyMuPDF` para leitura rápida de PDF nativo, detecção de páginas escaneadas e rasterização seletiva
+- `RapidOCR` + `ONNX Runtime` para OCR neural local, portátil e sem envio de documentos à nuvem
+- `Pillow` + CLAHE/OpenCV para normalização, contraste, redução de ruído e nova tentativa em imagens difíceis
+- `pypdf` como leitor alternativo de PDFs nativos
+- `pytesseract` como fallback quando o aplicativo Tesseract está instalado no Windows
+
+O sistema não considera OCR como validação jurídica. Resultados com baixa confiança ou campos críticos ausentes permanecem sujeitos à comparação humana com o original.
+
+Variáveis opcionais de ambiente:
+
+- `OCR_MAX_FILE_MB` — limite por arquivo, padrão 50 MB
+- `OCR_MAX_PAGES` — máximo de páginas escaneadas processadas por PDF, padrão 12
+- `OCR_PDF_DPI` — resolução de rasterização, padrão 170 DPI
+- `TESSERACT_CMD` — caminho manual para `tesseract.exe`, quando necessário
 
 ## Documentacao principal
 

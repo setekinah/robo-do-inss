@@ -1,5 +1,11 @@
 streamlit==1.55.0
-# Dependencias opcionais para a Fase 2 documental:
-# pypdf
-# pillow
-# pytesseract
+
+# Inteligencia documental local: PDF nativo + OCR neural portatil (sem nuvem).
+pypdf>=6.0,<7
+PyMuPDF>=1.27,<2
+Pillow>=11,<13
+rapidocr>=3.9,<4
+onnxruntime>=1.24,<2
+
+# Fallback adicional; o executável Tesseract é detectado automaticamente quando instalado.
+pytesseract>=0.3.13,<1

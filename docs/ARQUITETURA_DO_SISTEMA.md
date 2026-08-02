@@ -51,8 +51,8 @@ Isso significa que a experiencia visual ja aponta para um produto comercial, mas
 - banco SQLite para salvar atendimentos e documentos
 - checklist documental por tipo de beneficio
 - upload local de PDF e imagem
-- leitura de PDF nativo com `pypdf` quando a dependencia esta instalada
-- OCR local com `pytesseract` + executavel Tesseract quando disponivel
+- leitura nativa e rasterização seletiva de PDF com `PyMuPDF`, com fallback `pypdf`
+- OCR neural local com `RapidOCR` + `ONNX Runtime` e fallback Tesseract
 - preview de contrato padrao de honorarios
 - calculadora de salario-maternidade
 - credencial local protegida por hash com salt
@@ -113,10 +113,11 @@ Leitura pratica:
 
 ### Leitura documental
 
-- `pypdf` para texto nativo em PDF
-- `Pillow` para manipulacao basica de imagem
-- `pytesseract` para OCR
-- executavel `tesseract.exe` instalado no Windows
+- `PyMuPDF` para PDF nativo, detecção de scans e rasterização seletiva
+- `RapidOCR` + `ONNX Runtime` para reconhecimento neural local
+- `Pillow` + OpenCV/CLAHE para preparação de imagem
+- `pypdf` como leitor alternativo
+- `pytesseract` + `tesseract.exe` como fallback adicional
 
 ### Runtime local
 
@@ -128,6 +129,9 @@ Leitura pratica:
 Arquivo: `requirements.txt`
 
 - `streamlit==1.55.0`
+- `PyMuPDF`, `pypdf` e `Pillow`
+- `RapidOCR` e `ONNX Runtime`
+- `pytesseract`
 
 Observacao importante:
 
@@ -558,15 +562,17 @@ O login possui uma conta local persistida com PBKDF2-HMAC-SHA256, salt aleatorio
 
 Ainda nao ha multiusuario, identidade remota, recuperacao de senha ou permissao por perfil. A autenticacao atual e adequada ao MVP local, nao a um SaaS exposto na internet.
 
-## 12.4 OCR depende de ambiente
+## 12.4 OCR local em camadas
 
-O pipeline de OCR depende de:
+O pipeline documental usa cinco níveis coordenados:
 
-- `pytesseract`
-- executavel do Tesseract
-- eventualmente `pypdf` e `Pillow`
+1. `PyMuPDF` extrai a camada de texto dos PDFs nativos.
+2. Páginas sem texto ou dominadas por uma imagem são rasterizadas seletivamente; não se aplica OCR caro ao PDF inteiro sem necessidade.
+3. `RapidOCR` executa detecção e reconhecimento neural local com modelos ONNX.
+4. Imagens de baixa confiança recebem uma segunda tentativa com escala, autocontraste, CLAHE, redução de ruído e nitidez.
+5. `pytesseract` usa Tesseract em português e inglês como fallback quando o executável está disponível.
 
-Se o ambiente nao estiver completo, a aplicacao continua funcionando, mas com leitura documental reduzida.
+O pipeline possui limite de tamanho e de páginas, cache por arquivo inalterado, confiança ponderada, validação de CPF/CNPJ/data e indicação explícita dos campos críticos ausentes. Nenhuma leitura documental é enviada à nuvem e nenhum resultado automático libera o documento sem revisão humana.
 
 ## 12.5 Claims de produto adiantados em relacao ao backend
 
