@@ -8,6 +8,7 @@ import hmac
 import json
 import re
 import secrets
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,8 @@ from runtime_paths import DATA_DIR
 
 CREDENTIALS_PATH = DATA_DIR / "auth_credentials.json"
 PBKDF2_ITERATIONS = 600_000
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 300
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -47,6 +50,27 @@ def validate_whatsapp(value: str) -> str | None:
     if not 10 <= len(digits) <= 13:
         return "Informe um WhatsApp com DDD válido."
     return None
+
+
+def get_login_lockout_remaining(lockout_until: float | None, *, now: float | None = None) -> int:
+    """Return remaining lockout seconds for the current UI session."""
+    if not lockout_until:
+        return 0
+    current_time = time.time() if now is None else now
+    return max(0, int(lockout_until - current_time + 0.999))
+
+
+def register_failed_login(
+    failed_attempts: int,
+    *,
+    now: float | None = None,
+) -> tuple[int, float | None]:
+    """Record a failed attempt and start a short session lockout when needed."""
+    current_time = time.time() if now is None else now
+    attempts = max(0, failed_attempts) + 1
+    if attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
+        return 0, current_time + LOGIN_LOCKOUT_SECONDS
+    return attempts, None
 
 
 def credentials_configured() -> bool:

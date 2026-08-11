@@ -17,6 +17,8 @@ from automation_orchestrator import (
 )
 from auth_security import (
     credentials_configured,
+    get_login_lockout_remaining,
+    register_failed_login,
     save_credentials,
     validate_email,
     validate_password,
@@ -2235,6 +2237,10 @@ def ensure_session_defaults() -> None:
         st.session_state.is_authenticated = False
     if "auth_mode" not in st.session_state:
         st.session_state.auth_mode = "login" if credentials_configured() else "signup"
+    if "auth_failed_attempts" not in st.session_state:
+        st.session_state.auth_failed_attempts = 0
+    if "auth_lockout_until" not in st.session_state:
+        st.session_state.auth_lockout_until = None
     if "auth_step" not in st.session_state:
         st.session_state.auth_step = 1
     if "auth_signup_data" not in st.session_state:
@@ -3265,6 +3271,10 @@ def render_auth_login() -> None:
         unsafe_allow_html=True,
     )
     account_ready = credentials_configured()
+    remaining_lockout = get_login_lockout_remaining(st.session_state.auth_lockout_until)
+    if not remaining_lockout and st.session_state.auth_lockout_until:
+        st.session_state.auth_lockout_until = None
+        st.session_state.auth_failed_attempts = 0
     if not account_ready:
         st.info("Nenhuma conta foi configurada neste computador. Use Criar conta para concluir o primeiro acesso.")
     with st.form("auth_login_form"):
@@ -3290,7 +3300,14 @@ def render_auth_login() -> None:
             """,
             unsafe_allow_html=True,
         )
-        login_submit = st.form_submit_button("Entrar", use_container_width=True, type="primary")
+        login_submit = st.form_submit_button(
+            "Entrar",
+            use_container_width=True,
+            type="primary",
+            disabled=bool(remaining_lockout),
+        )
+    if remaining_lockout:
+        st.warning(f"Por segurança, aguarde {remaining_lockout} segundos antes de tentar novamente.")
     if login_submit:
         email_error = validate_email(login_email)
         if not login_email.strip() or not login_password.strip():
@@ -3300,8 +3317,13 @@ def render_auth_login() -> None:
         elif not account_ready:
             st.error("Não existe uma conta local configurada. Selecione Criar conta.")
         elif not verify_credentials(login_email, login_password):
+            attempts, lockout_until = register_failed_login(st.session_state.auth_failed_attempts)
+            st.session_state.auth_failed_attempts = attempts
+            st.session_state.auth_lockout_until = lockout_until
             st.error("E-mail ou senha inválidos. Verifique os dados e tente novamente.")
         else:
+            st.session_state.auth_failed_attempts = 0
+            st.session_state.auth_lockout_until = None
             st.session_state.is_authenticated = True
             st.session_state.current_view = "dashboard"
             st.rerun()
