@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 from datetime import date
 from typing import Any
 
@@ -2695,7 +2696,11 @@ def persist_document_uploads(
 ) -> list[str]:
     stored_files = list(current_files)
     for uploaded_file in uploaded_batch or []:
-        saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
+        try:
+            saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
+        except ValueError as exc:
+            st.error(f"Upload não realizado: {exc}")
+            continue
         if saved_path not in stored_files:
             stored_files.append(saved_path)
     return stored_files
@@ -5280,11 +5285,11 @@ def render_result_panel(flow: dict[str, Any], form_data: dict[str, Any]) -> None
     st.markdown(
         (
             f"<div class='status-chip' style='background:{background}; color:{color};'>{label}</div>"
-            f"<div class='surface-card'><h3>{result['title']}</h3>"
-            f"<p><strong>Resumo:</strong> {result['summary']}</p>"
-            f"<p><strong>Proximo passo:</strong> {result['next_step']}</p>"
-            f"<p><strong>Lead:</strong> {form_data['lead_name'] or 'Nao informado'}"
-            f" | <strong>Telefone:</strong> {form_data['lead_phone'] or 'Nao informado'}</p>"
+            f"<div class='surface-card'><h3>{escape(str(result['title']))}</h3>"
+            f"<p><strong>Resumo:</strong> {escape(str(result['summary']))}</p>"
+            f"<p><strong>Proximo passo:</strong> {escape(str(result['next_step']))}</p>"
+            f"<p><strong>Lead:</strong> {escape(str(form_data['lead_name'] or 'Nao informado'))}"
+            f" | <strong>Telefone:</strong> {escape(str(form_data['lead_phone'] or 'Nao informado'))}</p>"
             "</div>"
         ),
         unsafe_allow_html=True,
