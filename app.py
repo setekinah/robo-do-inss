@@ -5987,6 +5987,17 @@ def render_calculations_view() -> None:
         cnis_history = CnisImportRepository().list_for_attendance(int(selected_id))
         if cnis_history:
             st.caption(f"{len(cnis_history)} importação(ões) CNIS registrada(s) para este atendimento.")
+    cnis_history = CnisImportRepository().list_for_attendance(int(selected_id))
+    confirmed_imports = [item for item in cnis_history if item["confirmed_at"]]
+    cnis_import_id = st.selectbox(
+        "CNIS revisado usado como evidência (opcional)",
+        options=[None] + [item["id"] for item in confirmed_imports],
+        format_func=lambda import_id: "Sem CNIS vinculado" if import_id is None else next(
+            f"Importação #{item['id']} · {item['created_at']} · confiança {item['confidence']:.0%}"
+            for item in confirmed_imports if item["id"] == import_id
+        ),
+        key="calc_rgps_cnis_import_id",
+    )
     st.markdown("### Planejamento RGPS — regras selecionadas de 2026")
     first, second, third = st.columns(3)
     with first:
@@ -6019,6 +6030,7 @@ def render_calculations_view() -> None:
                     "contribution_months": data.contribution_months,
                     "carencia_months": data.carencia_months,
                     "affiliation_date": affiliation_date.isoformat(),
+                    "cnis_import_id": cnis_import_id,
                 },
                 ruleset_version=RULESET_VERSION,
             )
