@@ -53,6 +53,9 @@ from document_rules import get_flow_document_strategy
 from document_storage import save_uploaded_document
 from flows_data import FLOW_DEFINITIONS
 from office_settings import load_office_settings, resolve_fee_percentage, save_office_settings
+from services.contract_service import build_fee_contract_preview as build_contract_preview
+from services.document_score_service import build_document_case_score as calculate_document_case_score
+from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
 
 
@@ -2626,64 +2629,8 @@ def get_document_progress(documents: list[Any]) -> tuple[int, int]:
 
 
 def build_document_case_score(documents: list[Any]) -> dict[str, Any]:
-    if not documents:
-        return {"score": 0, "label": "Sem dossie", "critical_gaps": [], "processed": 0}
-
-    status_weight = {
-        "validado": 1.0,
-        "em_validacao": 0.82,
-        "recebido": 0.62,
-        "pendente": 0.18,
-        "ilegivel": 0.05,
-        "inconsistente": 0.12,
-        "dispensado": 1.0,
-    }
-    extraction_weight = {
-        "extraido": 1.0,
-        "parcial": 0.72,
-        "nao_processado": 0.0,
-        "sem_texto": 0.18,
-        "dependencia_ausente": 0.0,
-        "erro": 0.0,
-        None: 0.0,
-    }
-
-    required_docs = [row for row in documents if int(row["required"]) == 1]
-    if not required_docs:
-        return {"score": 0, "label": "Sem obrigatorios", "critical_gaps": [], "processed": 0}
-
-    total_points = 0.0
-    critical_gaps: list[str] = []
-    processed = 0
-
-    for row in required_docs:
-        current_status = row["status"]
-        current_extraction = row["extraction_status"]
-        if current_extraction in {"extraido", "parcial"}:
-            processed += 1
-
-        total_points += status_weight.get(current_status, 0.0) * 70
-        total_points += extraction_weight.get(current_extraction, 0.0) * 30
-
-        if current_status in {"pendente", "ilegivel", "inconsistente"}:
-            critical_gaps.append(str(row["document_name"]))
-
-    max_points = len(required_docs) * 100
-    score = round((total_points / max_points) * 100) if max_points else 0
-
-    if score >= 80:
-        label = "Pronto para analise juridica"
-    elif score >= 55:
-        label = "Dossie parcialmente consolidado"
-    else:
-        label = "Dossie critico"
-
-    return {
-        "score": int(score),
-        "label": label,
-        "critical_gaps": critical_gaps[:4],
-        "processed": processed,
-    }
+    """Compatibilidade da interface; a regra de domínio vive no serviço."""
+    return calculate_document_case_score(documents)
 
 
 def persist_document_uploads(
@@ -5035,35 +4982,8 @@ def render_settings_view() -> None:
 
 
 def build_fee_contract_preview(flow_name: str, lead_name: str) -> str:
-    client_name = lead_name or "CLIENTE"
-    today = date.today().strftime("%d/%m/%Y")
     office_settings = st.session_state.get("office_settings", load_office_settings())
-    fee_percentage = resolve_fee_percentage(flow_name, office_settings)
-    return f"""
-CONTRATO PARTICULAR DE HONORARIOS ADVOCATICIOS
-
-Data da minuta: {today}
-
-CONTRATANTE:
-{client_name}
-
-OBJETO:
-Prestacao de servicos advocaticios para analise, requerimento administrativo e/ou medidas correlatas
-relacionadas ao beneficio previdenciario de {flow_name}.
-
-HONORARIOS:
-Fica ajustado, a titulo de honorarios advocaticios contratuais, o percentual de {fee_percentage}% ({fee_percentage} por cento)
-sobre o valor economico obtido com o beneficio, incluindo valores atrasados, parcelas retroativas,
-RPV, precatorio ou quantias liberadas em favor do contratante, observada a estrategia juridica adotada.
-
-PAGAMENTO:
-Os honorarios serao pagos no momento da liberacao dos valores, autorizando o contratante a deducao
-do percentual contratado ou o pagamento imediato apos o recebimento do beneficio.
-
-CIENCIA:
-Esta minuta e um modelo inicial exibido pelo sistema e deve ser revisada e validada pelo escritorio
-antes da assinatura definitiva.
-"""
+    return build_contract_preview(flow_name, lead_name, office_settings)
 
 
 def render_contract_preview(flow: dict[str, Any], form_data: dict[str, Any]) -> None:
@@ -5077,7 +4997,7 @@ def render_contract_preview(flow: dict[str, Any], form_data: dict[str, Any]) -> 
 
 
 def clamp_benefit_value(value: float) -> float:
-    return min(max(value, SALARIO_MINIMO_2026), TETO_INSS_2026)
+    return clamp_maternity_benefit_value(value)
 
 
 def render_salario_maternidade_calculator() -> None:

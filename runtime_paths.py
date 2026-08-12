@@ -1,32 +1,5 @@
-"""Resolve paths for local operational data outside the source checkout."""
+"""Compatibilidade para integrações que ainda importam ``runtime_paths``."""
 
-from __future__ import annotations
+from data_paths import BASE_DIR, DATA_DIR, migrate_legacy_data, resolve_data_dir
 
-import os
-from pathlib import Path
-
-
-BASE_DIR = Path(__file__).resolve().parent
-
-
-def resolve_data_dir() -> Path:
-    """Return a writable user-data directory, falling back only when necessary."""
-    configured = os.environ.get("ROBO_INSS_DATA_DIR")
-    preferred = Path(os.environ.get("LOCALAPPDATA", BASE_DIR)) / "Robo do INSS" / "data"
-    fallback = BASE_DIR / "data"
-    candidates = (Path(configured).expanduser(),) if configured else (preferred, fallback)
-
-    for candidate in candidates:
-        try:
-            candidate.mkdir(parents=True, exist_ok=True)
-            probe = candidate / ".write_test"
-            probe.write_text("ok", encoding="utf-8")
-            probe.unlink(missing_ok=True)
-            return candidate
-        except OSError:
-            continue
-
-    return fallback
-
-
-DATA_DIR = resolve_data_dir()
+__all__ = ["BASE_DIR", "DATA_DIR", "migrate_legacy_data", "resolve_data_dir"]

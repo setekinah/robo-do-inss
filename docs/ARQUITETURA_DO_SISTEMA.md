@@ -155,7 +155,7 @@ as dependencias documentais aparecem hoje como opcionais em comentario no `requi
 | `office_settings.py` | Configuracoes do escritorio e percentuais de honorarios |
 | `auth_security.py` | Validacao e armazenamento local de credenciais protegidas por PBKDF2 |
 | `automation_orchestrator.py` | Recepcao idempotente, processamento e roteamento de eventos para tarefas do CRM |
-| `runtime_paths.py` | Diretorio unico e configuravel para todos os dados operacionais |
+| `data_paths.py` | Diretorio unico, configuravel e com migracao nao destrutiva dos dados legados |
 | `iniciar_robo_inss.bat` | Inicializacao direta do Streamlit |
 | `iniciar_robo_inss_completo.bat` | Inicializacao com verificacao de ambiente e abertura automatica do navegador |
 
@@ -552,9 +552,9 @@ Risco:
 
 ## 12.2 Diretorio operacional unificado
 
-`database.py`, `office_settings.py`, `document_storage.py` e `auth_security.py` usam o diretorio resolvido por `runtime_paths.py`.
+`database.py`, `office_settings.py`, `document_storage.py` e `auth_security.py` usam o diretorio resolvido por `data_paths.py`. `runtime_paths.py` permanece como uma camada de compatibilidade para imports existentes.
 
-Por padrao, o Windows utiliza `%LOCALAPPDATA%\\Robo do INSS\\data`. Testes podem definir `ROBO_INSS_DATA_DIR` para isolar totalmente os dados.
+Por padrao, o Windows utiliza `%LOCALAPPDATA%\\Robo do INSS\\data`. Testes podem definir `ROBO_INSS_DATA_DIR` para isolar totalmente os dados. Na primeira execucao, arquivos legados do diretorio local `data/` sao copiados somente quando ainda nao existem no destino; a origem e o destino existente sao preservados.
 
 ## 12.3 Autenticacao local
 

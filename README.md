@@ -31,7 +31,7 @@ Ou usar o launcher:
 - `iniciar_robo_inss.bat`
 - `iniciar_robo_inss_completo.bat` (instala o Streamlit se necessário e abre o navegador)
 
-Os dados operacionais (banco SQLite, configurações e documentos enviados) são armazenados localmente em `%LOCALAPPDATA%\Robo do INSS\data` e não devem ser adicionados ao Git.
+Os dados operacionais (banco SQLite, configurações e documentos enviados) são armazenados localmente em `%LOCALAPPDATA%\Robo do INSS\data` e não devem ser adicionados ao Git. O resolvedor central `data_paths.py` aceita `ROBO_INSS_DATA_DIR` para instalações portáteis e testes. Na primeira execução, arquivos existentes em `data/` no diretório do projeto são copiados para o destino escolhido sem substituir nem remover arquivos.
 
 ## Inteligência documental e OCR
 
