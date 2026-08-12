@@ -61,6 +61,7 @@ from services.maternity_benefit_service import clamp_benefit_value as clamp_mate
 from services.rgps_planning_service import RgpsPlanningInput, RULESET_VERSION, screen_rgps_planning, serialize_planning_result
 from services.reference_data_service import ReferenceDataset
 from services.date_calculation_service import calculate_day_interval
+from services.cnis_import_service import build_cnis_preview
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
 
 
@@ -5945,6 +5946,21 @@ def render_calculations_view() -> None:
             for row in attendances if int(row["id"]) == attendance_id
         ),
     )
+    with st.expander("Importar CNIS com prévia", expanded=False):
+        cnis_upload = st.file_uploader(
+            "Extrato CNIS em PDF ou imagem", type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"], key="cnis_import_upload"
+        )
+        if cnis_upload and st.button("Ler CNIS e gerar prévia", key="read_cnis_import"):
+            saved_path = save_uploaded_document(int(selected_id), "CNIS_IMPORTACAO", cnis_upload)
+            with st.spinner("Extraindo texto localmente..."):
+                st.session_state["cnis_import_preview"] = build_cnis_preview([saved_path])
+        preview = st.session_state.get("cnis_import_preview")
+        if preview:
+            st.caption(f"Status: {preview['extraction_status']} · confiança: {preview['confidence']:.0%}")
+            st.json(preview["fields"])
+            st.caption(preview["technical_notes"])
+            if preview["text_excerpt"]:
+                st.text_area("Texto extraído para conferência", preview["text_excerpt"], height=160, disabled=True, key="cnis_import_text")
     st.markdown("### Planejamento RGPS — regras selecionadas de 2026")
     first, second, third = st.columns(3)
     with first:
