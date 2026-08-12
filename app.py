@@ -63,6 +63,7 @@ from services.rgps_planning_service import RgpsPlanningInput, RULESET_VERSION, s
 from services.reference_data_service import ReferenceDataset
 from services.date_calculation_service import calculate_day_interval
 from services.cnis_import_service import build_cnis_preview
+from services.crm_ux_catalog import CRM_UX_CATALOG
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
 
 
@@ -4351,6 +4352,19 @@ def render_crm_pipeline_board(
                     )
 
 
+def render_crm_ux_map() -> None:
+    st.info("Inventário funcional do CRM atual para orientar fluxos, telas, estados e protótipos de UI/UX.")
+    for title, capability, interactions in CRM_UX_CATALOG:
+        with st.container(border=True):
+            left, right = st.columns([0.9, 1.1])
+            with left:
+                st.markdown(f"#### {title}")
+                st.write(capability)
+            with right:
+                st.caption("Interações e estados a projetar")
+                st.write(interactions)
+
+
 def render_crm_view() -> None:
     render_shell_page_header(
         "CRM Juridico",
@@ -4361,7 +4375,7 @@ def render_crm_view() -> None:
     crm_summary = get_crm_summary()
     crm_performance = get_crm_performance()
     pending_section = st.session_state.pop("pending_crm_section", None)
-    if pending_section in {"funil", "caso", "automacoes", "indicadores"}:
+    if pending_section in {"funil", "caso", "automacoes", "indicadores", "mapa_ux"}:
         st.session_state.crm_section = pending_section
     pending_case_id = st.session_state.pop("pending_crm_case_id", None)
     if pending_case_id is not None:
@@ -4373,18 +4387,21 @@ def render_crm_view() -> None:
 
     crm_section = st.radio(
         "Área do CRM",
-        options=["funil", "caso", "automacoes", "indicadores"],
+        options=["funil", "caso", "automacoes", "indicadores", "mapa_ux"],
         format_func=lambda value: {
             "funil": "🗂️ Funil e clientes",
             "caso": "👤 Caso em foco",
             "automacoes": "⚡ Automações",
             "indicadores": "📈 Indicadores",
-        }[value],
+        }.get(value, "🧩 Mapa UX"),
         key="crm_section",
         horizontal=True,
         label_visibility="collapsed",
         width="stretch",
     )
+    if crm_section == "mapa_ux":
+        render_crm_ux_map()
+        return
     if crm_section == "automacoes":
         render_automation_center(all_pipeline_records)
         return
