@@ -199,6 +199,30 @@ def init_database() -> None:
         ensure_document_column(conn, "extraction_status", "TEXT")
         ensure_document_column(conn, "extraction_confidence", "REAL")
         ensure_document_column(conn, "technical_notes", "TEXT")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS calculos_previdenciarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                calculation_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                inputs_json TEXT NOT NULL,
+                result_json TEXT,
+                ruleset_version TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'rascunho',
+                requires_human_review INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_calculos_previdenciarios_attendance
+            ON calculos_previdenciarios(attendance_id, id DESC)
+            """
+        )
         backfill_document_checklists(conn)
         conn.commit()
 

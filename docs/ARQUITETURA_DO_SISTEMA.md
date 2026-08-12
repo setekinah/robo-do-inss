@@ -556,7 +556,13 @@ Risco:
 
 Por padrao, o Windows utiliza `%LOCALAPPDATA%\\Robo do INSS\\data`. Testes podem definir `ROBO_INSS_DATA_DIR` para isolar totalmente os dados. Na primeira execucao, arquivos legados do diretorio local `data/` sao copiados somente quando ainda nao existem no destino; a origem e o destino existente sao preservados.
 
-## 12.3 Autenticacao local
+## 12.3 Base de calculos previdenciarios
+
+O catalogo em `services/calculation_service.py` registra apenas os modulos que podem ser preparados pelo sistema. A persistencia em `repositories/calculation_repository.py` guarda entradas, resultados, versao das regras e o estado de revisao no SQLite, sempre vinculada a um atendimento.
+
+Os motores numericos ainda nao sao liberados por esse catalogo: cada formula exige fonte normativa, versao identificavel, casos de teste e revisao humana antes de produzir orientacao juridica.
+
+## 12.4 Autenticacao local
 
 O login possui uma conta local persistida com PBKDF2-HMAC-SHA256, salt aleatorio e comparacao em tempo constante.
 
