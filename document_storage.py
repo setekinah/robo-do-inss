@@ -26,6 +26,14 @@ def _upload_limit_bytes() -> int:
 MAX_UPLOAD_BYTES = _upload_limit_bytes()
 
 
+def _make_private_directory(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+
+
 def _has_valid_signature(content: bytes, suffix: str) -> bool:
     """Reject files whose content does not match the extension offered to the OCR pipeline."""
     if suffix == ".pdf":
@@ -69,8 +77,9 @@ def save_uploaded_document(attendance_id: int, document_code: str, uploaded_file
     if not _has_valid_signature(content, suffix):
         raise ValueError("O conteúdo do arquivo não corresponde ao formato informado.")
 
+    _make_private_directory(UPLOADS_DIR)
     target_dir = UPLOADS_DIR / f"atendimento_{attendance_id}"
-    target_dir.mkdir(parents=True, exist_ok=True)
+    _make_private_directory(target_dir)
     safe_name = sanitize_filename(original_name)
     safe_document_code = sanitize_filename(document_code)
     content_digest = hashlib.sha256(content).hexdigest()[:12]
@@ -79,5 +88,13 @@ def save_uploaded_document(attendance_id: int, document_code: str, uploaded_file
     if not target_path.exists():
         temporary_path = target_path.with_suffix(f"{target_path.suffix}.tmp")
         temporary_path.write_bytes(content)
+        try:
+            os.chmod(temporary_path, 0o600)
+        except OSError:
+            pass
         temporary_path.replace(target_path)
+        try:
+            os.chmod(target_path, 0o600)
+        except OSError:
+            pass
     return str(target_path)

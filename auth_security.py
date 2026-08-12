@@ -10,10 +10,9 @@ import re
 import secrets
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-from runtime_paths import DATA_DIR
+from runtime_paths import DATA_DIR, write_private_text
 
 
 CREDENTIALS_PATH = DATA_DIR / "auth_credentials.json"
@@ -98,32 +97,64 @@ def save_credentials(email: str, password: str) -> None:
         "password_hash": base64.b64encode(password_hash).decode("ascii"),
         "iterations": PBKDF2_ITERATIONS,
         "updated_at": datetime.now(timezone.utc).isoformat(),
+        "failed_attempts": 0,
+        "lockout_until": None,
     }
-    CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = Path(f"{CREDENTIALS_PATH}.tmp")
-    temporary_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    temporary_path.replace(CREDENTIALS_PATH)
+    write_private_text(CREDENTIALS_PATH, json.dumps(payload, indent=2))
 
 
 def verify_credentials(email: str, password: str) -> bool:
+    payload = _load_credentials_payload()
     credentials = _load_credentials()
-    if credentials is None or normalize_email(email) != credentials["email"]:
+    if payload is None or credentials is None:
+        return False
+    lockout_remaining = get_login_lockout_remaining(payload.get("lockout_until"))
+    if lockout_remaining:
         return False
 
-    candidate_hash = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        credentials["salt"],
-        credentials["iterations"],
+    is_valid = normalize_email(email) == credentials["email"] and hmac.compare_digest(
+        hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), credentials["salt"], credentials["iterations"]
+        ),
+        credentials["password_hash"],
     )
-    return hmac.compare_digest(candidate_hash, credentials["password_hash"])
+    if is_valid:
+        if payload.get("failed_attempts") or payload.get("lockout_until"):
+            payload["failed_attempts"] = 0
+            payload["lockout_until"] = None
+            write_private_text(CREDENTIALS_PATH, json.dumps(payload, indent=2))
+        return True
+
+    attempts, lockout_until = register_failed_login(int(payload.get("failed_attempts") or 0))
+    payload["failed_attempts"] = attempts
+    payload["lockout_until"] = lockout_until
+    write_private_text(CREDENTIALS_PATH, json.dumps(payload, indent=2))
+    return False
 
 
-def _load_credentials() -> dict[str, Any] | None:
+def get_persistent_login_lockout_remaining() -> int:
+    """Return the account lockout shared by all local browser sessions."""
+    payload = _load_credentials_payload()
+    return get_login_lockout_remaining(payload.get("lockout_until") if payload else None)
+
+
+def _load_credentials_payload() -> dict[str, Any] | None:
     if not CREDENTIALS_PATH.exists():
         return None
     try:
         payload = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return None
+        return payload
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _load_credentials() -> dict[str, Any] | None:
+    payload = _load_credentials_payload()
+    if payload is None:
+        return None
+    try:
         email = normalize_email(str(payload["email"]))
         salt = base64.b64decode(payload["salt"], validate=True)
         password_hash = base64.b64decode(payload["password_hash"], validate=True)

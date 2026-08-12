@@ -18,6 +18,7 @@ from automation_orchestrator import (
 from auth_security import (
     credentials_configured,
     get_login_lockout_remaining,
+    get_persistent_login_lockout_remaining,
     register_failed_login,
     save_credentials,
     validate_email,
@@ -44,6 +45,7 @@ from database import (
     list_integration_events,
     list_recent_attendances,
     load_history,
+    record_security_event,
     retry_integration_event,
     review_crm_task,
     save_attendance,
@@ -131,18 +133,18 @@ CONFLICT_STATUS = {
 FEATURE_CARDS = [
     (
         "🎙️",
-        "Responde em audio",
-        "Se o lead manda audio, a Sofia responde em audio com voz personalizada e conduz o atendimento com naturalidade.",
+        "Fluxo de atendimento",
+        "A operação registra a triagem e orienta a próxima ação. Integrações de áudio e canais externos ainda não estão disponíveis.",
     ),
     (
         "🧠",
-        "Motor de elegibilidade com IA",
-        "A Sofia cobre os principais beneficios previdenciarios e calcula score de exito com checklist documental.",
+        "Motor de elegibilidade determinístico",
+        "A Sofia cobre os principais benefícios previdenciários por regras estruturadas e checklist documental revisável.",
     ),
     (
         "🧾",
-        "Contrato pelo celular",
-        "Contrato, procuracao e declaracao enviados por WhatsApp com assinatura digital.",
+        "Prévia de contrato",
+        "O sistema prepara uma prévia interna de honorários; assinatura digital e envio por WhatsApp não estão integrados.",
     ),
     (
         "📊",
@@ -151,8 +153,8 @@ FEATURE_CARDS = [
     ),
     (
         "🔔",
-        "Follow-up automatizado",
-        "O sistema identifica leads parados e prepara lembretes automaticos para nao perder oportunidades.",
+        "Fila operacional",
+        "Eventos internos podem criar tarefas revisáveis; o envio automatizado de lembretes por canal externo não está integrado.",
     ),
     (
         "📷",
@@ -171,20 +173,20 @@ FEATURE_CARDS = [
     ),
     (
         "🔄",
-        "Recupera leads perdidos",
-        "Lead sem aderencia ao beneficio A pode ser redirecionado automaticamente para outro fluxo viavel.",
+        "Triagem orientada",
+        "O operador pode iniciar outro fluxo quando necessário; não há redirecionamento automático de leads.",
     ),
 ]
 PROCESS_STEPS = [
     (
         "1",
-        "Lead chega pelo WhatsApp",
-        "Trafego pago, link na bio e QR code direcionam o lead para a esteira automatizada da Sofia.",
+        "Lead entra na operação",
+        "O operador registra o atendimento e inicia a triagem no fluxo adequado.",
     ),
     (
         "2",
-        "IA faz a triagem",
-        "Perguntas dinamicas identificam beneficio, score de exito e checklist inicial sem sobrecarregar o lead.",
+        "Triagem guiada",
+        "Perguntas dinâmicas identificam o benefício, o resultado operacional e o checklist inicial.",
     ),
     (
         "3",
@@ -193,8 +195,8 @@ PROCESS_STEPS = [
     ),
     (
         "4",
-        "Contrato assinado pelo celular",
-        "Contrato, procuracao e declaracoes saem para assinatura digital assim que o caso for aprovado.",
+        "Prévia de contrato revisada",
+        "Após aprovação, o sistema disponibiliza a prévia interna para conferência antes de qualquer contratação.",
     ),
 ]
 PLAN_OPTIONS = [
@@ -282,7 +284,6 @@ def inject_styles() -> None:
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
         :root {
             --bg: #f6f8fc;
             --panel: rgba(255, 255, 255, 0.94);
@@ -3271,7 +3272,10 @@ def render_auth_login() -> None:
         unsafe_allow_html=True,
     )
     account_ready = credentials_configured()
-    remaining_lockout = get_login_lockout_remaining(st.session_state.auth_lockout_until)
+    remaining_lockout = max(
+        get_login_lockout_remaining(st.session_state.auth_lockout_until),
+        get_persistent_login_lockout_remaining(),
+    )
     if not remaining_lockout and st.session_state.auth_lockout_until:
         st.session_state.auth_lockout_until = None
         st.session_state.auth_failed_attempts = 0
@@ -3320,12 +3324,14 @@ def render_auth_login() -> None:
             attempts, lockout_until = register_failed_login(st.session_state.auth_failed_attempts)
             st.session_state.auth_failed_attempts = attempts
             st.session_state.auth_lockout_until = lockout_until
+            record_security_event("login_failed")
             st.error("E-mail ou senha inválidos. Verifique os dados e tente novamente.")
         else:
             st.session_state.auth_failed_attempts = 0
             st.session_state.auth_lockout_until = None
             st.session_state.is_authenticated = True
             st.session_state.current_view = "dashboard"
+            record_security_event("login_succeeded")
             st.rerun()
     st.caption("Primeiro acesso? Use Criar conta no seletor acima.")
 

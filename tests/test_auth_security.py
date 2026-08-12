@@ -62,6 +62,15 @@ class AuthSecurityTests(unittest.TestCase):
         self.assertEqual(auth_security.get_login_lockout_remaining(lockout_until, now=100.0), 300)
         self.assertEqual(auth_security.get_login_lockout_remaining(lockout_until, now=400.0), 0)
 
+    def test_failed_logins_are_throttled_across_browser_sessions(self) -> None:
+        auth_security.save_credentials("advogado@exemplo.com.br", "SenhaForte2026")
+
+        for _ in range(auth_security.MAX_FAILED_LOGIN_ATTEMPTS):
+            self.assertFalse(auth_security.verify_credentials("advogado@exemplo.com.br", "SenhaErrada2026"))
+
+        self.assertGreater(auth_security.get_persistent_login_lockout_remaining(), 0)
+        self.assertFalse(auth_security.verify_credentials("advogado@exemplo.com.br", "SenhaForte2026"))
+
 
 if __name__ == "__main__":
     unittest.main()

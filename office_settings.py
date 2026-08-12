@@ -6,7 +6,7 @@ import json
 from copy import deepcopy
 from typing import Any
 
-from runtime_paths import DATA_DIR
+from runtime_paths import DATA_DIR, write_private_text
 
 
 SETTINGS_PATH = DATA_DIR / "office_settings.json"
@@ -54,12 +54,8 @@ def load_office_settings() -> dict[str, Any]:
 
 
 def save_office_settings(settings: dict[str, Any]) -> None:
-    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     merged = _deep_merge(DEFAULT_OFFICE_SETTINGS, settings)
-    SETTINGS_PATH.write_text(
-        json.dumps(merged, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_private_text(SETTINGS_PATH, json.dumps(merged, ensure_ascii=False, indent=2))
 
 
 def resolve_fee_percentage(flow_name: str, settings: dict[str, Any]) -> int:

@@ -24,7 +24,9 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
 
 MAX_FILE_BYTES = _env_int("OCR_MAX_FILE_MB", 50, 1, 250) * 1024 * 1024
 MAX_OCR_PAGES = _env_int("OCR_MAX_PAGES", 12, 1, 100)
+MAX_PDF_PAGES = _env_int("OCR_MAX_PDF_PAGES", 100, 1, 500)
 PDF_OCR_DPI = _env_int("OCR_PDF_DPI", 170, 120, 300)
+MAX_IMAGE_PIXELS = _env_int("OCR_MAX_IMAGE_PIXELS", 40_000_000, 1_000_000, 100_000_000)
 MIN_NATIVE_PAGE_CHARS = _env_int("OCR_MIN_NATIVE_CHARS", 32, 12, 500)
 OCR_RETRY_CONFIDENCE = 0.78
 SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
@@ -176,6 +178,13 @@ def extract_text_from_pdf(file_path: Path) -> dict[str, Any]:
                 note=f"O PDF {file_path.name} exige senha e não pôde ser analisado.",
                 hard_failure=True,
             )
+        if len(document) > MAX_PDF_PAGES:
+            return extraction_failure(
+                source_type="pdf_excede_limite_paginas",
+                note=(f"O PDF {file_path.name} possui mais de {MAX_PDF_PAGES} "
+                      "páginas e não foi processado automaticamente."),
+                hard_failure=True,
+            )
 
         chunks: list[str] = []
         confidence_samples: list[tuple[float, int]] = []
@@ -283,6 +292,13 @@ def extract_text_from_pdf_with_pypdf(file_path: Path) -> dict[str, Any]:
         )
     try:
         reader = PdfReader(str(file_path))
+        if len(reader.pages) > MAX_PDF_PAGES:
+            return extraction_failure(
+                source_type="pdf_excede_limite_paginas",
+                note=(f"O PDF {file_path.name} possui mais de {MAX_PDF_PAGES} "
+                      "páginas e não foi processado automaticamente."),
+                hard_failure=True,
+            )
         chunks = [normalize_whitespace(page.extract_text() or "") for page in reader.pages]
         text = normalize_whitespace("\n\n".join(chunk for chunk in chunks if chunk))
         if text:
@@ -320,7 +336,15 @@ def extract_text_from_image(file_path: Path) -> dict[str, Any]:
             dependency_missing=True,
         )
     try:
+        Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
         with Image.open(file_path) as opened:
+            if opened.width * opened.height > MAX_IMAGE_PIXELS:
+                return extraction_failure(
+                    source_type="imagem_excede_limite_pixels",
+                    note=(f"A imagem {file_path.name} excede o limite de "
+                          f"{MAX_IMAGE_PIXELS:,} pixels para OCR."),
+                    hard_failure=True,
+                )
             image = ImageOps.exif_transpose(opened).convert("RGB")
             result = run_ocr_image(image, source_label=file_path.name)
         return {
@@ -608,6 +632,8 @@ def get_ocr_capabilities() -> dict[str, Any]:
         "tesseract_path": str(tesseract_path) if tesseract_path else "",
         "packages": detected,
         "max_ocr_pages": MAX_OCR_PAGES,
+        "max_pdf_pages": MAX_PDF_PAGES,
+        "max_image_pixels": MAX_IMAGE_PIXELS,
         "pdf_ocr_dpi": PDF_OCR_DPI,
         "privacy_mode": "local",
     }
