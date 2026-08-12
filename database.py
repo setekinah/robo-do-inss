@@ -223,6 +223,17 @@ def init_database() -> None:
             ON calculos_previdenciarios(attendance_id, id DESC)
             """
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS referencias_calculo (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                version TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                effective_date TEXT NOT NULL,
+                data_json TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
         backfill_document_checklists(conn)
         conn.commit()
 

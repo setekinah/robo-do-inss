@@ -54,10 +54,13 @@ from document_storage import save_uploaded_document
 from flows_data import FLOW_DEFINITIONS
 from office_settings import load_office_settings, resolve_fee_percentage, save_office_settings
 from repositories.calculation_repository import CalculationRepository
+from repositories.reference_data_repository import ReferenceDataRepository
 from services.contract_service import build_fee_contract_preview as build_contract_preview
 from services.document_score_service import build_document_case_score as calculate_document_case_score
 from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
 from services.rgps_planning_service import RgpsPlanningInput, RULESET_VERSION, screen_rgps_planning, serialize_planning_result
+from services.reference_data_service import ReferenceDataset
+from services.date_calculation_service import calculate_day_interval
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
 
 
@@ -5904,6 +5907,31 @@ def render_calculations_view() -> None:
     st.warning(
         "Esta tela não concede benefício nem calcula RMI. Confirme os dados no CNIS e revise juridicamente antes de orientar o cliente."
     )
+    with st.expander("Referências locais e calculadora de intervalo"):
+        reference_left, reference_right = st.columns(2)
+        with reference_left:
+            interval_start = st.date_input("Início do intervalo", value=date.today(), key="interval_start")
+            interval_end = st.date_input("Fim do intervalo", value=date.today(), key="interval_end")
+            inclusive = st.checkbox("Contar os dois extremos", key="interval_inclusive")
+            try:
+                st.metric("Dias no intervalo", calculate_day_interval(interval_start, interval_end, inclusive))
+            except ValueError as error:
+                st.error(str(error))
+        with reference_right:
+            reference_file = st.file_uploader("Importar referência JSON", type=["json"], key="reference_dataset_file")
+            if reference_file and st.button("Validar e salvar referência", key="save_reference_dataset"):
+                try:
+                    payload = json.loads(reference_file.getvalue().decode("utf-8"))
+                    dataset = ReferenceDataset(
+                        kind=str(payload["kind"]), version=str(payload["version"]),
+                        source_url=str(payload["source_url"]),
+                        effective_date=date.fromisoformat(str(payload["effective_date"])),
+                        data=dict(payload["data"]),
+                    )
+                    ReferenceDataRepository().save(dataset)
+                    st.success(f"Referência {dataset.kind} {dataset.version} salva localmente.")
+                except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+                    st.error(f"Referência inválida: {error}")
     attendances = list_recent_attendances(limit=200)
     if not attendances:
         st.info("Registre um atendimento antes de iniciar uma triagem de cálculo.")
