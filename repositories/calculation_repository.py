@@ -70,6 +70,17 @@ class CalculationRepository:
             ).fetchall()
         return [self._to_record(row) for row in rows]
 
+    def mark_reviewed(self, calculation_id: int) -> None:
+        with get_connection() as conn:
+            cursor = conn.execute(
+                """UPDATE calculos_previdenciarios
+                SET status = 'revisado', updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND status = 'aguardando_revisao'""",
+                (calculation_id,),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Cálculo não está disponível para revisão.")
+
     @staticmethod
     def _to_record(row: Any) -> CalculationRecord:
         return CalculationRecord(

@@ -6067,6 +6067,24 @@ def render_calculations_view() -> None:
             use_container_width=True,
             hide_index=True,
         )
+        awaiting_review = [record for record in records if record.status == "aguardando_revisao"]
+        if awaiting_review:
+            review_id = st.selectbox(
+                "Cálculo a revisar",
+                options=[record.id for record in awaiting_review],
+                format_func=lambda calculation_id: next(
+                    f"#{record.id} · {record.title} · {record.created_at}"
+                    for record in awaiting_review if record.id == calculation_id
+                ),
+                key="calculation_review_id",
+            )
+            if st.button("Marcar cálculo como revisado", icon=":material/verified:", key="mark_calculation_reviewed"):
+                try:
+                    CalculationRepository().mark_reviewed(int(review_id))
+                    st.success("Cálculo marcado como revisado.")
+                    st.rerun()
+                except ValueError as error:
+                    st.error(str(error))
 
 
 def render_current_view() -> None:
