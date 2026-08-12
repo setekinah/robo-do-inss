@@ -562,6 +562,8 @@ O catalogo em `services/calculation_service.py` registra apenas os modulos que p
 
 Os motores numericos ainda nao sao liberados por esse catalogo: cada formula exige fonte normativa, versao identificavel, casos de teste e revisao humana antes de produzir orientacao juridica.
 
+O primeiro motor reconstruido e `services/rgps_planning_service.py`, com escopo restrito a uma triagem de 2026 da regra geral, dos pontos e da idade progressiva. As fontes de referencia sao a [EC 103/2019](https://www.planalto.gov.br/ccivil_03/constituicao/emendas/emc/emc103.htm) e a orientacao do [INSS para as regras de 2026](https://www.gov.br/inss/pt-br/noticias/noticias/regras-de-transicao-mudam-os-requisitos-para-aposentadoria-em-2026/). Pedagios, direito adquirido, RMI e periodos especiais permanecem fora desse escopo.
+
 ## 12.4 Autenticacao local
 
 O login possui uma conta local persistida com PBKDF2-HMAC-SHA256, salt aleatorio e comparacao em tempo constante.

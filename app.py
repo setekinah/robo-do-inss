@@ -53,9 +53,11 @@ from document_rules import get_flow_document_strategy
 from document_storage import save_uploaded_document
 from flows_data import FLOW_DEFINITIONS
 from office_settings import load_office_settings, resolve_fee_percentage, save_office_settings
+from repositories.calculation_repository import CalculationRepository
 from services.contract_service import build_fee_contract_preview as build_contract_preview
 from services.document_score_service import build_document_case_score as calculate_document_case_score
 from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
+from services.rgps_planning_service import RgpsPlanningInput, RULESET_VERSION, screen_rgps_planning, serialize_planning_result
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
 
 
@@ -110,6 +112,9 @@ NAV_MATERIAL_ICONS = {
     "contratos": ":material/description:",
     "configuracoes": ":material/settings:",
 }
+
+NAV_ITEMS.append(("calculos", "Cálculos", "🧮"))
+NAV_MATERIAL_ICONS["calculos"] = ":material/calculate:"
 
 CRM_STAGES = [
     ("novo_contato", "Novo contato"),
@@ -2169,13 +2174,13 @@ def render_admin_topbar() -> None:
             "<span class='law-admin-topbar law-admin-nav-marker'></span>",
             unsafe_allow_html=True,
         )
-        nav_columns = st.columns([1.45, 1, 1.08, 1, 1, 1.08, 0.78, 0.58], gap="small")
+        nav_columns = st.columns([1.45, 1, 1.08, 1, 1, 1, 1.08, 0.78, 0.58], gap="small")
         with nav_columns[0]:
             st.markdown(
                 "<div class='law-admin-brand-compact'><strong>SOFI.IA PREVI</strong><span>Administração jurídica</span></div>",
                 unsafe_allow_html=True,
             )
-        for column, (view_id, label, _emoji) in zip(nav_columns[1:6], NAV_ITEMS):
+        for column, (view_id, label, _emoji) in zip(nav_columns[1:7], NAV_ITEMS):
             with column:
                 if st.button(
                     label,
@@ -2187,12 +2192,12 @@ def render_admin_topbar() -> None:
                 ):
                     set_current_view(view_id)
                     st.rerun()
-        with nav_columns[6]:
+        with nav_columns[7]:
             st.markdown(
                 "<div class='law-admin-status-compact'><strong>● Ativo</strong><span>Dados locais</span></div>",
                 unsafe_allow_html=True,
             )
-        with nav_columns[7]:
+        with nav_columns[8]:
             if st.button(
                 "Sair",
                 key="auth_logout_top",
@@ -5891,12 +5896,105 @@ def render_attendance_consultation() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_calculations_view() -> None:
+    render_shell_page_header(
+        "Cálculos previdenciários",
+        "Triagem técnica com regras versionadas e revisão humana obrigatória.",
+    )
+    st.warning(
+        "Esta tela não concede benefício nem calcula RMI. Confirme os dados no CNIS e revise juridicamente antes de orientar o cliente."
+    )
+    attendances = list_recent_attendances(limit=200)
+    if not attendances:
+        st.info("Registre um atendimento antes de iniciar uma triagem de cálculo.")
+        return
+
+    selected_id = st.selectbox(
+        "Atendimento vinculado",
+        options=[int(row["id"]) for row in attendances],
+        format_func=lambda attendance_id: next(
+            f"#{row['id']} — {row['lead_name']} ({row['flow_name']})"
+            for row in attendances if int(row["id"]) == attendance_id
+        ),
+    )
+    st.markdown("### Planejamento RGPS — regras selecionadas de 2026")
+    first, second, third = st.columns(3)
+    with first:
+        birth_date = st.date_input("Data de nascimento", value=date(1965, 1, 1), key="calc_rgps_birth_date")
+        sex_label = st.radio("Sexo para a regra", ["Mulher", "Homem"], horizontal=True, key="calc_rgps_sex")
+    with second:
+        contribution_years = st.number_input("Anos completos de contribuição", min_value=0, max_value=60, value=15, key="calc_rgps_years")
+        contribution_months = st.number_input("Meses adicionais", min_value=0, max_value=11, value=0, key="calc_rgps_months")
+    with third:
+        carencia_months = st.number_input("Carência reconhecida (meses)", min_value=0, max_value=720, value=180, key="calc_rgps_carencia")
+        affiliation_date = st.date_input("Data da primeira filiação ao RGPS", value=date(2010, 1, 1), key="calc_rgps_affiliation")
+
+    if st.button("Executar triagem e registrar", icon=":material/fact_check:", type="primary"):
+        data = RgpsPlanningInput(
+            birth_date=birth_date,
+            sex="F" if sex_label == "Mulher" else "M",
+            contribution_months=int(contribution_years) * 12 + int(contribution_months),
+            carencia_months=int(carencia_months),
+            affiliation_date=affiliation_date,
+        )
+        try:
+            result = screen_rgps_planning(data)
+            serialized = serialize_planning_result(result)
+            repository = CalculationRepository()
+            calculation_id = repository.create(
+                attendance_id=int(selected_id), calculation_type="planejamento_rgps",
+                title="Triagem de planejamento RGPS (2026)",
+                inputs={
+                    "birth_date": birth_date.isoformat(), "sex": data.sex,
+                    "contribution_months": data.contribution_months,
+                    "carencia_months": data.carencia_months,
+                    "affiliation_date": affiliation_date.isoformat(),
+                },
+                ruleset_version=RULESET_VERSION,
+            )
+            repository.save_result(calculation_id, serialized)
+            st.session_state["last_rgps_planning_result"] = serialized
+            st.success("Triagem registrada como aguardando revisão humana.")
+        except ValueError as error:
+            st.error(str(error))
+
+    result_data = st.session_state.get("last_rgps_planning_result")
+    if result_data:
+        st.markdown("### Resultado da triagem")
+        for screening in result_data["screenings"]:
+            if screening["eligible"]:
+                st.success(f"{screening['title']}: requisitos objetivos informados atendidos.")
+            else:
+                st.info(f"{screening['title']}: " + " ".join(screening["pending_requirements"]))
+        for notice in result_data["notices"]:
+            st.caption(notice)
+
+    records = CalculationRepository().list_for_attendance(int(selected_id))
+    if records:
+        st.markdown("### Histórico do atendimento")
+        st.dataframe(
+            [
+                {
+                    "Data": record.created_at,
+                    "Módulo": record.title,
+                    "Regras": record.ruleset_version,
+                    "Status": record.status.replace("_", " ").title(),
+                }
+                for record in records
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
 def render_current_view() -> None:
     current_view = st.session_state.current_view
     if current_view == "dashboard":
         render_dashboard_view()
     elif current_view == "crm":
         render_crm_view()
+    elif current_view == "calculos":
+        render_calculations_view()
     elif current_view == "leads":
         render_leads_view()
     elif current_view == "contratos":

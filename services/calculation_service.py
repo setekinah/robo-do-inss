@@ -20,7 +20,7 @@ class CalculationModule:
 
 
 CALCULATION_MODULES = (
-    CalculationModule("planejamento_rgps", "Planejamento previdenciário RGPS"),
+    CalculationModule("planejamento_rgps", "Triagem de planejamento RGPS (2026)"),
     CalculationModule("bpc_loas", "Análise documental BPC/LOAS"),
     CalculationModule("revisao_beneficio", "Revisão de benefício"),
     CalculationModule("atrasados", "Apuração de parcelas em atraso"),
