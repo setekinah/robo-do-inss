@@ -234,6 +234,21 @@ def init_database() -> None:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS importacoes_cnis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                file_path TEXT NOT NULL,
+                extraction_status TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                fields_json TEXT NOT NULL,
+                technical_notes TEXT NOT NULL,
+                text_excerpt TEXT NOT NULL,
+                confirmed_at TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )"""
+        )
         backfill_document_checklists(conn)
         conn.commit()
 

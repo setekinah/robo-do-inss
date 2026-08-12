@@ -55,6 +55,7 @@ from flows_data import FLOW_DEFINITIONS
 from office_settings import load_office_settings, resolve_fee_percentage, save_office_settings
 from repositories.calculation_repository import CalculationRepository
 from repositories.reference_data_repository import ReferenceDataRepository
+from repositories.cnis_import_repository import CnisImportRepository
 from services.contract_service import build_fee_contract_preview as build_contract_preview
 from services.document_score_service import build_document_case_score as calculate_document_case_score
 from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
@@ -5953,7 +5954,9 @@ def render_calculations_view() -> None:
         if cnis_upload and st.button("Ler CNIS e gerar prévia", key="read_cnis_import"):
             saved_path = save_uploaded_document(int(selected_id), "CNIS_IMPORTACAO", cnis_upload)
             with st.spinner("Extraindo texto localmente..."):
-                st.session_state["cnis_import_preview"] = build_cnis_preview([saved_path])
+                preview = build_cnis_preview([saved_path])
+            preview["import_id"] = CnisImportRepository().create(int(selected_id), saved_path, preview)
+            st.session_state["cnis_import_preview"] = preview
         preview = st.session_state.get("cnis_import_preview")
         if preview:
             st.caption(f"Status: {preview['extraction_status']} · confiança: {preview['confidence']:.0%}")
@@ -5961,6 +5964,12 @@ def render_calculations_view() -> None:
             st.caption(preview["technical_notes"])
             if preview["text_excerpt"]:
                 st.text_area("Texto extraído para conferência", preview["text_excerpt"], height=160, disabled=True, key="cnis_import_text")
+            if preview.get("import_id") and st.button("Confirmar prévia revisada", key="confirm_cnis_import"):
+                CnisImportRepository().confirm(int(preview["import_id"]))
+                st.success("Prévia CNIS marcada como revisada.")
+        cnis_history = CnisImportRepository().list_for_attendance(int(selected_id))
+        if cnis_history:
+            st.caption(f"{len(cnis_history)} importação(ões) CNIS registrada(s) para este atendimento.")
     st.markdown("### Planejamento RGPS — regras selecionadas de 2026")
     first, second, third = st.columns(3)
     with first:
