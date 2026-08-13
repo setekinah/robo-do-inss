@@ -33,7 +33,15 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
     st.warning(
         "Esta tela não concede benefício nem calcula RMI. Confirme os dados no CNIS e revise juridicamente antes de orientar o cliente."
     )
-    with st.expander("Referências locais e calculadora de intervalo"):
+    attendances = list_recent_attendances(limit=200)
+    if not attendances:
+        st.info("Para importar um CNIS, primeiro registre ou selecione o atendimento do cliente.")
+        if st.button("Ir para Atendimentos", icon=":material/person_add:", type="primary"):
+            st.session_state.current_view = "leads"
+            st.rerun()
+        return
+
+    with st.expander("Referências técnicas (JSON — opcional) e calculadora de intervalo"):
         reference_left, reference_right = st.columns(2)
         with reference_left:
             interval_start = st.date_input("Início do intervalo", value=date.today(), key="interval_start")
@@ -44,7 +52,11 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
             except ValueError as error:
                 st.error(str(error))
         with reference_right:
-            reference_file = st.file_uploader("Importar referência JSON", type=["json"], key="reference_dataset_file")
+            reference_file = st.file_uploader(
+                "Importar referência técnica (.json; não é documento CNIS)",
+                type=["json"],
+                key="reference_dataset_file",
+            )
             if reference_file and st.button("Validar e salvar referência", key="save_reference_dataset"):
                 try:
                     payload = json.loads(reference_file.getvalue().decode("utf-8"))
@@ -58,11 +70,6 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
                     st.success(f"Referência {dataset.kind} {dataset.version} salva localmente.")
                 except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
                     st.error(f"Referência inválida: {error}")
-    attendances = list_recent_attendances(limit=200)
-    if not attendances:
-        st.info("Registre um atendimento antes de iniciar uma triagem de cálculo.")
-        return
-
     selected_id = st.selectbox(
         "Atendimento vinculado", options=[int(row["id"]) for row in attendances],
         format_func=lambda attendance_id: next(
@@ -70,7 +77,7 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
             for row in attendances if int(row["id"]) == attendance_id
         ),
     )
-    with st.expander("Importar CNIS com prévia", expanded=False):
+    with st.expander("1. Importar CNIS do cliente (PDF ou imagem)", expanded=True):
         cnis_upload = st.file_uploader(
             "Extrato CNIS em PDF ou imagem", type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"], key="cnis_import_upload"
         )
