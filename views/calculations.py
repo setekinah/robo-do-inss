@@ -79,8 +79,11 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
     )
     with st.expander("1. Importar CNIS do cliente (PDF ou imagem)", expanded=True):
         cnis_upload = st.file_uploader(
-            "Extrato CNIS em PDF ou imagem", type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"], key="cnis_import_upload"
+            "CNIS do cliente — arraste o documento aqui ou clique em Procurar arquivos",
+            type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"],
+            key="cnis_import_upload",
         )
+        st.caption("Formatos aceitos: PDF, PNG, JPG e TIFF. Se arrastar não funcionar no navegador, clique em Procurar arquivos.")
         if cnis_upload and st.button("Ler CNIS e gerar prévia", key="read_cnis_import"):
             saved_path = save_uploaded_document(int(selected_id), "CNIS_IMPORTACAO", cnis_upload)
             with st.spinner("Extraindo texto localmente..."):

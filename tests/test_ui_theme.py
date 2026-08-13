@@ -19,6 +19,15 @@ class UiThemeTests(unittest.TestCase):
         self.assertEqual(theme["secondaryBackgroundColor"].lower(), "#ffffff")
         self.assertEqual(theme["textColor"].lower(), "#17243b")
 
+    def test_file_upload_language_is_portuguese_and_clear_for_cnis(self) -> None:
+        app_source = (PROJECT_ROOT / "app.py").read_text(encoding="utf-8")
+        calculations_source = (PROJECT_ROOT / "views" / "calculations.py").read_text(encoding="utf-8")
+
+        self.assertIn("Arraste o arquivo aqui", app_source)
+        self.assertIn("ou clique em Procurar arquivos", app_source)
+        self.assertIn("CNIS do cliente — arraste o documento aqui", calculations_source)
+        self.assertIn('type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"]', calculations_source)
+
 
 if __name__ == "__main__":
     unittest.main()

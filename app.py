@@ -604,6 +604,20 @@ def inject_styles() -> None:
             border-color: rgba(176, 138, 74, 0.40);
             color: #ffffff;
         }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:first-child {
+            font-size: 0 !important;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:first-child::after {
+            content: "Arraste o arquivo aqui";
+            font-size: 0.95rem;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:nth-child(2) {
+            font-size: 0 !important;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:nth-child(2)::after {
+            content: "ou clique em Procurar arquivos";
+            font-size: 0.82rem;
+        }
         .stButton > button:disabled,
         .stButton > button[disabled] {
             background: linear-gradient(180deg, #d9d6d0 0%, #cfc9c0 100%) !important;
