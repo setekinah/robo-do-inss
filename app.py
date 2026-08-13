@@ -65,6 +65,7 @@ from services.date_calculation_service import calculate_day_interval
 from services.cnis_import_service import build_cnis_preview
 from services.crm_ux_catalog import CRM_UX_CATALOG
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
+from views.calculations import render_calculations_view as render_calculations_workspace
 
 
 st.set_page_config(
@@ -6127,7 +6128,7 @@ def render_current_view() -> None:
     elif current_view == "crm":
         render_crm_view()
     elif current_view == "calculos":
-        render_calculations_view()
+        render_calculations_workspace(render_shell_page_header)
     elif current_view == "leads":
         render_leads_view()
     elif current_view == "contratos":
