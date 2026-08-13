@@ -24,6 +24,7 @@ from auth_security import (
     verify_credentials,
 )
 from database import (
+    DB_PATH,
     add_crm_activity,
     complete_crm_task,
     create_crm_task,
@@ -56,6 +57,7 @@ from flows_data import FLOW_DEFINITIONS
 from office_settings import load_office_settings, resolve_fee_percentage, save_office_settings
 from runtime_paths import DATA_DIR
 from services.backup_service import create_backup, restore_backup, validate_backup
+from services.environment_diagnostics import build_environment_diagnostic
 from services.contract_service import build_fee_contract_preview as build_contract_preview
 from services.document_score_service import build_document_case_score as calculate_document_case_score
 from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
@@ -5047,6 +5049,27 @@ def render_settings_view() -> None:
                     st.success(f"{len(restored)} arquivo(s) restaurado(s). Reinicie o aplicativo para recarregar os dados.")
         except ValueError as error:
             st.error(str(error))
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
+    st.markdown("<h3 class='pre-section-title'>Diagnóstico do ambiente</h3>", unsafe_allow_html=True)
+    st.caption("Verifica recursos deste computador sem ler ou enviar documentos de clientes.")
+    if st.button("Verificar ambiente", icon=":material/health_and_safety:", key="run_environment_diagnostic"):
+        st.session_state["environment_diagnostic"] = build_environment_diagnostic(DATA_DIR, DB_PATH)
+    diagnostic = st.session_state.get("environment_diagnostic")
+    if diagnostic:
+        status_label = {"ok": "Pronto para operar", "warning": "Pronto com alertas", "error": "Ação necessária"}[diagnostic["status"]]
+        if diagnostic["status"] == "ok":
+            st.success(status_label)
+        elif diagnostic["status"] == "warning":
+            st.warning(status_label)
+        else:
+            st.error(status_label)
+        st.dataframe(
+            [{"Componente": item["label"], "Situação": {"ok": "Disponível", "warning": "Opcional/alerta", "error": "Indisponível"}[item["status"]], "Detalhe": item["detail"]} for item in diagnostic["checks"]],
+            use_container_width=True,
+            hide_index=True,
+        )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
