@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -53,6 +54,8 @@ from document_rules import get_flow_document_strategy
 from document_storage import save_uploaded_document
 from flows_data import FLOW_DEFINITIONS
 from office_settings import load_office_settings, resolve_fee_percentage, save_office_settings
+from runtime_paths import DATA_DIR
+from services.backup_service import create_backup, restore_backup, validate_backup
 from services.contract_service import build_fee_contract_preview as build_contract_preview
 from services.document_score_service import build_document_case_score as calculate_document_case_score
 from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
@@ -5014,6 +5017,37 @@ def render_settings_view() -> None:
         save_office_settings(updated_settings)
         st.session_state.office_settings = load_office_settings()
         st.success("Configuracoes salvas com sucesso.")
+
+    st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
+    st.markdown("<h3 class='pre-section-title'>Backup e restauração local</h3>", unsafe_allow_html=True)
+    st.caption("O backup inclui banco, configurações e documentos deste computador. Nenhum arquivo é enviado à nuvem.")
+    if st.button("Criar backup agora", icon=":material/backup:", key="create_local_backup"):
+        backup_path = create_backup(DATA_DIR)
+        st.session_state["latest_local_backup"] = str(backup_path)
+        st.success(f"Backup criado: {backup_path.name}")
+    latest_backup = st.session_state.get("latest_local_backup")
+    if latest_backup:
+        latest_path = Path(latest_backup)
+        if latest_path.is_file():
+            st.download_button(
+                "Baixar último backup", latest_path.read_bytes(), file_name=latest_path.name,
+                mime="application/zip", key="download_local_backup",
+            )
+    restore_file = st.file_uploader("Restaurar backup (.zip)", type=["zip"], key="restore_local_backup")
+    if restore_file:
+        try:
+            file_list = validate_backup(restore_file.getvalue())
+            st.warning(f"A restauração substituirá {len(file_list)} arquivo(s). Um backup preventivo será criado antes.")
+            confirm_restore = st.text_input("Digite RESTAURAR para confirmar", key="confirm_local_restore")
+            if st.button("Restaurar backup", icon=":material/restore:", key="restore_local_backup_button"):
+                if confirm_restore != "RESTAURAR":
+                    st.error("Confirmação inválida. Digite RESTAURAR em letras maiúsculas.")
+                else:
+                    restored = restore_backup(DATA_DIR, restore_file.getvalue())
+                    st.success(f"{len(restored)} arquivo(s) restaurado(s). Reinicie o aplicativo para recarregar os dados.")
+        except ValueError as error:
+            st.error(str(error))
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def build_fee_contract_preview(flow_name: str, lead_name: str) -> str:
