@@ -6067,6 +6067,33 @@ def render_calculations_view() -> None:
             use_container_width=True,
             hide_index=True,
         )
+        for record in records:
+            with st.expander(f"#{record.id} · {record.title} · {record.status.replace('_', ' ').title()}"):
+                evidence_import_id = record.inputs.get("cnis_import_id")
+                evidence_label = "Nenhum CNIS vinculado"
+                if evidence_import_id:
+                    matching_import = next((item for item in cnis_history if item["id"] == evidence_import_id), None)
+                    evidence_label = (
+                        f"CNIS #{evidence_import_id} · {'revisado' if matching_import and matching_import['confirmed_at'] else 'não confirmado'}"
+                    )
+                metadata_left, metadata_right = st.columns(2)
+                with metadata_left:
+                    st.caption("Evidência documental")
+                    st.write(evidence_label)
+                    st.caption("Entradas registradas")
+                    st.json(record.inputs)
+                with metadata_right:
+                    st.caption("Versão da regra")
+                    st.write(record.ruleset_version)
+                    st.caption("Revisão humana")
+                    if record.reviewed_at:
+                        st.write(f"Concluída em {record.reviewed_at}")
+                        st.write(record.review_notes)
+                    else:
+                        st.write("Pendente")
+                if record.result:
+                    st.caption("Resultado preservado")
+                    st.json(record.result)
         awaiting_review = [record for record in records if record.status == "aguardando_revisao"]
         if awaiting_review:
             review_id = st.selectbox(
