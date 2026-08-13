@@ -57,8 +57,11 @@ class CalculationFoundationTests(unittest.TestCase):
         self.assertTrue(records[0].requires_human_review)
         self.assertEqual(records[0].inputs["contribuicoes"], 180)
         self.assertEqual(records[0].result["notice"], "Resultado exige revisão humana.")
-        repository.mark_reviewed(calculation_id)
-        self.assertEqual(repository.list_for_attendance(self.attendance_id)[0].status, "revisado")
+        repository.mark_reviewed(calculation_id, "CNIS conferido; manter validação final da advogada.")
+        reviewed = repository.list_for_attendance(self.attendance_id)[0]
+        self.assertEqual(reviewed.status, "revisado")
+        self.assertEqual(reviewed.review_notes, "CNIS conferido; manter validação final da advogada.")
+        self.assertIsNotNone(reviewed.reviewed_at)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,8 @@ class CalculationRecord:
     requires_human_review: bool
     created_at: str
     updated_at: str
+    review_notes: str | None
+    reviewed_at: str | None
 
 
 class CalculationRepository:
@@ -70,13 +72,16 @@ class CalculationRepository:
             ).fetchall()
         return [self._to_record(row) for row in rows]
 
-    def mark_reviewed(self, calculation_id: int) -> None:
+    def mark_reviewed(self, calculation_id: int, review_notes: str) -> None:
+        if not review_notes.strip():
+            raise ValueError("Registre a observação da revisão antes de concluir.")
         with get_connection() as conn:
             cursor = conn.execute(
                 """UPDATE calculos_previdenciarios
-                SET status = 'revisado', updated_at = CURRENT_TIMESTAMP
+                SET status = 'revisado', review_notes = ?, reviewed_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND status = 'aguardando_revisao'""",
-                (calculation_id,),
+                (review_notes.strip(), calculation_id),
             )
             if cursor.rowcount != 1:
                 raise ValueError("Cálculo não está disponível para revisão.")
@@ -89,4 +94,6 @@ class CalculationRepository:
             result=json.loads(row["result_json"]) if row["result_json"] else None,
             ruleset_version=str(row["ruleset_version"]), status=str(row["status"]),
             requires_human_review=bool(row["requires_human_review"]), created_at=str(row["created_at"]), updated_at=str(row["updated_at"]),
+            review_notes=str(row["review_notes"]) if row["review_notes"] else None,
+            reviewed_at=str(row["reviewed_at"]) if row["reviewed_at"] else None,
         )

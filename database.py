@@ -223,6 +223,8 @@ def init_database() -> None:
             ON calculos_previdenciarios(attendance_id, id DESC)
             """
         )
+        ensure_calculation_column(conn, "review_notes", "TEXT")
+        ensure_calculation_column(conn, "reviewed_at", "TEXT")
         conn.execute(
             """CREATE TABLE IF NOT EXISTS referencias_calculo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -280,6 +282,15 @@ def ensure_task_column(conn: sqlite3.Connection, column_name: str, column_type: 
     }
     if column_name not in columns:
         conn.execute(f"ALTER TABLE crm_tarefas ADD COLUMN {column_name} {column_type}")
+
+
+def ensure_calculation_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(calculos_previdenciarios)").fetchall()
+    }
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE calculos_previdenciarios ADD COLUMN {column_name} {column_type}")
 
 
 def save_attendance(

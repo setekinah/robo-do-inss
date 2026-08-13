@@ -6078,9 +6078,15 @@ def render_calculations_view() -> None:
                 ),
                 key="calculation_review_id",
             )
+            review_notes = st.text_area(
+                "Observação da revisão",
+                placeholder="Ex.: CNIS conferido, pendência de período rural mantida para análise jurídica.",
+                key="calculation_review_notes",
+                height=90,
+            )
             if st.button("Marcar cálculo como revisado", icon=":material/verified:", key="mark_calculation_reviewed"):
                 try:
-                    CalculationRepository().mark_reviewed(int(review_id))
+                    CalculationRepository().mark_reviewed(int(review_id), review_notes)
                     st.success("Cálculo marcado como revisado.")
                     st.rerun()
                 except ValueError as error:
