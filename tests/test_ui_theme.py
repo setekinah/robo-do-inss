@@ -25,6 +25,7 @@ class UiThemeTests(unittest.TestCase):
 
         self.assertIn("Arraste o arquivo aqui", app_source)
         self.assertIn("ou clique em Procurar arquivos", app_source)
+        self.assertIn("Ainda não há dossiês para anexar documentos", app_source)
         self.assertIn("CNIS do cliente — arraste o documento aqui", calculations_source)
         self.assertIn('type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"]', calculations_source)
 

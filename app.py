@@ -5457,7 +5457,11 @@ def render_document_pipeline() -> None:
             st.markdown("<h3 class='pre-section-title'>Fila de dossiês</h3>", unsafe_allow_html=True)
             st.caption("Escolha um caso para leitura técnica e fechamento documental.")
             if not queue_rows:
-                st.info("Ainda não há atendimentos prontos para a fase documental.")
+                st.info(
+                    "Ainda não há dossiês para anexar documentos. Abra a aba **1. Nova triagem** acima, "
+                    "registre o cliente e conclua/salve a triagem. Em seguida, volte para **2. Documentos** "
+                    "e arraste o CNIS no item solicitado do checklist."
+                )
             else:
                 selected_queue_id = st.selectbox(
                     "Caso documental",
