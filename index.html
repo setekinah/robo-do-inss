@@ -3,116 +3,525 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SOFI.IA PREVI - Triagem Inteligente</title>
+  <title>PrevIA - Plataforma Revolucionária de Advocacia Previdenciária</title>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- CSS Principal -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="hero-panel">
-      <p class="eyebrow">Triagem de benefícios</p>
-      <h1>SOFI.IA PREVI</h1>
-      <p class="hero-copy">
-        Um MVP de atendimento guiado para qualificar leads de INSS com base em fluxos
-        de decisão inspirados nos roteiros das imagens enviadas.
-      </p>
 
-      <div class="hero-card">
-        <h2>Fluxos iniciais</h2>
-        <ul class="flow-list">
-          <li>Auxílio-Acidente</li>
-          <li>Aposentadoria</li>
-          <li>BPC/LOAS</li>
-        </ul>
+  <!-- Canvas Fundo de Matriz Neural -->
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- OVERLAY DE LOGIN / ONBOARDING PREVIA (Matching TELA DE LOGIN.png) -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-card">
+      <div class="login-logo">Prev<span>IA</span></div>
+      <p class="login-subtitle" id="login-subtitle">Crie sua conta e comece em minutos</p>
+
+      <div class="step-indicator" id="step-indicator">
+        <div class="step-node completed" id="node-1"><i class="fa-solid fa-check"></i></div>
+        <div class="step-line active" id="line-1"></div>
+        <div class="step-node active" id="node-2">2</div>
+        <div class="step-line" id="line-2"></div>
+        <div class="step-node" id="node-3">3</div>
       </div>
 
-      <div class="hero-card muted">
-        <h2>Saída do sistema</h2>
-        <p>
-          O atendente recebe uma classificação, um resumo da resposta do lead e o próximo
-          encaminhamento sugerido.
-        </p>
+      <form id="auth-form" onsubmit="event.preventDefault();">
+        <div id="step-content-1" class="auth-step-panel" style="display: none;">
+          <div class="form-header">
+            <h3>Credenciais de Acesso</h3>
+            <p>Informe seu e-mail profissional e defina uma senha segura</p>
+          </div>
+          <div class="form-group">
+            <label for="reg-email">E-mail profissional</label>
+            <input type="email" id="reg-email" placeholder="advogado@escritorio.adv.br" required>
+          </div>
+          <div class="form-group">
+            <label for="reg-password">Senha de acesso</label>
+            <input type="password" id="reg-password" placeholder="Mínimo 10 caracteres (Maiúscula, número)" required>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" onclick="app.showLoginMode()">Já tenho conta</button>
+            <button type="button" class="btn-primary-blue" onclick="app.nextOnboardingStep(2)">Continuar</button>
+          </div>
+        </div>
+
+        <div id="step-content-2" class="auth-step-panel">
+          <div class="form-header">
+            <h3>Seu escritório</h3>
+            <p>Informações do escritório de advocacia</p>
+          </div>
+          <div class="form-group">
+            <label for="office-name">Nome do escritório</label>
+            <input type="text" id="office-name" placeholder="Ex: MADE Advocacia" value="MADE" required>
+          </div>
+          <div class="form-group">
+            <label for="office-oab">Número da OAB</label>
+            <input type="text" id="office-oab" placeholder="Ex: 524387/SP" value="524387" required>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" onclick="app.nextOnboardingStep(1)">Voltar</button>
+            <button type="button" class="btn-primary-blue" onclick="app.submitRegistration()">Continuar</button>
+          </div>
+        </div>
+
+        <div id="step-content-login" class="auth-step-panel" style="display: none;">
+          <div class="form-header">
+            <h3>Entrar no PrevIA</h3>
+            <p>Digite suas credenciais de acesso para prosseguir</p>
+          </div>
+          <div class="form-group">
+            <label for="login-email">E-mail</label>
+            <input type="email" id="login-email" placeholder="advogado@escritorio.adv.br">
+          </div>
+          <div class="form-group">
+            <label for="login-password">Senha</label>
+            <input type="password" id="login-password" placeholder="Sua senha">
+          </div>
+          <div style="margin-top: 1.5rem;">
+            <button type="button" class="btn-primary-blue" style="width: 100%;" onclick="app.submitLogin()">Fazer Login</button>
+          </div>
+        </div>
+      </form>
+
+      <div class="login-toggle-link" id="login-toggle-container">
+        Já tem conta? <a href="#" onclick="app.showLoginMode(); return false;">Fazer login</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE DETALHES DO LEAD (HISTÓRICO, CHECKLIST & CONTRATO) -->
+  <dialog id="lead-modal" class="glass-panel-modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="modal-lead-name">Cliente Previdenciário</h2>
+        <span class="card-tag tag-aposentadoria" id="modal-flow-name">Aposentadoria</span>
+      </div>
+      <button class="icon-btn" onclick="document.getElementById('lead-modal').close();"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="modal-nav">
+      <button class="modal-tab active" data-modaltab="history" onclick="app.switchModalTab('history')">
+        <i class="fa-solid fa-clock-rotate-left"></i> Histórico & Tarefas
+      </button>
+      <button class="modal-tab" data-modaltab="docs" onclick="app.switchModalTab('docs')">
+        <i class="fa-solid fa-list-check"></i> Checklist Documental
+      </button>
+      <button class="modal-tab" data-modaltab="contract" onclick="app.switchModalTab('contract')">
+        <i class="fa-solid fa-file-signature"></i> Gerar Contrato
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div id="modaltab-history" class="modal-panel">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+          <div>
+            <h4 style="margin-bottom: 0.8rem; font-family: var(--font-heading);"><i class="fa-solid fa-plus-circle" style="color: var(--primary);"></i> Nova Interação</h4>
+            <div class="form-group">
+              <label>Tipo de Contato</label>
+              <select id="new-activity-type" style="width: 100%; padding: 0.6rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: #fff; border-radius: var(--radius-sm);">
+                <option value="whatsapp">💬 WhatsApp</option>
+                <option value="ligacao">📞 Ligação Telefônica</option>
+                <option value="nota">📝 Nota Interna</option>
+                <option value="email">✉️ E-mail</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Descrição da Interação</label>
+              <textarea id="new-activity-body" rows="3" placeholder="Resumo do contato previdenciário..." style="width: 100%; padding: 0.6rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: #fff; border-radius: var(--radius-sm); font-family: var(--font-main);"></textarea>
+            </div>
+            <button class="btn-primary" onclick="app.addActivity()"><i class="fa-solid fa-paper-plane"></i> Registrar Interação</button>
+          </div>
+
+          <div>
+            <h4 style="margin-bottom: 0.8rem; font-family: var(--font-heading);"><i class="fa-solid fa-list" style="color: var(--secondary);"></i> Histórico de Interações</h4>
+            <div id="modal-activities-list" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="modaltab-docs" class="modal-panel" style="display: none;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+          <h4 style="font-family: var(--font-heading);"><i class="fa-solid fa-folder-tree" style="color: var(--accent-emerald);"></i> Checklist do Benefício</h4>
+          <span style="font-size: 0.85rem; color: var(--text-muted);" id="modal-docs-progress">0 de 0 Concluídos</span>
+        </div>
+        <div id="modal-docs-list" style="display: flex; flex-direction: column; gap: 0.8rem; max-height: 320px; overflow-y: auto;"></div>
+      </div>
+
+      <div id="modaltab-contract" class="modal-panel" style="display: none;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+          <h4 style="font-family: var(--font-heading);"><i class="fa-solid fa-file-contract" style="color: var(--accent-gold);"></i> Minuta Contratual Previdenciária</h4>
+          <button class="btn-primary" style="background: var(--primary-blue);" onclick="window.print()"><i class="fa-solid fa-print"></i> Imprimir Contrato</button>
+        </div>
+        <pre id="modal-contract-text" style="background: var(--bg-dark); padding: 1.2rem; border-radius: var(--radius-sm); border: 1px solid var(--glass-border); font-family: var(--font-code); font-size: 0.85rem; color: #fff; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></pre>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="app-container">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="global-search" placeholder="Buscar por cliente, CPF, telefone ou benefício...">
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="status-badge">
+          <div class="status-dot"></div>
+          <span>Robô PrevIA Online</span>
+        </div>
+
+        <button class="icon-btn" id="btn-audio-toggle" title="Efeitos Sonoros Sci-Fi">
+          <i class="fa-solid fa-volume-high"></i>
+        </button>
+
+        <button class="icon-btn" popovertarget="notifications-popover" title="Notificações e Alertas">
+          <i class="fa-solid fa-bell"></i>
+        </button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="brand-logo">
+        <div class="brand-icon">
+          <i class="fa-solid fa-scale-balanced"></i>
+        </div>
+        <div class="brand-text">
+          <h2>Prev<span>IA</span></h2>
+          <span class="tagline" id="sidebar-office-name">Painel do Escritório</span>
+        </div>
+      </div>
+
+      <ul class="nav-menu">
+        <li class="nav-item active" data-tab="dashboard">
+          <button><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></button>
+        </li>
+        <li class="nav-item" data-tab="kanban">
+          <button><i class="fa-solid fa-kanban"></i><span>Esteira Kanban Prev</span></button>
+        </li>
+        <li class="nav-item" data-tab="triage">
+          <button><i class="fa-solid fa-diagram-project"></i><span>Triagem Guiada INSS</span></button>
+        </li>
+        <li class="nav-item" data-tab="ocr">
+          <button><i class="fa-solid fa-file-contract"></i><span>Documentos & OCR</span></button>
+        </li>
+        <li class="nav-item" data-tab="orchestrator">
+          <button><i class="fa-solid fa-robot"></i><span>Robô & Automação</span></button>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="user-avatar" id="user-avatar-initials">MADE</div>
+        <div class="user-info">
+          <h4 id="user-display-name">Escritório MADE</h4>
+          <p id="user-display-oab">OAB: 524387</p>
+        </div>
       </div>
     </aside>
 
-    <main class="workspace">
-      <section class="panel">
-        <div class="panel-heading">
+    <main class="main-content">
+      <section id="view-dashboard" class="tab-view">
+        <div class="section-header">
           <div>
-            <p class="section-kicker">Etapa 1</p>
-            <h2>Dados do atendimento</h2>
+            <h1 class="section-title">Painel Executivo <span>PrevIA</span></h1>
+            <p style="color: var(--text-muted);">Visão estratégica em tempo real da esteira de atendimentos e honorários previstos.</p>
           </div>
-          <button class="ghost-button" id="resetAllButton" type="button">Reiniciar tudo</button>
+          <button class="btn-primary" id="btn-novo-atendimento">
+            <i class="fa-solid fa-plus"></i> Novo Atendimento
+          </button>
         </div>
 
-        <form id="leadForm" class="lead-form">
-          <label>
-            Nome do lead
-            <input type="text" id="leadName" placeholder="Ex.: Maria da Silva">
-          </label>
-          <label>
-            Telefone
-            <input type="text" id="leadPhone" placeholder="(11) 99999-9999">
-          </label>
-          <label>
-            Tipo de atendimento
-            <select id="flowSelector"></select>
-          </label>
-          <label class="full-width">
-            Observações
-            <textarea id="leadNotes" rows="3" placeholder="Contexto rápido do caso"></textarea>
-          </label>
-        </form>
+        <div class="metrics-grid">
+          <div class="glass-panel metric-card">
+            <div class="metric-header">
+              <span>TOTAL DE ATENDIMENTOS</span>
+              <div class="metric-icon"><i class="fa-solid fa-users"></i></div>
+            </div>
+            <div class="metric-value" id="stat-total">0</div>
+            <div class="metric-footer">
+              <span class="trend-up"><i class="fa-solid fa-arrow-trend-up"></i> +18%</span> este mês
+            </div>
+          </div>
+
+          <div class="glass-panel metric-card">
+            <div class="metric-header">
+              <span>HONORÁRIOS ESTIMADOS</span>
+              <div class="metric-icon" style="color: var(--accent-emerald); background: rgba(16, 185, 129, 0.1);"><i class="fa-solid fa-sack-dollar"></i></div>
+            </div>
+            <div class="metric-value" style="color: var(--accent-emerald);" id="stat-value">R$ 0,00</div>
+            <div class="metric-footer">
+              <span>Estimativa dos casos qualificados</span>
+            </div>
+          </div>
+
+          <div class="glass-panel metric-card">
+            <div class="metric-header">
+              <span>DOCUMENTOS PENDENTES</span>
+              <div class="metric-icon" style="color: var(--accent-gold); background: rgba(245, 158, 11, 0.1);"><i class="fa-solid fa-folder-open"></i></div>
+            </div>
+            <div class="metric-value" style="color: var(--accent-gold);" id="stat-docs">0</div>
+            <div class="metric-footer">
+              <span>Checklists aguardando anexos</span>
+            </div>
+          </div>
+
+          <div class="glass-panel metric-card">
+            <div class="metric-header">
+              <span>TAREFAS DE AUTOMAÇÃO</span>
+              <div class="metric-icon" style="color: var(--secondary); background: rgba(157, 78, 221, 0.1);"><i class="fa-solid fa-microchip"></i></div>
+            </div>
+            <div class="metric-value" style="color: var(--secondary);" id="stat-events">0</div>
+            <div class="metric-footer">
+              <span>Fila de execução em segundo plano</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="glass-panel chart-panel">
+            <div class="chart-header">
+              <h3 style="font-family: var(--font-heading); font-size: 1.1rem;"><i class="fa-solid fa-chart-line"></i> Desempenho por Benefício</h3>
+            </div>
+            <div class="chart-container">
+              <canvas id="metrics-chart"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-panel chart-panel">
+            <div class="chart-header">
+              <h3 style="font-family: var(--font-heading); font-size: 1.1rem;"><i class="fa-solid fa-shield-halved"></i> Auditoria LGPD & Conflito</h3>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 1.2rem; margin-top: 1rem;">
+              <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">CHECAGEM DE CONFLITO</span>
+                <h4 style="color: var(--accent-emerald); font-size: 1.1rem; margin-top: 0.2rem;" id="lgpd-conflict-stat">100% Conforme</h4>
+              </div>
+              <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">BASE LEGAL PREDOMINANTE</span>
+                <h4 style="color: var(--primary); font-size: 1.0rem; margin-top: 0.2rem;">Execução de Contrato / Tutela de Saúde</h4>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-heading">
+      <!-- TAB 2: ESTEIRA KANBAN PREV REFORMULADA (SMART FILTER BAR & NO HORIZONTAL SCROLL) -->
+      <section id="view-kanban" class="tab-view" style="display: none;">
+        <div class="section-header">
           <div>
-            <p class="section-kicker">Etapa 2</p>
-            <h2>Triagem guiada</h2>
-          </div>
-          <span class="status-pill" id="progressLabel">Aguardando início</span>
-        </div>
-
-        <div id="journeyIntro" class="empty-state">
-          <h3>Escolha o fluxo e inicie a triagem</h3>
-          <p>
-            O sistema vai apresentar uma pergunta por vez e conduzir automaticamente
-            para o próximo passo conforme as respostas.
-          </p>
-          <button class="primary-button" id="startButton" type="button">Iniciar fluxo</button>
-        </div>
-
-        <div id="questionCard" class="question-card hidden">
-          <div class="question-meta">
-            <span id="currentFlowName"></span>
-            <span id="currentStepCode"></span>
-          </div>
-          <h3 id="questionTitle"></h3>
-          <p id="questionHelp" class="question-help"></p>
-          <div id="questionOptions" class="option-grid"></div>
-          <div class="actions">
-            <button class="ghost-button" id="backButton" type="button">Voltar</button>
+            <h1 class="section-title">Esteira Kanban <span>Previdenciária</span></h1>
+            <p style="color: var(--text-muted);">Gerenciamento fluído e inteligente de fases, triagem, conflito e liberação de contratos.</p>
           </div>
         </div>
 
-        <div id="resultCard" class="result-card hidden"></div>
+        <!-- Barra Inteligente de Seleção de Etapa -->
+        <div class="kanban-filter-bar">
+          <button class="kanban-pill active" data-stagefilter="all" onclick="app.filterKanbanStage('all')">
+            <i class="fa-solid fa-layer-group"></i> Todas as Fases
+          </button>
+          <button class="kanban-pill" data-stagefilter="triagem" onclick="app.filterKanbanStage('triagem')">
+            <i class="fa-solid fa-clipboard-question" style="color: var(--primary);"></i> 1. Triagem
+          </button>
+          <button class="kanban-pill" data-stagefilter="qualificacao" onclick="app.filterKanbanStage('qualificacao')">
+            <i class="fa-solid fa-user-check" style="color: var(--accent-cyan);"></i> 2. Qualificação
+          </button>
+          <button class="kanban-pill" data-stagefilter="conflito" onclick="app.filterKanbanStage('conflito')">
+            <i class="fa-solid fa-shield-cat" style="color: var(--accent-gold);"></i> 3. Conflito / LGPD
+          </button>
+          <button class="kanban-pill" data-stagefilter="proposta" onclick="app.filterKanbanStage('proposta')">
+            <i class="fa-solid fa-file-signature" style="color: var(--secondary);"></i> 4. Proposta
+          </button>
+          <button class="kanban-pill" data-stagefilter="documentos" onclick="app.filterKanbanStage('documentos')">
+            <i class="fa-solid fa-folder-closed" style="color: var(--accent-emerald);"></i> 5. Documentos
+          </button>
+          <button class="kanban-pill" data-stagefilter="concluido" onclick="app.filterKanbanStage('concluido')">
+            <i class="fa-solid fa-circle-check" style="color: #38bdf8;"></i> 6. Concluído
+          </button>
+        </div>
+
+        <!-- Quadro Kanban Adaptativo -->
+        <div class="kanban-board" id="kanban-board">
+          <div class="kanban-column" data-stage="triagem">
+            <div class="kanban-header">
+              <span class="kanban-title"><i class="fa-solid fa-clipboard-question" style="color: var(--primary);"></i> 1. Triagem</span>
+              <span class="kanban-count" id="count-triagem">0</span>
+            </div>
+            <div class="kanban-cards" id="cards-triagem"></div>
+          </div>
+
+          <div class="kanban-column" data-stage="qualificacao">
+            <div class="kanban-header">
+              <span class="kanban-title"><i class="fa-solid fa-user-check" style="color: var(--accent-cyan);"></i> 2. Qualificação</span>
+              <span class="kanban-count" id="count-qualificacao">0</span>
+            </div>
+            <div class="kanban-cards" id="cards-qualificacao"></div>
+          </div>
+
+          <div class="kanban-column" data-stage="conflito">
+            <div class="kanban-header">
+              <span class="kanban-title"><i class="fa-solid fa-shield-cat" style="color: var(--accent-gold);"></i> 3. Conflito / LGPD</span>
+              <span class="kanban-count" id="count-conflito">0</span>
+            </div>
+            <div class="kanban-cards" id="cards-conflito"></div>
+          </div>
+
+          <div class="kanban-column" data-stage="proposta">
+            <div class="kanban-header">
+              <span class="kanban-title"><i class="fa-solid fa-file-signature" style="color: var(--secondary);"></i> 4. Proposta</span>
+              <span class="kanban-count" id="count-proposta">0</span>
+            </div>
+            <div class="kanban-cards" id="cards-proposta"></div>
+          </div>
+
+          <div class="kanban-column" data-stage="documentos">
+            <div class="kanban-header">
+              <span class="kanban-title"><i class="fa-solid fa-folder-closed" style="color: var(--accent-emerald);"></i> 5. Documentos</span>
+              <span class="kanban-count" id="count-documentos">0</span>
+            </div>
+            <div class="kanban-cards" id="cards-documentos"></div>
+          </div>
+
+          <div class="kanban-column" data-stage="concluido">
+            <div class="kanban-header">
+              <span class="kanban-title"><i class="fa-solid fa-circle-check" style="color: #38bdf8;"></i> 6. Concluído</span>
+              <span class="kanban-count" id="count-concluido">0</span>
+            </div>
+            <div class="kanban-cards" id="cards-concluido"></div>
+          </div>
+        </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-heading">
+      <section id="view-triage" class="tab-view" style="display: none;">
+        <div class="section-header">
           <div>
-            <p class="section-kicker">Etapa 3</p>
-            <h2>Histórico da sessão</h2>
+            <h1 class="section-title">Triagem Guiada <span>INSS</span></h1>
+            <p style="color: var(--text-muted);">Árvore de decisão inteligente para os 11 benefícios previdenciários.</p>
           </div>
         </div>
-        <div id="historyList" class="history-list">
-          <p class="history-placeholder">Nenhuma resposta registrada ainda.</p>
+
+        <div class="triage-container">
+          <div class="glass-panel wizard-card">
+            <div id="triage-selector">
+              <h3 style="font-family: var(--font-heading); font-size: 1.2rem; margin-bottom: 1rem;">Selecione o Benefício Desejado:</h3>
+              <div class="options-grid" id="triage-flow-buttons"></div>
+            </div>
+
+            <div id="triage-quiz" style="display: none;">
+              <div class="wizard-progress">
+                <div class="wizard-progress-bar" id="triage-progress-bar"></div>
+              </div>
+              <div class="question-code" id="triage-node-code">AA-01</div>
+              <h2 class="question-title" id="triage-question-title">Carregando pergunta...</h2>
+              <p class="question-help" id="triage-question-help">Explicação de apoio.</p>
+
+              <div class="options-grid" id="triage-options-container"></div>
+
+              <button class="btn-primary" id="btn-triage-back" style="background: rgba(255,255,255,0.1); color: #fff;">
+                <i class="fa-solid fa-arrow-left"></i> Voltar
+              </button>
+            </div>
+
+            <div id="triage-result" style="display: none; text-align: center;">
+              <div style="font-size: 3rem; color: var(--accent-emerald); margin-bottom: 1rem;">
+                <i class="fa-solid fa-circle-check"></i>
+              </div>
+              <h2 class="question-title" id="triage-result-title">Perfil Aprovado com Sucesso!</h2>
+              <p id="triage-result-summary" style="color: var(--text-muted); margin-bottom: 1.5rem;"></p>
+              
+              <div style="background: rgba(0, 242, 254, 0.05); padding: 1.2rem; border-radius: var(--radius-md); border: 1px solid var(--glass-border-glow); margin-bottom: 1.5rem; text-align: left;">
+                <h4 style="color: var(--primary); margin-bottom: 0.5rem;"><i class="fa-solid fa-list-check"></i> Próximos Passos Sugeridos:</h4>
+                <p id="triage-result-next-step" style="font-size: 0.95rem;"></p>
+              </div>
+
+              <button class="btn-primary" id="btn-salvar-triage-lead">
+                <i class="fa-solid fa-user-plus"></i> Salvar Lead na Esteira Kanban
+              </button>
+            </div>
+          </div>
         </div>
       </section>
+
+      <section id="view-ocr" class="tab-view" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title">Inteligência Documental <span>& OCR</span></h1>
+            <p style="color: var(--text-muted);">Leitura local de CNIS, Carteira de Trabalho, Carta de Concessão e Laudos Médicos.</p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+          <div class="glass-panel" style="padding: 1.8rem;">
+            <h3 style="font-family: var(--font-heading); margin-bottom: 1rem;"><i class="fa-solid fa-cloud-arrow-up"></i> Leitor de PDF / Imagem</h3>
+            <div class="dropzone" id="ocr-dropzone">
+              <i class="fa-solid fa-file-pdf"></i>
+              <h3>Arraste o documento aqui ou clique para selecionar</h3>
+              <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem;">Suporta PDF nativo, PNG ou JPG (Processamento 100% Local)</p>
+            </div>
+
+            <div id="ocr-status-box" style="margin-top: 1.5rem; display: none; padding: 1rem; background: rgba(0,242,254,0.05); border-radius: var(--radius-sm); border: 1px solid var(--glass-border-glow);">
+              <span style="font-size: 0.85rem; color: var(--primary); font-weight: 600;"><i class="fa-solid fa-gear fa-spin"></i> Processando documento com OCR neural...</span>
+            </div>
+          </div>
+
+          <div class="glass-panel" style="padding: 1.8rem;">
+            <h3 style="font-family: var(--font-heading); margin-bottom: 1rem;"><i class="fa-solid fa-code"></i> Dados Extraídos Inteligentes</h3>
+            <div id="ocr-extracted-tree" style="background: var(--bg-dark); padding: 1rem; border-radius: var(--radius-sm); font-family: var(--font-code); font-size: 0.85rem; color: var(--accent-cyan); min-height: 200px; overflow-x: auto;">
+              // Selecione ou envie um documento para extrair dados previdenciários
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-orchestrator" class="tab-view" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title">Central do Robô <span>& Automações</span></h1>
+            <p style="color: var(--text-muted);">Orquestrador interno de eventos, tarefas de segundo plano e log de auditoria.</p>
+          </div>
+        </div>
+
+        <div class="glass-panel" style="padding: 1.5rem;">
+          <h3 style="font-family: var(--font-heading); margin-bottom: 1rem;"><i class="fa-solid fa-microchip"></i> Fila de Eventos de Integração</h3>
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--glass-border); color: var(--text-muted);">
+                <th style="padding: 0.8rem;">ID</th>
+                <th style="padding: 0.8rem;">TIPO DE EVENTO</th>
+                <th style="padding: 0.8rem;">ORIGEM</th>
+                <th style="padding: 0.8rem;">PRIORIDADE</th>
+                <th style="padding: 0.8rem;">STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="orchestrator-events-body">
+              <tr>
+                <td colspan="5" style="padding: 1.5rem; text-align: center; color: var(--text-muted);">Nenhum evento em fila no momento.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
     </main>
   </div>
 
-  <script src="flows.js"></script>
+  <div id="notifications-popover" popover="auto">
+    <h3 style="font-family: var(--font-heading); font-size: 1rem; margin-bottom: 0.8rem;"><i class="fa-solid fa-bell" style="color: var(--primary);"></i> Central de Notificações</h3>
+    <div style="display: flex; flex-direction: column; gap: 0.8rem; font-size: 0.85rem;">
+      <div style="padding: 0.6rem; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm);">
+        <strong style="color: var(--accent-emerald);">Sistema PrevIA Inicializado:</strong> Robô operando sem alertas.
+      </div>
+      <div style="padding: 0.6rem; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm);">
+        <strong style="color: var(--primary);">Inteligência OCR:</strong> ONNX Engine carregado com sucesso.
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
