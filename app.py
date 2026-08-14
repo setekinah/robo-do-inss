@@ -58,6 +58,7 @@ from office_settings import load_office_settings, resolve_fee_percentage, save_o
 from runtime_paths import DATA_DIR
 from services.backup_service import create_backup, restore_backup, validate_backup
 from services.environment_diagnostics import build_environment_diagnostic
+from services.technical_logging import log_technical_event, read_recent_events
 from services.contract_service import build_fee_contract_preview as build_contract_preview
 from services.document_score_service import build_document_case_score as calculate_document_case_score
 from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
@@ -5026,6 +5027,7 @@ def render_settings_view() -> None:
     if st.button("Criar backup agora", icon=":material/backup:", key="create_local_backup"):
         backup_path = create_backup(DATA_DIR)
         st.session_state["latest_local_backup"] = str(backup_path)
+        log_technical_event(DATA_DIR, event="backup.created", component="settings", context={"file_name": backup_path.name})
         st.success(f"Backup criado: {backup_path.name}")
     latest_backup = st.session_state.get("latest_local_backup")
     if latest_backup:
@@ -5046,6 +5048,7 @@ def render_settings_view() -> None:
                     st.error("Confirmação inválida. Digite RESTAURAR em letras maiúsculas.")
                 else:
                     restored = restore_backup(DATA_DIR, restore_file.getvalue())
+                    log_technical_event(DATA_DIR, event="backup.restored", component="settings", level="warning", context={"file_count": len(restored)})
                     st.success(f"{len(restored)} arquivo(s) restaurado(s). Reinicie o aplicativo para recarregar os dados.")
         except ValueError as error:
             st.error(str(error))
@@ -5056,6 +5059,11 @@ def render_settings_view() -> None:
     st.caption("Verifica recursos deste computador sem ler ou enviar documentos de clientes.")
     if st.button("Verificar ambiente", icon=":material/health_and_safety:", key="run_environment_diagnostic"):
         st.session_state["environment_diagnostic"] = build_environment_diagnostic(DATA_DIR, DB_PATH)
+        log_technical_event(
+            DATA_DIR, event="environment.diagnostic_completed", component="settings",
+            level="error" if st.session_state["environment_diagnostic"]["status"] == "error" else "warning" if st.session_state["environment_diagnostic"]["status"] == "warning" else "info",
+            context={"status": st.session_state["environment_diagnostic"]["status"]},
+        )
     diagnostic = st.session_state.get("environment_diagnostic")
     if diagnostic:
         status_label = {"ok": "Pronto para operar", "warning": "Pronto com alertas", "error": "Ação necessária"}[diagnostic["status"]]
@@ -5071,6 +5079,17 @@ def render_settings_view() -> None:
             hide_index=True,
         )
     st.markdown("</div>", unsafe_allow_html=True)
+
+    with st.expander("Eventos técnicos recentes", expanded=False):
+        events = read_recent_events(DATA_DIR)
+        if events:
+            st.dataframe(
+                [{"Quando": item["timestamp"], "Nível": item["level"], "Evento": item["event"], "Componente": item["component"], "Correlação": item["correlation_id"] or "-"} for item in events],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("Nenhum evento técnico registrado nesta instalação.")
 
 
 def build_fee_contract_preview(flow_name: str, lead_name: str) -> str:
