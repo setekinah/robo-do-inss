@@ -638,6 +638,20 @@ def inject_styles() -> None:
             border-radius: 16px;
             border: 1px solid rgba(24, 38, 58, 0.08);
         }
+        .operation-journey {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.7rem;
+            margin: 0.25rem 0 1.15rem;
+        }
+        .operation-journey-step {
+            background: rgba(255,255,255,0.82);
+            border: 1px solid rgba(24, 38, 58, 0.09);
+            border-radius: 14px;
+            padding: 0.72rem 0.85rem;
+        }
+        .operation-journey-step strong { color: var(--navy); display: block; }
+        .operation-journey-step span { color: var(--muted); font-size: 0.82rem; }
         .stMarkdown h3, .stMarkdown h4 {
             color: var(--navy);
             font-family: Georgia, "Times New Roman", serif;
@@ -4656,7 +4670,15 @@ def render_crm_view() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 def render_operational_workspace() -> None:
-    operational_tabs = st.tabs(["1. Nova triagem", "2. Documentos", "3. Casos salvos"])
+    st.markdown(
+        "<div class='operation-journey'>"
+        "<div class='operation-journey-step'><strong>1. Registrar cliente</strong><span>Escolha o atendimento e conclua a triagem.</span></div>"
+        "<div class='operation-journey-step'><strong>2. Organizar documentos</strong><span>Anexe, leia e revise o checklist do dossiê.</span></div>"
+        "<div class='operation-journey-step'><strong>3. Conduzir o caso</strong><span>Acompanhe pendências, tarefas e próximo passo.</span></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    operational_tabs = st.tabs(["1. Registrar cliente", "2. Documentos", "3. Casos salvos"])
     with operational_tabs[0]:
         render_operation_kpis()
         left, center, right = st.columns([0.78, 1.48, 0.94], gap="medium")
