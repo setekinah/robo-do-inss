@@ -8,15 +8,17 @@ import hmac
 import json
 import re
 import secrets
+import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-from runtime_paths import DATA_DIR
+from runtime_paths import DATA_DIR, write_private_text
 
 
 CREDENTIALS_PATH = DATA_DIR / "auth_credentials.json"
 PBKDF2_ITERATIONS = 600_000
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 300
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -49,6 +51,27 @@ def validate_whatsapp(value: str) -> str | None:
     return None
 
 
+def get_login_lockout_remaining(lockout_until: float | None, *, now: float | None = None) -> int:
+    """Return remaining lockout seconds for the current UI session."""
+    if not lockout_until:
+        return 0
+    current_time = time.time() if now is None else now
+    return max(0, int(lockout_until - current_time + 0.999))
+
+
+def register_failed_login(
+    failed_attempts: int,
+    *,
+    now: float | None = None,
+) -> tuple[int, float | None]:
+    """Record a failed attempt and start a short session lockout when needed."""
+    current_time = time.time() if now is None else now
+    attempts = max(0, failed_attempts) + 1
+    if attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
+        return 0, current_time + LOGIN_LOCKOUT_SECONDS
+    return attempts, None
+
+
 def credentials_configured() -> bool:
     return _load_credentials() is not None
 
@@ -74,32 +97,64 @@ def save_credentials(email: str, password: str) -> None:
         "password_hash": base64.b64encode(password_hash).decode("ascii"),
         "iterations": PBKDF2_ITERATIONS,
         "updated_at": datetime.now(timezone.utc).isoformat(),
+        "failed_attempts": 0,
+        "lockout_until": None,
     }
-    CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = Path(f"{CREDENTIALS_PATH}.tmp")
-    temporary_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    temporary_path.replace(CREDENTIALS_PATH)
+    write_private_text(CREDENTIALS_PATH, json.dumps(payload, indent=2))
 
 
 def verify_credentials(email: str, password: str) -> bool:
+    payload = _load_credentials_payload()
     credentials = _load_credentials()
-    if credentials is None or normalize_email(email) != credentials["email"]:
+    if payload is None or credentials is None:
+        return False
+    lockout_remaining = get_login_lockout_remaining(payload.get("lockout_until"))
+    if lockout_remaining:
         return False
 
-    candidate_hash = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        credentials["salt"],
-        credentials["iterations"],
+    is_valid = normalize_email(email) == credentials["email"] and hmac.compare_digest(
+        hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), credentials["salt"], credentials["iterations"]
+        ),
+        credentials["password_hash"],
     )
-    return hmac.compare_digest(candidate_hash, credentials["password_hash"])
+    if is_valid:
+        if payload.get("failed_attempts") or payload.get("lockout_until"):
+            payload["failed_attempts"] = 0
+            payload["lockout_until"] = None
+            write_private_text(CREDENTIALS_PATH, json.dumps(payload, indent=2))
+        return True
+
+    attempts, lockout_until = register_failed_login(int(payload.get("failed_attempts") or 0))
+    payload["failed_attempts"] = attempts
+    payload["lockout_until"] = lockout_until
+    write_private_text(CREDENTIALS_PATH, json.dumps(payload, indent=2))
+    return False
 
 
-def _load_credentials() -> dict[str, Any] | None:
+def get_persistent_login_lockout_remaining() -> int:
+    """Return the account lockout shared by all local browser sessions."""
+    payload = _load_credentials_payload()
+    return get_login_lockout_remaining(payload.get("lockout_until") if payload else None)
+
+
+def _load_credentials_payload() -> dict[str, Any] | None:
     if not CREDENTIALS_PATH.exists():
         return None
     try:
         payload = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return None
+        return payload
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _load_credentials() -> dict[str, Any] | None:
+    payload = _load_credentials_payload()
+    if payload is None:
+        return None
+    try:
         email = normalize_email(str(payload["email"]))
         salt = base64.b64decode(payload["salt"], validate=True)
         password_hash = base64.b64decode(payload["password_hash"], validate=True)

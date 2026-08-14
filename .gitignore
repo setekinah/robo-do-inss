@@ -13,6 +13,17 @@ data/
 # User documents and generated artifacts
 uploads/
 *.zip
+*.tmp
+*.bak
+*.swp
+
+# Test, coverage and tooling artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Local environment
 .venv/

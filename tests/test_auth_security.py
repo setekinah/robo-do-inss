@@ -51,6 +51,26 @@ class AuthSecurityTests(unittest.TestCase):
         self.assertIsNone(auth_security.validate_whatsapp("(11) 99999-9999"))
         self.assertIsNotNone(auth_security.validate_whatsapp("123"))
 
+    def test_failed_logins_start_a_temporary_lockout(self) -> None:
+        attempts = 0
+        lockout_until = None
+        for _ in range(auth_security.MAX_FAILED_LOGIN_ATTEMPTS):
+            attempts, lockout_until = auth_security.register_failed_login(attempts, now=100.0)
+
+        self.assertEqual(attempts, 0)
+        self.assertEqual(lockout_until, 100.0 + auth_security.LOGIN_LOCKOUT_SECONDS)
+        self.assertEqual(auth_security.get_login_lockout_remaining(lockout_until, now=100.0), 300)
+        self.assertEqual(auth_security.get_login_lockout_remaining(lockout_until, now=400.0), 0)
+
+    def test_failed_logins_are_throttled_across_browser_sessions(self) -> None:
+        auth_security.save_credentials("advogado@exemplo.com.br", "SenhaForte2026")
+
+        for _ in range(auth_security.MAX_FAILED_LOGIN_ATTEMPTS):
+            self.assertFalse(auth_security.verify_credentials("advogado@exemplo.com.br", "SenhaErrada2026"))
+
+        self.assertGreater(auth_security.get_persistent_login_lockout_remaining(), 0)
+        self.assertFalse(auth_security.verify_credentials("advogado@exemplo.com.br", "SenhaForte2026"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
 streamlit==1.55.0
+pandas>=2.2,<3
 
 # Inteligencia documental local: PDF nativo + OCR neural portatil (sem nuvem).
 pypdf>=6.0,<7

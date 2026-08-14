@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 from datetime import date
 from typing import Any
 
@@ -16,6 +17,9 @@ from automation_orchestrator import (
 )
 from auth_security import (
     credentials_configured,
+    get_login_lockout_remaining,
+    get_persistent_login_lockout_remaining,
+    register_failed_login,
     save_credentials,
     validate_email,
     validate_password,
@@ -41,6 +45,7 @@ from database import (
     list_integration_events,
     list_recent_attendances,
     load_history,
+    record_security_event,
     retry_integration_event,
     review_crm_task,
     save_attendance,
@@ -128,18 +133,18 @@ CONFLICT_STATUS = {
 FEATURE_CARDS = [
     (
         "🎙️",
-        "Responde em audio",
-        "Se o lead manda audio, a Sofia responde em audio com voz personalizada e conduz o atendimento com naturalidade.",
+        "Fluxo de atendimento",
+        "A operação registra a triagem e orienta a próxima ação. Integrações de áudio e canais externos ainda não estão disponíveis.",
     ),
     (
         "🧠",
-        "Motor de elegibilidade com IA",
-        "A Sofia cobre os principais beneficios previdenciarios e calcula score de exito com checklist documental.",
+        "Motor de elegibilidade determinístico",
+        "A Sofia cobre os principais benefícios previdenciários por regras estruturadas e checklist documental revisável.",
     ),
     (
         "🧾",
-        "Contrato pelo celular",
-        "Contrato, procuracao e declaracao enviados por WhatsApp com assinatura digital.",
+        "Prévia de contrato",
+        "O sistema prepara uma prévia interna de honorários; assinatura digital e envio por WhatsApp não estão integrados.",
     ),
     (
         "📊",
@@ -148,8 +153,8 @@ FEATURE_CARDS = [
     ),
     (
         "🔔",
-        "Follow-up automatizado",
-        "O sistema identifica leads parados e prepara lembretes automaticos para nao perder oportunidades.",
+        "Fila operacional",
+        "Eventos internos podem criar tarefas revisáveis; o envio automatizado de lembretes por canal externo não está integrado.",
     ),
     (
         "📷",
@@ -168,20 +173,20 @@ FEATURE_CARDS = [
     ),
     (
         "🔄",
-        "Recupera leads perdidos",
-        "Lead sem aderencia ao beneficio A pode ser redirecionado automaticamente para outro fluxo viavel.",
+        "Triagem orientada",
+        "O operador pode iniciar outro fluxo quando necessário; não há redirecionamento automático de leads.",
     ),
 ]
 PROCESS_STEPS = [
     (
         "1",
-        "Lead chega pelo WhatsApp",
-        "Trafego pago, link na bio e QR code direcionam o lead para a esteira automatizada da Sofia.",
+        "Lead entra na operação",
+        "O operador registra o atendimento e inicia a triagem no fluxo adequado.",
     ),
     (
         "2",
-        "IA faz a triagem",
-        "Perguntas dinamicas identificam beneficio, score de exito e checklist inicial sem sobrecarregar o lead.",
+        "Triagem guiada",
+        "Perguntas dinâmicas identificam o benefício, o resultado operacional e o checklist inicial.",
     ),
     (
         "3",
@@ -190,8 +195,8 @@ PROCESS_STEPS = [
     ),
     (
         "4",
-        "Contrato assinado pelo celular",
-        "Contrato, procuracao e declaracoes saem para assinatura digital assim que o caso for aprovado.",
+        "Prévia de contrato revisada",
+        "Após aprovação, o sistema disponibiliza a prévia interna para conferência antes de qualquer contratação.",
     ),
 ]
 PLAN_OPTIONS = [
@@ -279,7 +284,6 @@ def inject_styles() -> None:
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
         :root {
             --bg: #f6f8fc;
             --panel: rgba(255, 255, 255, 0.94);
@@ -2234,6 +2238,10 @@ def ensure_session_defaults() -> None:
         st.session_state.is_authenticated = False
     if "auth_mode" not in st.session_state:
         st.session_state.auth_mode = "login" if credentials_configured() else "signup"
+    if "auth_failed_attempts" not in st.session_state:
+        st.session_state.auth_failed_attempts = 0
+    if "auth_lockout_until" not in st.session_state:
+        st.session_state.auth_lockout_until = None
     if "auth_step" not in st.session_state:
         st.session_state.auth_step = 1
     if "auth_signup_data" not in st.session_state:
@@ -2330,10 +2338,10 @@ def render_recent_queue() -> None:
         st.markdown(
             (
                 f"<div class='pre-lead-card{selected_class}'>"
-                f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                f"<p>{row['flow_name']} | {row['created_at']}</p>"
+                f"<h5>#{row['id']} - {escape(str(row['lead_name']))}</h5>"
+                f"<p>{escape(str(row['flow_name']))} | {escape(str(row['created_at']))}</p>"
                 f"<p><span class='status-chip' style='background:{background}; color:{color};'>{label}</span></p>"
-                f"<p>{row['result_title']}</p>"
+                f"<p>{escape(str(row['result_title']))}</p>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -2351,18 +2359,18 @@ def render_active_case_panel(flow: dict[str, Any], form_data: dict[str, Any]) ->
         f"""
         <div class="pre-focus-hero">
           <div class="eyebrow">Lead ativo</div>
-          <h3>{form_data['lead_name'] or 'Nao informado'}</h3>
-          <p>{flow['name']} | {current_step}</p>
+          <h3>{escape(str(form_data['lead_name'] or 'Nao informado'))}</h3>
+          <p>{escape(str(flow['name']))} | {escape(str(current_step))}</p>
         </div>
         <div class="pre-focus-grid">
-          <div class="pre-focus-stat"><strong>{form_data['lead_phone'] or '-'}</strong><span>Contato principal</span></div>
+          <div class="pre-focus-stat"><strong>{escape(str(form_data['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>
           <div class="pre-focus-stat"><strong>{len(triage_state.history)}</strong><span>Respostas registradas</span></div>
           <div class="pre-focus-stat"><strong>{current_step}</strong><span>Etapa corrente</span></div>
           <div class="pre-focus-stat"><strong>{'Concluindo' if current_node is None else 'Em triagem'}</strong><span>Status da sessao</span></div>
         </div>
         <div class="pre-detail-list">
-          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{current_question}</span></div>
-          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{flow['name']}</span></div>
+          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{escape(str(current_question))}</span></div>
+          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{escape(str(flow['name']))}</span></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -2695,7 +2703,11 @@ def persist_document_uploads(
 ) -> list[str]:
     stored_files = list(current_files)
     for uploaded_file in uploaded_batch or []:
-        saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
+        try:
+            saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
+        except ValueError as exc:
+            st.error(f"Upload não realizado: {exc}")
+            continue
         if saved_path not in stored_files:
             stored_files.append(saved_path)
     return stored_files
@@ -3260,6 +3272,13 @@ def render_auth_login() -> None:
         unsafe_allow_html=True,
     )
     account_ready = credentials_configured()
+    remaining_lockout = max(
+        get_login_lockout_remaining(st.session_state.auth_lockout_until),
+        get_persistent_login_lockout_remaining(),
+    )
+    if not remaining_lockout and st.session_state.auth_lockout_until:
+        st.session_state.auth_lockout_until = None
+        st.session_state.auth_failed_attempts = 0
     if not account_ready:
         st.info("Nenhuma conta foi configurada neste computador. Use Criar conta para concluir o primeiro acesso.")
     with st.form("auth_login_form"):
@@ -3285,7 +3304,14 @@ def render_auth_login() -> None:
             """,
             unsafe_allow_html=True,
         )
-        login_submit = st.form_submit_button("Entrar", use_container_width=True, type="primary")
+        login_submit = st.form_submit_button(
+            "Entrar",
+            use_container_width=True,
+            type="primary",
+            disabled=bool(remaining_lockout),
+        )
+    if remaining_lockout:
+        st.warning(f"Por segurança, aguarde {remaining_lockout} segundos antes de tentar novamente.")
     if login_submit:
         email_error = validate_email(login_email)
         if not login_email.strip() or not login_password.strip():
@@ -3295,10 +3321,17 @@ def render_auth_login() -> None:
         elif not account_ready:
             st.error("Não existe uma conta local configurada. Selecione Criar conta.")
         elif not verify_credentials(login_email, login_password):
+            attempts, lockout_until = register_failed_login(st.session_state.auth_failed_attempts)
+            st.session_state.auth_failed_attempts = attempts
+            st.session_state.auth_lockout_until = lockout_until
+            record_security_event("login_failed")
             st.error("E-mail ou senha inválidos. Verifique os dados e tente novamente.")
         else:
+            st.session_state.auth_failed_attempts = 0
+            st.session_state.auth_lockout_until = None
             st.session_state.is_authenticated = True
             st.session_state.current_view = "dashboard"
+            record_security_event("login_succeeded")
             st.rerun()
     st.caption("Primeiro acesso? Use Criar conta no seletor acima.")
 
@@ -3711,10 +3744,10 @@ def render_dashboard_view() -> None:
                         st.markdown(
                             (
                                 "<div class='pre-task-item'>"
-                                f"<div class='pre-task-priority {priority_class}'>{task['priority']}</div>"
-                                f"<h4>#{task['case_id']} | {task['lead_name']}</h4>"
-                                f"<p><strong>{task['title']}</strong></p>"
-                                f"<p>{task['description']}</p>"
+                                f"<div class='pre-task-priority {priority_class}'>{escape(str(task['priority']))}</div>"
+                                f"<h4>#{task['case_id']} | {escape(str(task['lead_name']))}</h4>"
+                                f"<p><strong>{escape(str(task['title']))}</strong></p>"
+                                f"<p>{escape(str(task['description']))}</p>"
                                 "</div>"
                             ),
                             unsafe_allow_html=True,
@@ -3733,8 +3766,8 @@ def render_dashboard_view() -> None:
                     (
                         "<div class='pre-focus-hero'>"
                         f"<div class='eyebrow'>{get_stage_label(str(focus_record['stage']))}</div>"
-                        f"<h3>#{focus_record['id']} | {focus_record['lead_name']}</h3>"
-                        f"<p>{focus_record['flow_name']} | {status_label}</p>"
+                        f"<h3>#{focus_record['id']} | {escape(str(focus_record['lead_name']))}</h3>"
+                        f"<p>{escape(str(focus_record['flow_name']))} | {status_label}</p>"
                         "</div>"
                         "<div class='pre-focus-grid'>"
                         f"<div class='pre-focus-stat'><strong>{focus_record['score']}/100</strong><span>Score documental atual</span></div>"
@@ -4857,10 +4890,10 @@ def render_contracts_view() -> None:
                 "<div class='pre-card'>"
                 "<h3 class='pre-section-title'>Preparacao de assinatura</h3>"
                 "<div class='pre-meta-list'>"
-                f"<div class='pre-meta-item'><strong>Cliente em foco</strong><span>#{details['id']} | {details['lead_name']}</span></div>"
-                f"<div class='pre-meta-item'><strong>Fluxo aprovado</strong><span>{details['flow_name']}</span></div>"
+                f"<div class='pre-meta-item'><strong>Cliente em foco</strong><span>#{details['id']} | {escape(str(details['lead_name']))}</span></div>"
+                f"<div class='pre-meta-item'><strong>Fluxo aprovado</strong><span>{escape(str(details['flow_name']))}</span></div>"
                 f"<div class='pre-meta-item'><strong>Honorario contratado</strong><span>{fee_percentage}% sobre o proveito economico do caso.</span></div>"
-                f"<div class='pre-meta-item'><strong>Tutorial de assinatura</strong><span>{tutorial_video_url or 'Ainda nao configurado nas preferencias do escritorio.'}</span></div>"
+                f"<div class='pre-meta-item'><strong>Tutorial de assinatura</strong><span>{escape(str(tutorial_video_url or 'Ainda nao configurado nas preferencias do escritorio.'))}</span></div>"
                 "</div>"
                 "</div>"
             ),
@@ -4881,9 +4914,9 @@ def render_contracts_view() -> None:
             st.markdown(
                 (
                     f"<div class='pre-lead-card{selected_class}'>"
-                    f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                    f"<p>{row['flow_name']}</p>"
-                    f"<p>{row['result_title']}</p>"
+                    f"<h5>#{row['id']} - {escape(str(row['lead_name']))}</h5>"
+                    f"<p>{escape(str(row['flow_name']))}</p>"
+                    f"<p>{escape(str(row['result_title']))}</p>"
                     "</div>"
                 ),
                 unsafe_allow_html=True,
@@ -4902,9 +4935,9 @@ def render_contracts_view() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-hero'>"
-                f"<div class='eyebrow'>{details['flow_name']}</div>"
-                f"<h3>#{details['id']} | {details['lead_name']}</h3>"
-                f"<p>{details['result_title']} | Caso aprovado para contratacao</p>"
+                f"<div class='eyebrow'>{escape(str(details['flow_name']))}</div>"
+                f"<h3>#{details['id']} | {escape(str(details['lead_name']))}</h3>"
+                f"<p>{escape(str(details['result_title']))} | Caso aprovado para contratacao</p>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -4915,7 +4948,7 @@ def render_contracts_view() -> None:
                 f"<div class='pre-focus-stat'><strong>{fee_percentage}%</strong><span>Honorario parametrizado</span></div>"
                 f"<div class='pre-focus-stat'><strong>{validated_total}/{required_total}</strong><span>Obrigatorios validados</span></div>"
                 f"<div class='pre-focus-stat'><strong>{format_currency(details['estimated_total_value']) if details['estimated_total_value'] else '-'}</strong><span>Base economica estimada</span></div>"
-                f"<div class='pre-focus-stat'><strong>{details['lead_phone'] or '-'}</strong><span>Contato principal</span></div>"
+                f"<div class='pre-focus-stat'><strong>{escape(str(details['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -4923,9 +4956,9 @@ def render_contracts_view() -> None:
         st.markdown(
             (
                 "<div class='pre-detail-list'>"
-                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{details['summary']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{details['next_step']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{details['notes'] or 'Sem observacoes adicionais registradas.'}</span></div>"
+                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{escape(str(details['summary']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{escape(str(details['next_step']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{escape(str(details['notes'] or 'Sem observacoes adicionais registradas.'))}</span></div>"
                 f"<div class='pre-detail-row'><strong>Status documental</strong><span>{validated_total}/{required_total} obrigatorios validados para sustentar a assinatura.</span></div>"
                 "</div>"
             ),
@@ -5280,11 +5313,11 @@ def render_result_panel(flow: dict[str, Any], form_data: dict[str, Any]) -> None
     st.markdown(
         (
             f"<div class='status-chip' style='background:{background}; color:{color};'>{label}</div>"
-            f"<div class='surface-card'><h3>{result['title']}</h3>"
-            f"<p><strong>Resumo:</strong> {result['summary']}</p>"
-            f"<p><strong>Proximo passo:</strong> {result['next_step']}</p>"
-            f"<p><strong>Lead:</strong> {form_data['lead_name'] or 'Nao informado'}"
-            f" | <strong>Telefone:</strong> {form_data['lead_phone'] or 'Nao informado'}</p>"
+            f"<div class='surface-card'><h3>{escape(str(result['title']))}</h3>"
+            f"<p><strong>Resumo:</strong> {escape(str(result['summary']))}</p>"
+            f"<p><strong>Proximo passo:</strong> {escape(str(result['next_step']))}</p>"
+            f"<p><strong>Lead:</strong> {escape(str(form_data['lead_name'] or 'Nao informado'))}"
+            f" | <strong>Telefone:</strong> {escape(str(form_data['lead_phone'] or 'Nao informado'))}</p>"
             "</div>"
         ),
         unsafe_allow_html=True,
@@ -5532,8 +5565,8 @@ def render_document_pipeline() -> None:
                 st.markdown(
                     (
                         "<div class='pre-lead-card selected'>"
-                        f"<h5>#{selected_row['id']} - {selected_row['lead_name']}</h5>"
-                        f"<p>{selected_row['flow_name']}</p>"
+                        f"<h5>#{selected_row['id']} - {escape(str(selected_row['lead_name']))}</h5>"
+                        f"<p>{escape(str(selected_row['flow_name']))}</p>"
                         f"<p>{progress}</p>"
                         f"<p>{triage_status} | Ilegíveis: {int(selected_row['illegible_total'] or 0)} | Inconsistentes: {int(selected_row['inconsistent_total'] or 0)}</p>"
                         "</div>"
@@ -5572,8 +5605,8 @@ def render_document_pipeline() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-hero'>"
-                f"<div class='eyebrow'>{details['flow_name']}</div>"
-                f"<h3>#{details['id']} | {details['lead_name']}</h3>"
+                f"<div class='eyebrow'>{escape(str(details['flow_name']))}</div>"
+                f"<h3>#{details['id']} | {escape(str(details['lead_name']))}</h3>"
                 f"<p>{status_label} | Dossie em consolidacao documental</p>"
                 "</div>"
             ),
@@ -5599,8 +5632,8 @@ def render_document_pipeline() -> None:
                 "<div class='pre-detail-list'>"
                 f"<div class='pre-detail-row'><strong>Foco documental</strong><span>{strategy['analysis_focus']}</span></div>"
                 f"<div class='pre-detail-row'><strong>Risco atual</strong><span>{focus_gap_text}</span></div>"
-                f"<div class='pre-detail-row'><strong>Proximo passo juridico</strong><span>{details['next_step']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Notas da triagem</strong><span>{details['notes'] or 'Sem observacoes adicionais registradas.'}</span></div>"
+                f"<div class='pre-detail-row'><strong>Proximo passo juridico</strong><span>{escape(str(details['next_step']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Notas da triagem</strong><span>{escape(str(details['notes'] or 'Sem observacoes adicionais registradas.'))}</span></div>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -5867,10 +5900,10 @@ def render_attendance_consultation() -> None:
                 st.markdown(
                     (
                         f"<div class='pre-lead-card{selected_class}'>"
-                        f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                        f"<p>{row['flow_name']} | {row['created_at']}</p>"
+                        f"<h5>#{row['id']} - {escape(str(row['lead_name']))}</h5>"
+                        f"<p>{escape(str(row['flow_name']))} | {escape(str(row['created_at']))}</p>"
                         f"<p><span class='status-chip' style='background:{background}; color:{color};'>{label}</span></p>"
-                        f"<p>{row['result_title']}</p>"
+                        f"<p>{escape(str(row['result_title']))}</p>"
                         "</div>"
                     ),
                     unsafe_allow_html=True,
@@ -5903,9 +5936,9 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-hero'>"
-                f"<div class='eyebrow'>{details['flow_name']}</div>"
-                f"<h3>#{details['id']} | {details['lead_name']}</h3>"
-                f"<p>{details['result_title']} | {label}</p>"
+                f"<div class='eyebrow'>{escape(str(details['flow_name']))}</div>"
+                f"<h3>#{details['id']} | {escape(str(details['lead_name']))}</h3>"
+                f"<p>{escape(str(details['result_title']))} | {label}</p>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -5913,8 +5946,8 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-grid'>"
-                f"<div class='pre-focus-stat'><strong>{focus_benefit}</strong><span>Beneficio dominante</span></div>"
-                f"<div class='pre-focus-stat'><strong>{details['lead_phone'] or '-'}</strong><span>Contato principal</span></div>"
+                f"<div class='pre-focus-stat'><strong>{escape(str(focus_benefit))}</strong><span>Beneficio dominante</span></div>"
+                f"<div class='pre-focus-stat'><strong>{escape(str(details['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>"
                 f"<div class='pre-focus-stat'><strong>{validated_total}/{required_total}</strong><span>Obrigatorios validados</span></div>"
                 f"<div class='pre-focus-stat'><strong>{score['score']}/100</strong><span>Score documental</span></div>"
                 "</div>"
@@ -5928,10 +5961,10 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-detail-list'>"
-                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{details['summary']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{details['next_step']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{details['notes'] or 'Sem observacoes adicionais.'}</span></div>"
-                f"<div class='pre-detail-row'><strong>Data do registro</strong><span>{details['created_at']}</span></div>"
+                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{escape(str(details['summary']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{escape(str(details['next_step']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{escape(str(details['notes'] or 'Sem observacoes adicionais.'))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Data do registro</strong><span>{escape(str(details['created_at']))}</span></div>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -5942,7 +5975,7 @@ def render_attendance_consultation() -> None:
             st.markdown(
                 (
                     "<div class='pre-meta-list' style='margin-top:1rem;'>"
-                    f"<div class='pre-meta-item'><strong>Categoria especifica</strong><span>{details['benefit_category'] or 'Nao informada'}</span></div>"
+                    f"<div class='pre-meta-item'><strong>Categoria especifica</strong><span>{escape(str(details['benefit_category'] or 'Nao informada'))}</span></div>"
                     f"<div class='pre-meta-item'><strong>Valor mensal estimado</strong><span>{format_currency(monthly) if monthly else 'Nao informado'}</span></div>"
                     f"<div class='pre-meta-item'><strong>Total estimado</strong><span>{format_currency(total) if total else 'Nao informado'}</span></div>"
                     "</div>"

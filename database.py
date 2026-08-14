@@ -13,15 +13,18 @@ from runtime_paths import DATA_DIR
 
 
 DB_PATH = DATA_DIR / "triagem.db"
+SCHEMA_VERSION = 1
 
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
     """Open a transactional SQLite connection and always release the file handle."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
+    connection = sqlite3.connect(DB_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 10000")
+    connection.execute("PRAGMA journal_mode = WAL")
     try:
         yield connection
         connection.commit()
@@ -34,6 +37,15 @@ def get_connection() -> Iterator[sqlite3.Connection]:
 
 def init_database() -> None:
     with get_connection() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                description TEXT NOT NULL
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS atendimentos (
@@ -162,6 +174,16 @@ def init_database() -> None:
             """
         )
         conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS security_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                details_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_integration_events_status ON integration_events(status, id)"
         )
         conn.execute(
@@ -200,6 +222,10 @@ def init_database() -> None:
         ensure_document_column(conn, "extraction_confidence", "REAL")
         ensure_document_column(conn, "technical_notes", "TEXT")
         backfill_document_checklists(conn)
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, description) VALUES (?, ?)",
+            (SCHEMA_VERSION, "Initial versioned schema baseline"),
+        )
         conn.commit()
 
 
@@ -230,6 +256,15 @@ def ensure_task_column(conn: sqlite3.Connection, column_name: str, column_type: 
     }
     if column_name not in columns:
         conn.execute(f"ALTER TABLE crm_tarefas ADD COLUMN {column_name} {column_type}")
+
+
+def record_security_event(event_type: str, details: dict[str, Any] | None = None) -> None:
+    """Persist minimal security telemetry without storing credentials or PII."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO security_audit_log(event_type, details_json) VALUES (?, ?)",
+            (event_type.strip()[:100], json.dumps(details or {}, ensure_ascii=True)),
+        )
 
 
 def save_attendance(
