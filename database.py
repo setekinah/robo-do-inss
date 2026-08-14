@@ -225,6 +225,8 @@ def init_database() -> None:
         )
         ensure_calculation_column(conn, "review_notes", "TEXT")
         ensure_calculation_column(conn, "reviewed_at", "TEXT")
+        ensure_calculation_column(conn, "created_by", "TEXT")
+        ensure_calculation_column(conn, "reviewed_by", "TEXT")
         conn.execute(
             """CREATE TABLE IF NOT EXISTS referencias_calculo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

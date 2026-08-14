@@ -48,6 +48,7 @@ class CalculationFoundationTests(unittest.TestCase):
             title="Planejamento preliminar",
             inputs={"contribuicoes": 180, "observacao": "Conferir CNIS"},
             ruleset_version="pendente-de-revisao-juridica",
+            created_by="operador@teste.com",
         )
         repository.save_result(calculation_id, {"notice": "Resultado exige revisão humana."})
 
@@ -55,13 +56,15 @@ class CalculationFoundationTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0].status, "aguardando_revisao")
         self.assertTrue(records[0].requires_human_review)
+        self.assertEqual(records[0].created_by, "operador@teste.com")
         self.assertEqual(records[0].inputs["contribuicoes"], 180)
         self.assertEqual(records[0].result["notice"], "Resultado exige revisão humana.")
-        repository.mark_reviewed(calculation_id, "CNIS conferido; manter validação final da advogada.")
+        repository.mark_reviewed(calculation_id, "CNIS conferido; manter validação final da advogada.", "revisora@teste.com")
         reviewed = repository.list_for_attendance(self.attendance_id)[0]
         self.assertEqual(reviewed.status, "revisado")
         self.assertEqual(reviewed.review_notes, "CNIS conferido; manter validação final da advogada.")
         self.assertIsNotNone(reviewed.reviewed_at)
+        self.assertEqual(reviewed.reviewed_by, "revisora@teste.com")
 
 
 if __name__ == "__main__":

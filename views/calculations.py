@@ -147,6 +147,7 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
                 attendance_id=int(selected_id), calculation_type="planejamento_rgps", title="Triagem de planejamento RGPS (2026)",
                 inputs={"birth_date": birth_date.isoformat(), "sex": data.sex, "contribution_months": data.contribution_months, "carencia_months": data.carencia_months, "affiliation_date": affiliation_date.isoformat(), "cnis_import_id": cnis_import_id},
                 ruleset_version=RULESET_VERSION,
+                created_by=str(st.session_state.get("auth_login_email") or "sistema local"),
             )
             repository.save_result(calculation_id, serialized)
             st.session_state["last_rgps_planning_result"] = serialized
@@ -201,7 +202,10 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
         review_notes = st.text_area("Observação da revisão", placeholder="Ex.: CNIS conferido, pendência de período rural mantida para análise jurídica.", key="calculation_review_notes", height=90)
         if st.button("Marcar cálculo como revisado", icon=":material/verified:", key="mark_calculation_reviewed"):
             try:
-                CalculationRepository().mark_reviewed(int(review_id), review_notes)
+                CalculationRepository().mark_reviewed(
+                    int(review_id), review_notes,
+                    reviewed_by=str(st.session_state.get("auth_login_email") or "sistema local"),
+                )
                 st.success("Cálculo marcado como revisado.")
                 st.rerun()
             except ValueError as error:

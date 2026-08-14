@@ -24,6 +24,8 @@ class CalculationRecord:
     updated_at: str
     review_notes: str | None
     reviewed_at: str | None
+    created_by: str | None
+    reviewed_by: str | None
 
 
 class CalculationRepository:
@@ -36,16 +38,17 @@ class CalculationRepository:
         inputs: dict[str, Any],
         ruleset_version: str,
         requires_human_review: bool = True,
+        created_by: str = "sistema local",
     ) -> int:
         with get_connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO calculos_previdenciarios (
                     attendance_id, calculation_type, title, inputs_json,
-                    ruleset_version, requires_human_review
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    ruleset_version, requires_human_review, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (attendance_id, calculation_type, title, json.dumps(inputs, ensure_ascii=False), ruleset_version, int(requires_human_review)),
+                (attendance_id, calculation_type, title, json.dumps(inputs, ensure_ascii=False), ruleset_version, int(requires_human_review), created_by),
             )
             return int(cursor.lastrowid)
 
@@ -72,16 +75,16 @@ class CalculationRepository:
             ).fetchall()
         return [self._to_record(row) for row in rows]
 
-    def mark_reviewed(self, calculation_id: int, review_notes: str) -> None:
+    def mark_reviewed(self, calculation_id: int, review_notes: str, reviewed_by: str = "sistema local") -> None:
         if not review_notes.strip():
             raise ValueError("Registre a observação da revisão antes de concluir.")
         with get_connection() as conn:
             cursor = conn.execute(
                 """UPDATE calculos_previdenciarios
-                SET status = 'revisado', review_notes = ?, reviewed_at = CURRENT_TIMESTAMP,
+                SET status = 'revisado', review_notes = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND status = 'aguardando_revisao'""",
-                (review_notes.strip(), calculation_id),
+                (review_notes.strip(), reviewed_by, calculation_id),
             )
             if cursor.rowcount != 1:
                 raise ValueError("Cálculo não está disponível para revisão.")
@@ -96,4 +99,6 @@ class CalculationRepository:
             requires_human_review=bool(row["requires_human_review"]), created_at=str(row["created_at"]), updated_at=str(row["updated_at"]),
             review_notes=str(row["review_notes"]) if row["review_notes"] else None,
             reviewed_at=str(row["reviewed_at"]) if row["reviewed_at"] else None,
+            created_by=str(row["created_by"]) if row["created_by"] else None,
+            reviewed_by=str(row["reviewed_by"]) if row["reviewed_by"] else None,
         )
