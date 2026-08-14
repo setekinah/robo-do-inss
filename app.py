@@ -61,6 +61,7 @@ from services.environment_diagnostics import build_environment_diagnostic
 from services.technical_logging import log_technical_event, read_recent_events
 from services.contract_service import build_fee_contract_preview as build_contract_preview
 from services.document_score_service import build_document_case_score as calculate_document_case_score
+from services.document_feedback_service import build_document_feedback
 from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
 from services.crm_ux_catalog import CRM_UX_CATALOG
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
@@ -5698,14 +5699,11 @@ def render_document_pipeline() -> None:
 
                 if row["technical_notes"]:
                     st.caption(f"Leitura tecnica: {row['technical_notes']}")
-                if row["extraction_status"] in {"erro", "dependencia_ausente", "sem_texto"}:
-                    st.error(
-                        "A leitura automática não produziu texto confiável. Confira o arquivo e o diagnóstico técnico."
-                    )
-                elif row["raw_text"] and float(row["extraction_confidence"] or 0) < 0.70:
-                    st.warning(
-                        "Baixa confiança: não valide este documento sem comparação visual com o original."
-                    )
+                feedback = build_document_feedback(
+                    str(row["extraction_status"] or "nao_processado"),
+                    float(row["extraction_confidence"] or 0),
+                )
+                getattr(st, feedback["level"])(f"{feedback['title']}: {feedback['message']}")
 
                 if extracted_data:
                     st.markdown("**Campos detectados**")
