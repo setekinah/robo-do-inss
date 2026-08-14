@@ -2672,6 +2672,14 @@ def persist_document_uploads(
             if saved_path not in stored_files:
                 stored_files.append(saved_path)
         except ValueError as error:
+            log_technical_event(
+                DATA_DIR,
+                event="document.upload_rejected",
+                level="warning",
+                component="document_pipeline",
+                correlation_id=f"attendance-{attendance_id}",
+                context={"document_code": document_code, "reason": str(error)},
+            )
             st.error(f"Arquivo não anexado: {error}")
     return stored_files
 

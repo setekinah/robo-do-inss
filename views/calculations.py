@@ -22,6 +22,8 @@ from services.rgps_planning_service import (
     screen_rgps_planning,
     serialize_planning_result,
 )
+from services.technical_logging import log_technical_event
+from runtime_paths import DATA_DIR
 
 
 def render_calculations_view(render_page_header: Callable[[str, str], None]) -> None:
@@ -92,6 +94,14 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
                 preview["import_id"] = CnisImportRepository().create(int(selected_id), saved_path, preview)
                 st.session_state["cnis_import_preview"] = preview
             except ValueError as error:
+                log_technical_event(
+                    DATA_DIR,
+                    event="cnis.upload_rejected",
+                    level="warning",
+                    component="calculations",
+                    correlation_id=f"attendance-{selected_id}",
+                    context={"reason": str(error)},
+                )
                 st.error(f"CNIS não importado: {error}")
         preview = st.session_state.get("cnis_import_preview")
         if preview:
