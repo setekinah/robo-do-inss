@@ -155,7 +155,7 @@ as dependencias documentais aparecem hoje como opcionais em comentario no `requi
 | `office_settings.py` | Configuracoes do escritorio e percentuais de honorarios |
 | `auth_security.py` | Validacao e armazenamento local de credenciais protegidas por PBKDF2 |
 | `automation_orchestrator.py` | Recepcao idempotente, processamento e roteamento de eventos para tarefas do CRM |
-| `runtime_paths.py` | Diretorio unico e configuravel para todos os dados operacionais |
+| `data_paths.py` | Diretorio unico, configuravel e com migracao nao destrutiva dos dados legados |
 | `iniciar_robo_inss.bat` | Inicializacao direta do Streamlit |
 | `iniciar_robo_inss_completo.bat` | Inicializacao com verificacao de ambiente e abertura automatica do navegador |
 
@@ -552,11 +552,19 @@ Risco:
 
 ## 12.2 Diretorio operacional unificado
 
-`database.py`, `office_settings.py`, `document_storage.py` e `auth_security.py` usam o diretorio resolvido por `runtime_paths.py`.
+`database.py`, `office_settings.py`, `document_storage.py` e `auth_security.py` usam o diretorio resolvido por `data_paths.py`. `runtime_paths.py` permanece como uma camada de compatibilidade para imports existentes.
 
-Por padrao, o Windows utiliza `%LOCALAPPDATA%\\Robo do INSS\\data`. Testes podem definir `ROBO_INSS_DATA_DIR` para isolar totalmente os dados.
+Por padrao, o Windows utiliza `%LOCALAPPDATA%\\Robo do INSS\\data`. Testes podem definir `ROBO_INSS_DATA_DIR` para isolar totalmente os dados. Na primeira execucao, arquivos legados do diretorio local `data/` sao copiados somente quando ainda nao existem no destino; a origem e o destino existente sao preservados.
 
-## 12.3 Autenticacao local
+## 12.3 Base de calculos previdenciarios
+
+O catalogo em `services/calculation_service.py` registra apenas os modulos que podem ser preparados pelo sistema. A persistencia em `repositories/calculation_repository.py` guarda entradas, resultados, versao das regras e o estado de revisao no SQLite, sempre vinculada a um atendimento.
+
+Os motores numericos ainda nao sao liberados por esse catalogo: cada formula exige fonte normativa, versao identificavel, casos de teste e revisao humana antes de produzir orientacao juridica.
+
+O primeiro motor reconstruido e `services/rgps_planning_service.py`, com escopo restrito a uma triagem de 2026 da regra geral, dos pontos e da idade progressiva. As fontes de referencia sao a [EC 103/2019](https://www.planalto.gov.br/ccivil_03/constituicao/emendas/emc/emc103.htm) e a orientacao do [INSS para as regras de 2026](https://www.gov.br/inss/pt-br/noticias/noticias/regras-de-transicao-mudam-os-requisitos-para-aposentadoria-em-2026/). Pedagios, direito adquirido, RMI e periodos especiais permanecem fora desse escopo.
+
+## 12.4 Autenticacao local
 
 O login possui uma conta local persistida com PBKDF2-HMAC-SHA256, salt aleatorio e comparacao em tempo constante.
 

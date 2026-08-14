@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -23,6 +24,7 @@ from auth_security import (
     verify_credentials,
 )
 from database import (
+    DB_PATH,
     add_crm_activity,
     complete_crm_task,
     create_crm_task,
@@ -53,7 +55,17 @@ from document_rules import get_flow_document_strategy
 from document_storage import save_uploaded_document
 from flows_data import FLOW_DEFINITIONS
 from office_settings import load_office_settings, resolve_fee_percentage, save_office_settings
+from runtime_paths import DATA_DIR
+from services.backup_service import create_backup, restore_backup, validate_backup
+from services.environment_diagnostics import build_environment_diagnostic
+from services.technical_logging import log_technical_event, read_recent_events
+from services.contract_service import build_fee_contract_preview as build_contract_preview
+from services.document_score_service import build_document_case_score as calculate_document_case_score
+from services.document_feedback_service import build_document_feedback
+from services.maternity_benefit_service import clamp_benefit_value as clamp_maternity_benefit_value
+from services.crm_ux_catalog import CRM_UX_CATALOG
 from triage_engine import answer_current_question, create_state, get_current_node, get_result, step_back
+from views.calculations import render_calculations_view as render_calculations_workspace
 
 
 st.set_page_config(
@@ -107,6 +119,9 @@ NAV_MATERIAL_ICONS = {
     "contratos": ":material/description:",
     "configuracoes": ":material/settings:",
 }
+
+NAV_ITEMS.append(("calculos", "Cálculos", "🧮"))
+NAV_MATERIAL_ICONS["calculos"] = ":material/calculate:"
 
 CRM_STAGES = [
     ("novo_contato", "Novo contato"),
@@ -596,6 +611,20 @@ def inject_styles() -> None:
             border-color: rgba(176, 138, 74, 0.40);
             color: #ffffff;
         }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:first-child {
+            font-size: 0 !important;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:first-child::after {
+            content: "Arraste o arquivo aqui";
+            font-size: 0.95rem;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:nth-child(2) {
+            font-size: 0 !important;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] > div:nth-child(2)::after {
+            content: "ou clique em Procurar arquivos";
+            font-size: 0.82rem;
+        }
         .stButton > button:disabled,
         .stButton > button[disabled] {
             background: linear-gradient(180deg, #d9d6d0 0%, #cfc9c0 100%) !important;
@@ -609,6 +638,20 @@ def inject_styles() -> None:
             border-radius: 16px;
             border: 1px solid rgba(24, 38, 58, 0.08);
         }
+        .operation-journey {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.7rem;
+            margin: 0.25rem 0 1.15rem;
+        }
+        .operation-journey-step {
+            background: rgba(255,255,255,0.82);
+            border: 1px solid rgba(24, 38, 58, 0.09);
+            border-radius: 14px;
+            padding: 0.72rem 0.85rem;
+        }
+        .operation-journey-step strong { color: var(--navy); display: block; }
+        .operation-journey-step span { color: var(--muted); font-size: 0.82rem; }
         .stMarkdown h3, .stMarkdown h4 {
             color: var(--navy);
             font-family: Georgia, "Times New Roman", serif;
@@ -2166,13 +2209,13 @@ def render_admin_topbar() -> None:
             "<span class='law-admin-topbar law-admin-nav-marker'></span>",
             unsafe_allow_html=True,
         )
-        nav_columns = st.columns([1.45, 1, 1.08, 1, 1, 1.08, 0.78, 0.58], gap="small")
+        nav_columns = st.columns([1.45, 1, 1.08, 1, 1, 1, 1.08, 0.78, 0.58], gap="small")
         with nav_columns[0]:
             st.markdown(
                 "<div class='law-admin-brand-compact'><strong>SOFI.IA PREVI</strong><span>Administração jurídica</span></div>",
                 unsafe_allow_html=True,
             )
-        for column, (view_id, label, _emoji) in zip(nav_columns[1:6], NAV_ITEMS):
+        for column, (view_id, label, _emoji) in zip(nav_columns[1:7], NAV_ITEMS):
             with column:
                 if st.button(
                     label,
@@ -2184,12 +2227,12 @@ def render_admin_topbar() -> None:
                 ):
                     set_current_view(view_id)
                     st.rerun()
-        with nav_columns[6]:
+        with nav_columns[7]:
             st.markdown(
                 "<div class='law-admin-status-compact'><strong>● Ativo</strong><span>Dados locais</span></div>",
                 unsafe_allow_html=True,
             )
-        with nav_columns[7]:
+        with nav_columns[8]:
             if st.button(
                 "Sair",
                 key="auth_logout_top",
@@ -2626,64 +2669,8 @@ def get_document_progress(documents: list[Any]) -> tuple[int, int]:
 
 
 def build_document_case_score(documents: list[Any]) -> dict[str, Any]:
-    if not documents:
-        return {"score": 0, "label": "Sem dossie", "critical_gaps": [], "processed": 0}
-
-    status_weight = {
-        "validado": 1.0,
-        "em_validacao": 0.82,
-        "recebido": 0.62,
-        "pendente": 0.18,
-        "ilegivel": 0.05,
-        "inconsistente": 0.12,
-        "dispensado": 1.0,
-    }
-    extraction_weight = {
-        "extraido": 1.0,
-        "parcial": 0.72,
-        "nao_processado": 0.0,
-        "sem_texto": 0.18,
-        "dependencia_ausente": 0.0,
-        "erro": 0.0,
-        None: 0.0,
-    }
-
-    required_docs = [row for row in documents if int(row["required"]) == 1]
-    if not required_docs:
-        return {"score": 0, "label": "Sem obrigatorios", "critical_gaps": [], "processed": 0}
-
-    total_points = 0.0
-    critical_gaps: list[str] = []
-    processed = 0
-
-    for row in required_docs:
-        current_status = row["status"]
-        current_extraction = row["extraction_status"]
-        if current_extraction in {"extraido", "parcial"}:
-            processed += 1
-
-        total_points += status_weight.get(current_status, 0.0) * 70
-        total_points += extraction_weight.get(current_extraction, 0.0) * 30
-
-        if current_status in {"pendente", "ilegivel", "inconsistente"}:
-            critical_gaps.append(str(row["document_name"]))
-
-    max_points = len(required_docs) * 100
-    score = round((total_points / max_points) * 100) if max_points else 0
-
-    if score >= 80:
-        label = "Pronto para analise juridica"
-    elif score >= 55:
-        label = "Dossie parcialmente consolidado"
-    else:
-        label = "Dossie critico"
-
-    return {
-        "score": int(score),
-        "label": label,
-        "critical_gaps": critical_gaps[:4],
-        "processed": processed,
-    }
+    """Compatibilidade da interface; a regra de domínio vive no serviço."""
+    return calculate_document_case_score(documents)
 
 
 def persist_document_uploads(
@@ -2695,9 +2682,20 @@ def persist_document_uploads(
 ) -> list[str]:
     stored_files = list(current_files)
     for uploaded_file in uploaded_batch or []:
-        saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
-        if saved_path not in stored_files:
-            stored_files.append(saved_path)
+        try:
+            saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
+            if saved_path not in stored_files:
+                stored_files.append(saved_path)
+        except ValueError as error:
+            log_technical_event(
+                DATA_DIR,
+                event="document.upload_rejected",
+                level="warning",
+                component="document_pipeline",
+                correlation_id=f"attendance-{attendance_id}",
+                context={"document_code": document_code, "reason": str(error)},
+            )
+            st.error(f"Arquivo não anexado: {error}")
     return stored_files
 
 
@@ -4394,6 +4392,19 @@ def render_crm_pipeline_board(
                     )
 
 
+def render_crm_ux_map() -> None:
+    st.info("Inventário funcional do CRM atual para orientar fluxos, telas, estados e protótipos de UI/UX.")
+    for title, capability, interactions in CRM_UX_CATALOG:
+        with st.container(border=True):
+            left, right = st.columns([0.9, 1.1])
+            with left:
+                st.markdown(f"#### {title}")
+                st.write(capability)
+            with right:
+                st.caption("Interações e estados a projetar")
+                st.write(interactions)
+
+
 def render_crm_view() -> None:
     render_shell_page_header(
         "CRM Juridico",
@@ -4404,7 +4415,7 @@ def render_crm_view() -> None:
     crm_summary = get_crm_summary()
     crm_performance = get_crm_performance()
     pending_section = st.session_state.pop("pending_crm_section", None)
-    if pending_section in {"funil", "caso", "automacoes", "indicadores"}:
+    if pending_section in {"funil", "caso", "automacoes", "indicadores", "mapa_ux"}:
         st.session_state.crm_section = pending_section
     pending_case_id = st.session_state.pop("pending_crm_case_id", None)
     if pending_case_id is not None:
@@ -4416,18 +4427,21 @@ def render_crm_view() -> None:
 
     crm_section = st.radio(
         "Área do CRM",
-        options=["funil", "caso", "automacoes", "indicadores"],
+        options=["funil", "caso", "automacoes", "indicadores", "mapa_ux"],
         format_func=lambda value: {
             "funil": "🗂️ Funil e clientes",
             "caso": "👤 Caso em foco",
             "automacoes": "⚡ Automações",
             "indicadores": "📈 Indicadores",
-        }[value],
+        }.get(value, "🧩 Mapa UX"),
         key="crm_section",
         horizontal=True,
         label_visibility="collapsed",
         width="stretch",
     )
+    if crm_section == "mapa_ux":
+        render_crm_ux_map()
+        return
     if crm_section == "automacoes":
         render_automation_center(all_pipeline_records)
         return
@@ -4656,7 +4670,15 @@ def render_crm_view() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 def render_operational_workspace() -> None:
-    operational_tabs = st.tabs(["1. Nova triagem", "2. Documentos", "3. Casos salvos"])
+    st.markdown(
+        "<div class='operation-journey'>"
+        "<div class='operation-journey-step'><strong>1. Registrar cliente</strong><span>Escolha o atendimento e conclua a triagem.</span></div>"
+        "<div class='operation-journey-step'><strong>2. Organizar documentos</strong><span>Anexe, leia e revise o checklist do dossiê.</span></div>"
+        "<div class='operation-journey-step'><strong>3. Conduzir o caso</strong><span>Acompanhe pendências, tarefas e próximo passo.</span></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    operational_tabs = st.tabs(["1. Registrar cliente", "2. Documentos", "3. Casos salvos"])
     with operational_tabs[0]:
         render_operation_kpis()
         left, center, right = st.columns([0.78, 1.48, 0.94], gap="medium")
@@ -5033,37 +5055,80 @@ def render_settings_view() -> None:
         st.session_state.office_settings = load_office_settings()
         st.success("Configuracoes salvas com sucesso.")
 
+    st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
+    st.markdown("<h3 class='pre-section-title'>Backup e restauração local</h3>", unsafe_allow_html=True)
+    st.caption("O backup inclui banco, configurações e documentos deste computador. Nenhum arquivo é enviado à nuvem.")
+    if st.button("Criar backup agora", icon=":material/backup:", key="create_local_backup"):
+        backup_path = create_backup(DATA_DIR)
+        st.session_state["latest_local_backup"] = str(backup_path)
+        log_technical_event(DATA_DIR, event="backup.created", component="settings", context={"file_name": backup_path.name})
+        st.success(f"Backup criado: {backup_path.name}")
+    latest_backup = st.session_state.get("latest_local_backup")
+    if latest_backup:
+        latest_path = Path(latest_backup)
+        if latest_path.is_file():
+            st.download_button(
+                "Baixar último backup", latest_path.read_bytes(), file_name=latest_path.name,
+                mime="application/zip", key="download_local_backup",
+            )
+    restore_file = st.file_uploader("Restaurar backup (.zip)", type=["zip"], key="restore_local_backup")
+    if restore_file:
+        try:
+            file_list = validate_backup(restore_file.getvalue())
+            st.warning(f"A restauração substituirá {len(file_list)} arquivo(s). Um backup preventivo será criado antes.")
+            confirm_restore = st.text_input("Digite RESTAURAR para confirmar", key="confirm_local_restore")
+            if st.button("Restaurar backup", icon=":material/restore:", key="restore_local_backup_button"):
+                if confirm_restore != "RESTAURAR":
+                    st.error("Confirmação inválida. Digite RESTAURAR em letras maiúsculas.")
+                else:
+                    restored = restore_backup(DATA_DIR, restore_file.getvalue())
+                    log_technical_event(DATA_DIR, event="backup.restored", component="settings", level="warning", context={"file_count": len(restored)})
+                    st.success(f"{len(restored)} arquivo(s) restaurado(s). Reinicie o aplicativo para recarregar os dados.")
+        except ValueError as error:
+            st.error(str(error))
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
+    st.markdown("<h3 class='pre-section-title'>Diagnóstico do ambiente</h3>", unsafe_allow_html=True)
+    st.caption("Verifica recursos deste computador sem ler ou enviar documentos de clientes.")
+    if st.button("Verificar ambiente", icon=":material/health_and_safety:", key="run_environment_diagnostic"):
+        st.session_state["environment_diagnostic"] = build_environment_diagnostic(DATA_DIR, DB_PATH)
+        log_technical_event(
+            DATA_DIR, event="environment.diagnostic_completed", component="settings",
+            level="error" if st.session_state["environment_diagnostic"]["status"] == "error" else "warning" if st.session_state["environment_diagnostic"]["status"] == "warning" else "info",
+            context={"status": st.session_state["environment_diagnostic"]["status"]},
+        )
+    diagnostic = st.session_state.get("environment_diagnostic")
+    if diagnostic:
+        status_label = {"ok": "Pronto para operar", "warning": "Pronto com alertas", "error": "Ação necessária"}[diagnostic["status"]]
+        if diagnostic["status"] == "ok":
+            st.success(status_label)
+        elif diagnostic["status"] == "warning":
+            st.warning(status_label)
+        else:
+            st.error(status_label)
+        st.dataframe(
+            [{"Componente": item["label"], "Situação": {"ok": "Disponível", "warning": "Opcional/alerta", "error": "Indisponível"}[item["status"]], "Detalhe": item["detail"]} for item in diagnostic["checks"]],
+            use_container_width=True,
+            hide_index=True,
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    with st.expander("Eventos técnicos recentes", expanded=False):
+        events = read_recent_events(DATA_DIR)
+        if events:
+            st.dataframe(
+                [{"Quando": item["timestamp"], "Nível": item["level"], "Evento": item["event"], "Componente": item["component"], "Correlação": item["correlation_id"] or "-"} for item in events],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("Nenhum evento técnico registrado nesta instalação.")
+
 
 def build_fee_contract_preview(flow_name: str, lead_name: str) -> str:
-    client_name = lead_name or "CLIENTE"
-    today = date.today().strftime("%d/%m/%Y")
     office_settings = st.session_state.get("office_settings", load_office_settings())
-    fee_percentage = resolve_fee_percentage(flow_name, office_settings)
-    return f"""
-CONTRATO PARTICULAR DE HONORARIOS ADVOCATICIOS
-
-Data da minuta: {today}
-
-CONTRATANTE:
-{client_name}
-
-OBJETO:
-Prestacao de servicos advocaticios para analise, requerimento administrativo e/ou medidas correlatas
-relacionadas ao beneficio previdenciario de {flow_name}.
-
-HONORARIOS:
-Fica ajustado, a titulo de honorarios advocaticios contratuais, o percentual de {fee_percentage}% ({fee_percentage} por cento)
-sobre o valor economico obtido com o beneficio, incluindo valores atrasados, parcelas retroativas,
-RPV, precatorio ou quantias liberadas em favor do contratante, observada a estrategia juridica adotada.
-
-PAGAMENTO:
-Os honorarios serao pagos no momento da liberacao dos valores, autorizando o contratante a deducao
-do percentual contratado ou o pagamento imediato apos o recebimento do beneficio.
-
-CIENCIA:
-Esta minuta e um modelo inicial exibido pelo sistema e deve ser revisada e validada pelo escritorio
-antes da assinatura definitiva.
-"""
+    return build_contract_preview(flow_name, lead_name, office_settings)
 
 
 def render_contract_preview(flow: dict[str, Any], form_data: dict[str, Any]) -> None:
@@ -5077,7 +5142,7 @@ def render_contract_preview(flow: dict[str, Any], form_data: dict[str, Any]) -> 
 
 
 def clamp_benefit_value(value: float) -> float:
-    return min(max(value, SALARIO_MINIMO_2026), TETO_INSS_2026)
+    return clamp_maternity_benefit_value(value)
 
 
 def render_salario_maternidade_calculator() -> None:
@@ -5502,7 +5567,11 @@ def render_document_pipeline() -> None:
             st.markdown("<h3 class='pre-section-title'>Fila de dossiês</h3>", unsafe_allow_html=True)
             st.caption("Escolha um caso para leitura técnica e fechamento documental.")
             if not queue_rows:
-                st.info("Ainda não há atendimentos prontos para a fase documental.")
+                st.info(
+                    "Ainda não há dossiês para anexar documentos. Abra a aba **1. Nova triagem** acima, "
+                    "registre o cliente e conclua/salve a triagem. Em seguida, volte para **2. Documentos** "
+                    "e arraste o CNIS no item solicitado do checklist."
+                )
             else:
                 selected_queue_id = st.selectbox(
                     "Caso documental",
@@ -5652,14 +5721,11 @@ def render_document_pipeline() -> None:
 
                 if row["technical_notes"]:
                     st.caption(f"Leitura tecnica: {row['technical_notes']}")
-                if row["extraction_status"] in {"erro", "dependencia_ausente", "sem_texto"}:
-                    st.error(
-                        "A leitura automática não produziu texto confiável. Confira o arquivo e o diagnóstico técnico."
-                    )
-                elif row["raw_text"] and float(row["extraction_confidence"] or 0) < 0.70:
-                    st.warning(
-                        "Baixa confiança: não valide este documento sem comparação visual com o original."
-                    )
+                feedback = build_document_feedback(
+                    str(row["extraction_status"] or "nao_processado"),
+                    float(row["extraction_confidence"] or 0),
+                )
+                getattr(st, feedback["level"])(f"{feedback['title']}: {feedback['message']}")
 
                 if extracted_data:
                     st.markdown("**Campos detectados**")
@@ -5977,6 +6043,8 @@ def render_current_view() -> None:
         render_dashboard_view()
     elif current_view == "crm":
         render_crm_view()
+    elif current_view == "calculos":
+        render_calculations_workspace(render_shell_page_header)
     elif current_view == "leads":
         render_leads_view()
     elif current_view == "contratos":

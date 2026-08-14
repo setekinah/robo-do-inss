@@ -199,6 +199,60 @@ def init_database() -> None:
         ensure_document_column(conn, "extraction_status", "TEXT")
         ensure_document_column(conn, "extraction_confidence", "REAL")
         ensure_document_column(conn, "technical_notes", "TEXT")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS calculos_previdenciarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                calculation_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                inputs_json TEXT NOT NULL,
+                result_json TEXT,
+                ruleset_version TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'rascunho',
+                requires_human_review INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_calculos_previdenciarios_attendance
+            ON calculos_previdenciarios(attendance_id, id DESC)
+            """
+        )
+        ensure_calculation_column(conn, "review_notes", "TEXT")
+        ensure_calculation_column(conn, "reviewed_at", "TEXT")
+        ensure_calculation_column(conn, "created_by", "TEXT")
+        ensure_calculation_column(conn, "reviewed_by", "TEXT")
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS referencias_calculo (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                version TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                effective_date TEXT NOT NULL,
+                data_json TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS importacoes_cnis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                file_path TEXT NOT NULL,
+                extraction_status TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                fields_json TEXT NOT NULL,
+                technical_notes TEXT NOT NULL,
+                text_excerpt TEXT NOT NULL,
+                confirmed_at TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )"""
+        )
         backfill_document_checklists(conn)
         conn.commit()
 
@@ -230,6 +284,15 @@ def ensure_task_column(conn: sqlite3.Connection, column_name: str, column_type: 
     }
     if column_name not in columns:
         conn.execute(f"ALTER TABLE crm_tarefas ADD COLUMN {column_name} {column_type}")
+
+
+def ensure_calculation_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(calculos_previdenciarios)").fetchall()
+    }
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE calculos_previdenciarios ADD COLUMN {column_name} {column_type}")
 
 
 def save_attendance(
