@@ -190,7 +190,7 @@ body {
 .doc-status-aprovado { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
 .doc-status-rejeitado { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); }
 
-/* --- KANBAN BOARD INTELIGENTE & RESPONSIVO (SEM SCROLLBAR HORIZONTALE HORRÍVEL) --- */
+/* --- KANBAN BOARD INTELIGENTE & RESPONSIVO --- */
 .kanban-filter-bar {
   display: flex;
   align-items: center;
@@ -236,10 +236,9 @@ body {
   gap: 1.2rem;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden; /* Elimina barra transversal feia! */
+  overflow-x: hidden;
 }
 
-/* Quando uma coluna específica está focada */
 .kanban-board.focused-mode {
   grid-template-columns: 1fr;
   max-width: 800px;
@@ -354,6 +353,39 @@ body {
   margin-top: 0.6rem;
   padding-top: 0.6rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* --- DROPZONE E INTELIGÊNCIA DOCUMENTAL OCR --- */
+.dropzone {
+  border: 2px dashed rgba(0, 242, 254, 0.35);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  background: rgba(0, 242, 254, 0.02);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.dropzone:hover,
+.dropzone.drag-over {
+  border-color: var(--primary);
+  background: rgba(0, 242, 254, 0.1);
+  box-shadow: 0 0 25px rgba(0, 242, 254, 0.25);
+  transform: translateY(-2px);
+}
+
+.dropzone i {
+  font-size: 3.2rem;
+  color: var(--primary);
+  margin-bottom: 1rem;
+  transition: transform var(--transition-fast);
+}
+
+.dropzone:hover i,
+.dropzone.drag-over i {
+  transform: scale(1.15);
 }
 
 /* --- OVERLAY DE LOGIN / REGISTRO PREVIA --- */
@@ -1005,27 +1037,6 @@ canvas#metrics-chart {
 .btn-primary:hover {
   transform: translateY(-2px);
   filter: brightness(1.1);
-}
-
-.dropzone {
-  border: 2px dashed rgba(0, 242, 254, 0.3);
-  border-radius: var(--radius-lg);
-  padding: 3rem 2rem;
-  text-align: center;
-  background: rgba(0, 242, 254, 0.02);
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.dropzone:hover {
-  border-color: var(--primary);
-  background: rgba(0, 242, 254, 0.05);
-}
-
-.dropzone i {
-  font-size: 3rem;
-  color: var(--primary);
-  margin-bottom: 1rem;
 }
 
 [popover] {

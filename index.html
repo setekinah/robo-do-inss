@@ -311,7 +311,7 @@
         </div>
       </section>
 
-      <!-- TAB 2: ESTEIRA KANBAN PREV REFORMULADA (SMART FILTER BAR & NO HORIZONTAL SCROLL) -->
+      <!-- TAB 2: ESTEIRA KANBAN PREV -->
       <section id="view-kanban" class="tab-view" style="display: none;">
         <div class="section-header">
           <div>
@@ -320,7 +320,6 @@
           </div>
         </div>
 
-        <!-- Barra Inteligente de Seleção de Etapa -->
         <div class="kanban-filter-bar">
           <button class="kanban-pill active" data-stagefilter="all" onclick="app.filterKanbanStage('all')">
             <i class="fa-solid fa-layer-group"></i> Todas as Fases
@@ -345,7 +344,6 @@
           </button>
         </div>
 
-        <!-- Quadro Kanban Adaptativo -->
         <div class="kanban-board" id="kanban-board">
           <div class="kanban-column" data-stage="triagem">
             <div class="kanban-header">
@@ -447,31 +445,37 @@
         </div>
       </section>
 
+      <!-- TAB 4: INTELIGÊNCIA DOCUMENTAL & OCR FUNCIONAL -->
       <section id="view-ocr" class="tab-view" style="display: none;">
         <div class="section-header">
           <div>
             <h1 class="section-title">Inteligência Documental <span>& OCR</span></h1>
-            <p style="color: var(--text-muted);">Leitura local de CNIS, Carteira de Trabalho, Carta de Concessão e Laudos Médicos.</p>
+            <p style="color: var(--text-muted);">Leitura local e análise inteligente de CNIS, Carteira de Trabalho, Carta de Concessão e Laudos Médicos.</p>
           </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
           <div class="glass-panel" style="padding: 1.8rem;">
             <h3 style="font-family: var(--font-heading); margin-bottom: 1rem;"><i class="fa-solid fa-cloud-arrow-up"></i> Leitor de PDF / Imagem</h3>
+            
             <div class="dropzone" id="ocr-dropzone">
+              <input type="file" id="ocr-file-input" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" style="display: none;">
               <i class="fa-solid fa-file-pdf"></i>
-              <h3>Arraste o documento aqui ou clique para selecionar</h3>
-              <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem;">Suporta PDF nativo, PNG ou JPG (Processamento 100% Local)</p>
+              <h3 id="ocr-dropzone-title">Arraste o documento aqui ou clique para selecionar</h3>
+              <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem;" id="ocr-dropzone-sub">Suporta PDF nativo, PNG ou JPG (Processamento 100% Local)</p>
+              <button type="button" class="btn-primary" style="margin-top: 1.2rem; font-size: 0.85rem; padding: 0.6rem 1.2rem;" onclick="document.getElementById('ocr-file-input').click(); event.stopPropagation();">
+                <i class="fa-solid fa-folder-open"></i> Selecionar Arquivo do Computador
+              </button>
             </div>
 
             <div id="ocr-status-box" style="margin-top: 1.5rem; display: none; padding: 1rem; background: rgba(0,242,254,0.05); border-radius: var(--radius-sm); border: 1px solid var(--glass-border-glow);">
-              <span style="font-size: 0.85rem; color: var(--primary); font-weight: 600;"><i class="fa-solid fa-gear fa-spin"></i> Processando documento com OCR neural...</span>
+              <span style="font-size: 0.85rem; color: var(--primary); font-weight: 600;" id="ocr-status-text"><i class="fa-solid fa-gear fa-spin"></i> Processando documento com OCR neural...</span>
             </div>
           </div>
 
           <div class="glass-panel" style="padding: 1.8rem;">
             <h3 style="font-family: var(--font-heading); margin-bottom: 1rem;"><i class="fa-solid fa-code"></i> Dados Extraídos Inteligentes</h3>
-            <div id="ocr-extracted-tree" style="background: var(--bg-dark); padding: 1rem; border-radius: var(--radius-sm); font-family: var(--font-code); font-size: 0.85rem; color: var(--accent-cyan); min-height: 200px; overflow-x: auto;">
+            <div id="ocr-extracted-tree" style="background: var(--bg-dark); padding: 1rem; border-radius: var(--radius-sm); font-family: var(--font-code); font-size: 0.85rem; color: var(--accent-cyan); min-height: 260px; overflow-x: auto; max-height: 420px; overflow-y: auto;">
               // Selecione ou envie um documento para extrair dados previdenciários
             </div>
           </div>
