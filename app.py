@@ -2667,9 +2667,12 @@ def persist_document_uploads(
 ) -> list[str]:
     stored_files = list(current_files)
     for uploaded_file in uploaded_batch or []:
-        saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
-        if saved_path not in stored_files:
-            stored_files.append(saved_path)
+        try:
+            saved_path = save_uploaded_document(attendance_id, document_code, uploaded_file)
+            if saved_path not in stored_files:
+                stored_files.append(saved_path)
+        except ValueError as error:
+            st.error(f"Arquivo não anexado: {error}")
     return stored_files
 
 

@@ -85,11 +85,14 @@ def render_calculations_view(render_page_header: Callable[[str, str], None]) -> 
         )
         st.caption("Formatos aceitos: PDF, PNG, JPG e TIFF. Se arrastar não funcionar no navegador, clique em Procurar arquivos.")
         if cnis_upload and st.button("Ler CNIS e gerar prévia", key="read_cnis_import"):
-            saved_path = save_uploaded_document(int(selected_id), "CNIS_IMPORTACAO", cnis_upload)
-            with st.spinner("Extraindo texto localmente..."):
-                preview = build_cnis_preview([saved_path])
-            preview["import_id"] = CnisImportRepository().create(int(selected_id), saved_path, preview)
-            st.session_state["cnis_import_preview"] = preview
+            try:
+                saved_path = save_uploaded_document(int(selected_id), "CNIS_IMPORTACAO", cnis_upload)
+                with st.spinner("Extraindo texto localmente..."):
+                    preview = build_cnis_preview([saved_path])
+                preview["import_id"] = CnisImportRepository().create(int(selected_id), saved_path, preview)
+                st.session_state["cnis_import_preview"] = preview
+            except ValueError as error:
+                st.error(f"CNIS não importado: {error}")
         preview = st.session_state.get("cnis_import_preview")
         if preview:
             st.caption(f"Status: {preview['extraction_status']} · confiança: {preview['confidence']:.0%}")

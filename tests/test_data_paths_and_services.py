@@ -21,7 +21,7 @@ class _Upload:
     name = "meu documento.pdf"
 
     def getbuffer(self) -> bytes:
-        return b"arquivo de teste"
+        return b"%PDF-1.7\narquivo de teste"
 
 
 class DataPathsAndServicesTests(unittest.TestCase):
@@ -80,6 +80,13 @@ class DataPathsAndServicesTests(unittest.TestCase):
         self.assertIn("Ana", contract)
         self.assertIn("25%", contract)
         self.assertIn("12/08/2026", contract)
+
+    def test_upload_rejects_extension_that_does_not_match_content(self) -> None:
+        with self.assertRaises(ValueError):
+            document_storage.validate_uploaded_document("cnis.pdf", b"not a pdf")
+        with self.assertRaises(ValueError):
+            document_storage.validate_uploaded_document("arquivo.exe", b"MZ")
+        document_storage.validate_uploaded_document("cnis.pdf", b"%PDF-1.7\nconteudo")
 
 
 if __name__ == "__main__":
