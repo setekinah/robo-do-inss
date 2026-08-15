@@ -137,7 +137,7 @@
         <div id="modal-strategy-content" class="strategy-loading">Consolidando diagnóstico do caso...</div>
       </div>
       <div id="modaltab-history" class="modal-panel">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+        <div class="lead-modal-history-grid">
           <div>
             <h4 style="margin-bottom: 0.8rem; font-family: var(--font-heading);"><i class="fa-solid fa-plus-circle" style="color: var(--primary);"></i> Nova Interação</h4>
             <div class="form-group">
@@ -429,7 +429,7 @@
             <h1 class="section-title">Base de <span>Relacionamento</span></h1>
             <p style="color: var(--text-muted);">Leads sem elegibilidade atual, preservados para revisão futura e relacionamento autorizado.</p>
           </div>
-          <div style="display:flex; align-items:center; gap:1rem;"><div class="relationship-total"><span id="relationship-count">0</span> em acompanhamento</div><button class="btn-primary" type="button" onclick="app.openNewLead('relationship')"><i class="fa-solid fa-user-plus"></i> Adicionar contato</button></div>
+          <div class="relationship-header-actions"><div class="relationship-total"><span id="relationship-count">0</span> em acompanhamento</div><button class="btn-primary" type="button" onclick="app.openNewLead('relationship')"><i class="fa-solid fa-user-plus"></i> Adicionar contato</button></div>
         </div>
         <div class="relationship-notice"><i class="fa-solid fa-shield-halved"></i> Use contatos de remarketing apenas quando houver consentimento específico registrado. Esta base não é destinada à comercialização de dados.</div>
         <div id="relationship-list" class="relationship-list"></div>
@@ -514,7 +514,7 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem; align-items: start;">
+        <div class="ocr-workspace">
           <!-- COLUNA ESQUERDA: CAPTURA & UPLOAD DE ARQUIVOS -->
           <div class="glass-panel" style="padding: 1.5rem;">
             <h3 style="font-family: var(--font-heading); margin-bottom: 1rem; font-size: 1.1rem;">
@@ -554,7 +554,7 @@
           <!-- COLUNA DIREITA: PAINEL EXECUTIVO GRAFICO DO CNIS -->
           <div class="glass-panel" style="padding: 1.8rem; min-height: 520px;">
             <!-- HEADER COM ALTERNADOR DE VISÃO -->
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; padding-bottom: 0.8rem; border-bottom: 1px solid var(--glass-border);">
+            <div class="ocr-report-header">
               <div>
                 <h3 style="font-family: var(--font-heading); font-size: 1.2rem; display: flex; align-items: center; gap: 0.6rem;">
                   <i class="fa-solid fa-chart-pie" style="color: var(--primary);"></i>
@@ -563,7 +563,7 @@
               </div>
 
               <!-- TOGGLE VIEW MODE -->
-              <div style="display: flex; background: rgba(255,255,255,0.04); padding: 0.25rem; border-radius: var(--radius-full); border: 1px solid var(--glass-border);">
+              <div class="ocr-view-toggle">
                 <button class="kanban-pill active" id="btn-ocr-mode-visual" style="padding: 0.35rem 0.9rem; font-size: 0.78rem;" onclick="app.toggleOCRViewMode('visual')">
                   <i class="fa-solid fa-chart-column"></i> Visão Gráfica Executiva
                 </button>

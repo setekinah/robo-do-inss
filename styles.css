@@ -1293,3 +1293,168 @@ canvas#metrics-chart {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- AJUSTES DE LAYOUT: GARANTIR ENCOLHIMENTO REAL DAS TELAS --- */
+.app-container > *,
+.main-content,
+.topbar,
+.tab-view,
+.ocr-workspace > * {
+  min-width: 0;
+}
+
+.ocr-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.ocr-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.ocr-view-toggle {
+  display: flex;
+  flex: 0 1 auto;
+  background: rgba(255,255,255,0.04);
+  padding: 0.25rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+}
+
+.lead-modal-history-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.relationship-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .app-container {
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-rows: 64px minmax(0, 1fr);
+  }
+
+  .topbar {
+    min-height: 64px;
+    padding: 0 1rem;
+    gap: 0.75rem;
+  }
+
+  .search-box {
+    min-width: 0;
+    width: min(250px, 42vw);
+  }
+
+  .topbar-right {
+    gap: 0.55rem;
+  }
+
+  .status-badge span {
+    display: none;
+  }
+
+  .sidebar {
+    min-width: 64px;
+  }
+
+  .main-content {
+    padding: 1.25rem;
+  }
+
+  .section-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .section-header p {
+    line-height: 1.5;
+  }
+
+  .relationship-header-actions {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .ocr-workspace,
+  .lead-modal-history-grid,
+  .options-grid,
+  .metrics-grid,
+  .form-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ocr-report-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ocr-view-toggle {
+    max-width: 100%;
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .ocr-view-toggle .kanban-pill {
+    flex: 1 0 auto;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .kanban-filter-bar {
+    align-items: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .kanban-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .cnis-vinculo-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 460px) {
+  .main-content {
+    padding: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.55rem;
+  }
+
+  .topbar-left {
+    min-width: 0;
+  }
+
+  .search-box {
+    width: 34vw;
+  }
+
+  .search-box input {
+    min-width: 0;
+  }
+}
