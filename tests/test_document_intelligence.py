@@ -193,6 +193,40 @@ class DocumentIntelligenceTests(unittest.TestCase):
         self.assertEqual(values["data_nascimento"], "30/08/1961")
         self.assertEqual(values["rg"], "8654541")
 
+    def test_classification_does_not_turn_ctps_with_nit_into_cnis(self) -> None:
+        text = (
+            "CARTEIRA DE TRABALHO E PREVIDENCIA SOCIAL\n"
+            "CTPS\nNome: MARIA APARECIDA DOS SANTOS\n"
+            "NIT: 123.45678.90-0\nEmpresa: Alfa Servicos\nAdmissao: 01/02/2020"
+        )
+
+        classification = intelligence.classify_document("carteira-trabalho.pdf", text)
+        fields = intelligence.extract_document_fields(classification["code"], text)
+        assessment = intelligence.assess_document_extraction(
+            classification, fields, raw_text=text, source_confidence=0.94
+        )
+
+        self.assertEqual(classification["code"], "CTPS")
+        self.assertEqual(assessment["status"], "extraido")
+
+    def test_document_specific_fields_support_medical_report(self) -> None:
+        text = (
+            "RELATORIO MEDICO\nNome completo: ANA MARIA SOUZA\n"
+            "CID: M54.5\nCRM-SP: 123456"
+        )
+
+        classification = intelligence.classify_document("laudo.pdf", text)
+        fields = intelligence.extract_document_fields(classification["code"], text)
+        values = {field["key"]: field["value"] for field in fields}
+        assessment = intelligence.assess_document_extraction(
+            classification, fields, raw_text=text, source_confidence=0.91
+        )
+
+        self.assertEqual(classification["code"], "LAUDO_MEDICO")
+        self.assertEqual(values["cid"], "M54.5")
+        self.assertEqual(values["crm_medico"], "123456")
+        self.assertEqual(assessment["status"], "extraido")
+
     def test_corrupted_pdf_reports_hard_failure_without_crashing(self) -> None:
         target = self.temp_dir / "corrupted.pdf"
         target.write_bytes(b"not a valid pdf")

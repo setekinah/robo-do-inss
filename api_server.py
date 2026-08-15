@@ -863,7 +863,24 @@ ___________________________________________________
         document_fields = document_intelligence.extract_document_fields(
             classification["code"], analysis["raw_text"]
         )
-        field_values = {field["key"]: field["value"] for field in document_fields}
+        field_values = {
+            field["key"]: field["value"]
+            for field in document_fields
+            if field["value"] != "Nao identificado"
+        }
+        extracted = {**extracted, **field_values}
+        assessment = document_intelligence.assess_document_extraction(
+            classification,
+            document_fields,
+            raw_text=analysis["raw_text"],
+            source_confidence=float(analysis["extraction_confidence"]),
+        )
+        if assessment["missing_fields"]:
+            analysis["technical_notes"] += (
+                " | Campos do tipo documental ainda pendentes: "
+                + ", ".join(assessment["missing_fields"])
+                + "."
+            )
         if classification["code"] == "CNIS":
             cnis_report = document_intelligence.build_cnis_report(analysis["raw_text"], extracted)
             catalog_matches = cnis_knowledge.build_indicator_matches(
@@ -900,15 +917,16 @@ ___________________________________________________
                 "vinculos": [],
                 "competencias_identificadas": [],
             }
-        status = analysis["extraction_status"]
+        status = assessment["status"]
         success = status in {"extraido", "parcial"}
         self._send_json(
             {
                 "success": success,
                 "file_name": file_name,
-                "document_code": document_code,
+                "document_code": classification["code"],
+                "requested_document_code": document_code,
                 "extraction_status": status,
-                "extraction_confidence": analysis["extraction_confidence"],
+                "extraction_confidence": assessment["confidence"],
                 "requires_review": status != "extraido",
                 "classification": classification,
                 "document_fields": document_fields,
@@ -1041,5 +1059,8 @@ def run_server(port: int = 8000) -> None:
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
+    # A porta pode ser passada como argumento para o launcher local, evitando
+    # depender de estado global do ambiente durante reinicializações.
+    requested_port = sys.argv[1] if len(sys.argv) > 1 else os.getenv("PORT", 8000)
+    port = int(requested_port)
     run_server(port)

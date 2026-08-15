@@ -6,6 +6,7 @@ import importlib.util
 import os
 import re
 import shutil
+import unicodedata
 from datetime import datetime
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
@@ -770,54 +771,75 @@ DOCUMENT_DEFINITIONS: dict[str, dict[str, Any]] = {
     "CNIS": {
         "label": "CNIS - Extrato Previdenciario",
         "modules": ["vinculos", "carencia", "simulacao", "qualificacao"],
-        "signals": ["cnis", "extrato previdenciario", "nit", "remuneracoes", "vinculos"],
+        "strong_signals": ["cnis", "extrato previdenciario", "remuneracoes", "vinculos previdenciarios"],
+        "weak_signals": ["nit", "competencias", "indicador"],
+        "required_fields": ["nome", "cpf", "nit"],
     },
     "RG": {
         "label": "Documento de Identidade - RG",
         "modules": ["cadastro", "qualificacao"],
-        "signals": ["doc. identidade", "doc identidade", "org. emissor", "orgao emissor", "ssp", "registro geral"],
+        "strong_signals": ["doc identidade", "orgao emissor", "registro geral"],
+        "weak_signals": ["ssp", "rg"],
+        "required_fields": ["nome", "cpf", "rg"],
     },
     "CNH": {
         "label": "Carteira Nacional de Habilitacao - CNH",
         "modules": ["cadastro", "qualificacao"],
-        "signals": ["carteira nacional de habilitacao", "detran", "registro nacional", "cnh"],
+        "strong_signals": ["carteira nacional de habilitacao", "registro nacional"],
+        "weak_signals": ["detran", "cnh"],
+        "required_fields": ["nome", "cpf", "numero_cnh"],
     },
     "CTPS": {
         "label": "Carteira de Trabalho - CTPS",
         "modules": ["cadastro", "vinculos", "qualificacao"],
-        "signals": ["carteira de trabalho", "ctps", "contrato de trabalho", "admissao"],
+        "strong_signals": ["carteira de trabalho", "ctps"],
+        "weak_signals": ["contrato de trabalho", "admissao", "empregador"],
+        "required_fields": ["nome", "empresa", "data_admissao"],
     },
     "PPP": {
         "label": "Perfil Profissiografico Previdenciario - PPP/LTCAT",
         "modules": ["aposentadoria_especial", "qualificacao"],
-        "signals": ["perfil profissiografico", "ppp", "ltcat", "agente nocivo"],
+        "strong_signals": ["perfil profissiografico", "ltcat"],
+        "weak_signals": ["ppp", "agente nocivo"],
+        "required_fields": ["empresa", "funcao", "agente_nocivo"],
     },
     "LAUDO_MEDICO": {
         "label": "Laudo Medico",
         "modules": ["auxilio_doenca", "invalidez", "auxilio_acidente"],
-        "signals": ["laudo medico", "relatorio medico", "cid", "crm"],
+        "strong_signals": ["laudo medico", "relatorio medico"],
+        "weak_signals": ["cid", "crm"],
+        "required_fields": ["nome", "cid"],
     },
     "CADUNICO": {
         "label": "CadUnico",
         "modules": ["bpc_loas", "qualificacao"],
-        "signals": ["cadunico", "cadunico", "nis", "renda familiar", "grupo familiar"],
+        "strong_signals": ["cadunico", "folha resumo cadastro unico"],
+        "weak_signals": ["nis", "renda familiar", "grupo familiar"],
+        "required_fields": ["nome", "nis"],
     },
     "CARTA_CONCESSAO": {
         "label": "Carta de Concessao",
         "modules": ["revisao_beneficio", "qualificacao"],
-        "signals": ["carta de concessao", "numero do beneficio", "memoria de calculo", "rmi"],
+        "strong_signals": ["carta de concessao", "memoria de calculo"],
+        "weak_signals": ["numero do beneficio", "rmi", "nb"],
+        "required_fields": ["nome", "numero_beneficio"],
     },
 }
 
 
 def classify_document(file_name: str, raw_text: str) -> dict[str, Any]:
     """Classify locally by OCR text before choosing a field schema or legal module."""
-    normalized = f"{file_name}\n{raw_text}".casefold()
-    ranked: list[tuple[int, str, list[str]]] = []
+    normalized_file_name = normalize_document_text(file_name)
+    normalized_text = normalize_document_text(raw_text)
+    ranked: list[tuple[float, str, list[str]]] = []
     for code, definition in DOCUMENT_DEFINITIONS.items():
-        evidence = [signal for signal in definition["signals"] if signal.casefold() in normalized]
-        if evidence:
-            ranked.append((len(evidence), code, evidence))
+        strong = [signal for signal in definition["strong_signals"] if normalize_document_text(signal) in normalized_text]
+        weak = [signal for signal in definition["weak_signals"] if normalize_document_text(signal) in normalized_text]
+        file_hits = [signal for signal in [*definition["strong_signals"], *definition["weak_signals"]] if normalize_document_text(signal) in normalized_file_name]
+        score = len(strong) * 2.2 + len(weak) * 0.65 + len(file_hits) * 1.1
+        # Um sinal fraco isolado (por exemplo, NIT ou CRM) nao identifica o documento.
+        if strong or len(weak) >= 2 or file_hits:
+            ranked.append((score, code, [*strong, *weak, *[f"arquivo:{item}" for item in file_hits]]))
     if not ranked:
         return {
             "code": "NAO_CLASSIFICADO",
@@ -831,10 +853,17 @@ def classify_document(file_name: str, raw_text: str) -> dict[str, Any]:
     return {
         "code": code,
         "label": definition["label"],
-        "confidence": round(min(0.95, 0.45 + score * 0.16), 2),
+        "confidence": round(min(0.95, 0.35 + score * 0.14), 2),
         "evidence": evidence,
         "modules": definition["modules"],
     }
+
+
+def normalize_document_text(value: str) -> str:
+    """Normaliza acentos, pontuacao e espacos para sinais resistentes ao OCR."""
+    decomposed = unicodedata.normalize("NFKD", value or "")
+    without_accents = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", " ", without_accents.casefold()).strip()
 
 
 def extract_document_fields(document_code: str, raw_text: str) -> list[dict[str, str]]:
@@ -858,6 +887,34 @@ def extract_document_fields(document_code: str, raw_text: str) -> list[dict[str,
             ("competencias", "Competencias", extract_competencies(raw_text)),
             ("indicadores", "Indicadores INSS", summarize_keywords(raw_text, "indicadores")),
         ]
+    elif document_code == "CTPS":
+        specific = [
+            ("empresa", "Empresa", search_labeled_value(raw_text, ["empresa", "empregador", "razao social"])),
+            ("data_admissao", "Data de admissao", search_labeled_date(raw_text, ["admissao", "data admissao"])),
+            ("data_saida", "Data de saida", search_labeled_date(raw_text, ["saida", "demissao", "rescisao"])),
+        ]
+    elif document_code == "PPP":
+        specific = [
+            ("empresa", "Empresa", search_labeled_value(raw_text, ["empresa", "empregador", "razao social"])),
+            ("funcao", "Funcao", search_labeled_value(raw_text, ["funcao", "cargo"])),
+            ("agente_nocivo", "Agente nocivo", search_labeled_value(raw_text, ["agente nocivo", "agentes nocivos"])),
+        ]
+    elif document_code == "LAUDO_MEDICO":
+        specific = [
+            ("cid", "CID", extract_cid(raw_text)),
+            ("crm_medico", "CRM do profissional", extract_crm(raw_text)),
+        ]
+    elif document_code == "CADUNICO":
+        specific = [
+            ("nis", "NIS", first_valid_nit(raw_text)),
+            ("renda_familiar", "Renda familiar", extract_currency_after_label(raw_text, ["renda familiar", "renda per capita"])),
+        ]
+    elif document_code == "CARTA_CONCESSAO":
+        specific = [
+            ("numero_beneficio", "Numero do beneficio", extract_benefit_number(raw_text)),
+            ("dib", "DIB", search_labeled_date(raw_text, ["dib", "data inicio beneficio"])),
+            ("rmi", "RMI", extract_currency_after_label(raw_text, ["rmi", "renda mensal inicial"])),
+        ]
     fields = common + specific
     return [
         {
@@ -868,6 +925,31 @@ def extract_document_fields(document_code: str, raw_text: str) -> list[dict[str,
         }
         for key, label, value in fields
     ]
+
+
+def assess_document_extraction(
+    classification: dict[str, Any],
+    fields: list[dict[str, str]],
+    *,
+    raw_text: str,
+    source_confidence: float,
+) -> dict[str, Any]:
+    """Recalcula status usando os campos do tipo detectado, nao um schema de CNIS."""
+    if not raw_text.strip():
+        return {"status": "sem_texto", "confidence": 0.0, "missing_fields": []}
+    code = str(classification.get("code") or "NAO_CLASSIFICADO")
+    required = DOCUMENT_DEFINITIONS.get(code, {}).get("required_fields", ["nome", "cpf"])
+    values = {field["key"]: field.get("value", "") for field in fields}
+    missing = [key for key in required if not values.get(key) or values[key] == "Nao identificado"]
+    coverage = (len(required) - len(missing)) / len(required) if required else 1.0
+    confidence = round(max(0.0, min(0.99, source_confidence * 0.60 + coverage * 0.25 + float(classification.get("confidence") or 0.0) * 0.15)), 2)
+    if code == "NAO_CLASSIFICADO":
+        status = "parcial"
+    elif not missing and confidence >= 0.62:
+        status = "extraido"
+    else:
+        status = "parcial"
+    return {"status": status, "confidence": confidence, "missing_fields": missing}
 
 
 def extract_date_with_reverse_label(text: str, labels: list[str]) -> str:
@@ -902,6 +984,41 @@ def extract_issuing_agency(text: str) -> str:
 def extract_cnh_number(text: str) -> str:
     match = re.search(r"(?:registro|cnh)\s*[:\-]?\s*(\d{9,12})", text, flags=re.IGNORECASE)
     return match.group(1) if match else ""
+
+
+def extract_cid(text: str) -> str:
+    match = re.search(r"\bCID(?:[-\s]?[A-Z])?\s*[:\-]?\s*([A-Z]\d{2}(?:\.\d{1,2})?)\b", text, flags=re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
+def extract_crm(text: str) -> str:
+    match = re.search(r"\bCRM(?:[-/]?[A-Z]{2})?\s*[:\-]?\s*(\d{3,8})\b", text, flags=re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
+def extract_currency_after_label(text: str, labels: list[str]) -> str:
+    for label in labels:
+        match = re.search(
+            rf"{re.escape(label)}\s*[:\-]?\s*(R\$\s*[\d.]+,\d{{2}})",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return re.sub(r"\s+", " ", match.group(1)).strip()
+    return ""
+
+
+def extract_benefit_number(text: str) -> str:
+    labels = ["numero do beneficio", "número do benefício", "beneficio", "benefício", "nb"]
+    for label in labels:
+        match = re.search(
+            rf"{re.escape(label)}\s*[:\-]?\s*(\d{{3}}[.\s]?\d{{3}}[.\s]?\d{{3}}[-\s]?\d)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).strip()
+    return ""
 
 
 def extract_cnis_vinculos(raw_text: str) -> list[dict[str, Any]]:
