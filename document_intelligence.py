@@ -710,6 +710,260 @@ def extract_structured_fields(raw_text: str, critical_fields: list[str]) -> dict
     return {field: extract_field_value(field, raw_text) for field in critical_fields}
 
 
+def build_cnis_report(raw_text: str, extracted_data: dict[str, str]) -> dict[str, Any]:
+    """Build a CNIS report only from text evidence; it never decides entitlement."""
+    vinculos = extract_cnis_vinculos(raw_text)
+    competencias = extract_competency_list(raw_text)
+    indicadores = [indicator for vinculo in vinculos for indicator in vinculo["indicadores"]]
+    intervals = [
+        (vinculo["inicio_data"], vinculo["fim_data"])
+        for vinculo in vinculos
+        if vinculo.get("inicio_data") and vinculo.get("fim_data")
+    ]
+    days = contribution_days(intervals)
+    for vinculo in vinculos:
+        vinculo.pop("inicio_data", None)
+        vinculo.pop("fim_data", None)
+    if days:
+        years, remainder = divmod(days, 365)
+        months, remaining_days = divmod(remainder, 30)
+        total_time = f"{years} ano(s), {months} mes(es) e {remaining_days} dia(s)"
+        time_note = "Estimativa baseada em periodos com inicio e fim identificados; requer conferencia tecnica."
+    else:
+        total_time = "Nao apurado automaticamente"
+        time_note = "Nao ha periodos completos e confiaveis suficientes no texto extraido."
+    if competencias:
+        carencia = f"{len(competencias)} competencia(s) identificada(s)"
+        carencia_note = "Contagem documental preliminar; nao equivale a carencia homologada pelo INSS."
+    else:
+        carencia = "Nao apurada automaticamente"
+        carencia_note = "Nenhuma competencia valida foi estruturada para calculo."
+    return {
+        "segurado": {
+            "nome": extracted_data.get("nome", "") or "Nao identificado no documento",
+            "cpf": extracted_data.get("cpf", "") or "Nao identificado",
+            "nit_pis": extracted_data.get("nit", "") or "Nao identificado",
+            "data_nascimento": extracted_data.get("data_nascimento", "") or "Nao identificada",
+        },
+        "metricas": {
+            "tempo_contribuicao_total": total_time,
+            "tempo_contribuicao_dias": days or None,
+            "tempo_nota": time_note,
+            "carencia_cumprida": carencia,
+            "carencia_nota": carencia_note,
+            "rmi_estimada": "Nao calculada",
+            "rmi_nota": "A RMI exige base contributiva validada e calculo tecnico.",
+            "diagnostico_principal": "Sem diagnostico automatico",
+            "diagnostico_subtitulo": "A leitura documental nao substitui analise previdenciaria.",
+            "alertas_contagem": len(indicadores),
+            "alertas_nota": (
+                "Indicadores identificados: " + ", ".join(sorted(set(indicadores)))
+                if indicadores else "Nenhum indicador INSS estruturado foi identificado no texto."
+            ),
+        },
+        "vinculos": vinculos,
+        "competencias_identificadas": competencias,
+    }
+
+
+DOCUMENT_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "CNIS": {
+        "label": "CNIS - Extrato Previdenciario",
+        "modules": ["vinculos", "carencia", "simulacao", "qualificacao"],
+        "signals": ["cnis", "extrato previdenciario", "nit", "remuneracoes", "vinculos"],
+    },
+    "RG": {
+        "label": "Documento de Identidade - RG",
+        "modules": ["cadastro", "qualificacao"],
+        "signals": ["doc. identidade", "doc identidade", "org. emissor", "orgao emissor", "ssp", "registro geral"],
+    },
+    "CNH": {
+        "label": "Carteira Nacional de Habilitacao - CNH",
+        "modules": ["cadastro", "qualificacao"],
+        "signals": ["carteira nacional de habilitacao", "detran", "registro nacional", "cnh"],
+    },
+    "CTPS": {
+        "label": "Carteira de Trabalho - CTPS",
+        "modules": ["cadastro", "vinculos", "qualificacao"],
+        "signals": ["carteira de trabalho", "ctps", "contrato de trabalho", "admissao"],
+    },
+    "PPP": {
+        "label": "Perfil Profissiografico Previdenciario - PPP/LTCAT",
+        "modules": ["aposentadoria_especial", "qualificacao"],
+        "signals": ["perfil profissiografico", "ppp", "ltcat", "agente nocivo"],
+    },
+    "LAUDO_MEDICO": {
+        "label": "Laudo Medico",
+        "modules": ["auxilio_doenca", "invalidez", "auxilio_acidente"],
+        "signals": ["laudo medico", "relatorio medico", "cid", "crm"],
+    },
+    "CADUNICO": {
+        "label": "CadUnico",
+        "modules": ["bpc_loas", "qualificacao"],
+        "signals": ["cadunico", "cadunico", "nis", "renda familiar", "grupo familiar"],
+    },
+    "CARTA_CONCESSAO": {
+        "label": "Carta de Concessao",
+        "modules": ["revisao_beneficio", "qualificacao"],
+        "signals": ["carta de concessao", "numero do beneficio", "memoria de calculo", "rmi"],
+    },
+}
+
+
+def classify_document(file_name: str, raw_text: str) -> dict[str, Any]:
+    """Classify locally by OCR text before choosing a field schema or legal module."""
+    normalized = f"{file_name}\n{raw_text}".casefold()
+    ranked: list[tuple[int, str, list[str]]] = []
+    for code, definition in DOCUMENT_DEFINITIONS.items():
+        evidence = [signal for signal in definition["signals"] if signal.casefold() in normalized]
+        if evidence:
+            ranked.append((len(evidence), code, evidence))
+    if not ranked:
+        return {
+            "code": "NAO_CLASSIFICADO",
+            "label": "Documento nao classificado",
+            "confidence": 0.0,
+            "evidence": [],
+            "modules": ["triagem_manual"],
+        }
+    score, code, evidence = max(ranked, key=lambda candidate: candidate[0])
+    definition = DOCUMENT_DEFINITIONS[code]
+    return {
+        "code": code,
+        "label": definition["label"],
+        "confidence": round(min(0.95, 0.45 + score * 0.16), 2),
+        "evidence": evidence,
+        "modules": definition["modules"],
+    }
+
+
+def extract_document_fields(document_code: str, raw_text: str) -> list[dict[str, str]]:
+    """Return a typed, reviewable field contract for the classified document."""
+    common = [
+        ("nome", "Nome completo", extract_person_name(raw_text)),
+        ("cpf", "CPF", first_valid_identifier(raw_text, "cpf")),
+        ("data_nascimento", "Data de nascimento", extract_date_with_reverse_label(raw_text, ["data nascimento", "nascimento"])),
+    ]
+    specific: list[tuple[str, str, str]] = []
+    if document_code == "RG":
+        specific = [
+            ("rg", "RG", extract_rg(raw_text)),
+            ("orgao_emissor", "Orgao emissor", extract_issuing_agency(raw_text)),
+        ]
+    elif document_code == "CNH":
+        specific = [("numero_cnh", "Numero da CNH", extract_cnh_number(raw_text))]
+    elif document_code == "CNIS":
+        specific = [
+            ("nit", "NIT/PIS", first_valid_nit(raw_text)),
+            ("competencias", "Competencias", extract_competencies(raw_text)),
+            ("indicadores", "Indicadores INSS", summarize_keywords(raw_text, "indicadores")),
+        ]
+    fields = common + specific
+    return [
+        {
+            "key": key,
+            "label": label,
+            "value": value or "Nao identificado",
+            "status": "extraido" if value else "pendente_revisao",
+        }
+        for key, label, value in fields
+    ]
+
+
+def extract_date_with_reverse_label(text: str, labels: list[str]) -> str:
+    labelled = search_labeled_date(text, labels)
+    if labelled:
+        return labelled
+    for label in labels:
+        pattern = rf"(\d{{2}}/\d{{2}}/\d{{4}})\s*(?:{re.escape(label)})"
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match and is_valid_date(match.group(1)):
+            return match.group(1)
+    return ""
+
+
+def extract_rg(text: str) -> str:
+    patterns = [
+        r"\b(\d{5,12})\s+(?:SSP|DETRAN|PC|IGP)[/\-]?[A-Z]{0,2}\b",
+        r"(?:rg|registro geral)\s*[:\-]?\s*(\d{5,12})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def extract_issuing_agency(text: str) -> str:
+    match = re.search(r"\b((?:SSP|DETRAN|PC|IGP)[/\-]?[A-Z]{0,2})\b", text, flags=re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
+def extract_cnh_number(text: str) -> str:
+    match = re.search(r"(?:registro|cnh)\s*[:\-]?\s*(\d{9,12})", text, flags=re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
+def extract_cnis_vinculos(raw_text: str) -> list[dict[str, Any]]:
+    """Extract employer blocks only when the OCR supplied labelled evidence."""
+    labels = re.compile(
+        r"(?im)^(?:empregador|empresa|raz[aã]o\s+social|nome\s+do\s+empregador)\s*[:\-]\s*(?P<name>[^\n\r]+)"
+    )
+    matches = list(labels.finditer(raw_text))
+    indicator_pattern = re.compile(r"\b(?:PEXT|PREM|IREC|PADM|AEXT|ACNIS|IDINV|PEND)\b", re.IGNORECASE)
+    result: list[dict[str, Any]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else min(len(raw_text), match.end() + 1400)
+        block = raw_text[match.start():end]
+        employer = normalize_whitespace(match.group("name")).strip(" .;|")[:180]
+        start = search_labeled_date(block, ["admissão", "admissao", "início", "inicio", "data início", "data inicio"])
+        finish = search_labeled_date(block, ["rescisão", "rescisao", "término", "termino", "fim", "data fim", "data saída", "data saida"])
+        cnpj = first_valid_identifier(block, "cnpj")
+        indicators = list(dict.fromkeys(item.upper() for item in indicator_pattern.findall(block)))
+        if not employer or not (start or finish or cnpj or indicators):
+            continue
+        result.append({
+            "seq": len(result) + 1,
+            "empregador": employer,
+            "cnpj": cnpj or "Nao identificado",
+            "tipo_filiacao": search_labeled_value(block, ["categoria", "tipo filiação", "tipo filiacao"]) or "Nao identificado",
+            "data_inicio": start or "Nao identificada",
+            "data_fim": finish or "Nao identificada",
+            "inicio_data": parse_brazilian_date(start),
+            "fim_data": parse_brazilian_date(finish),
+            "status": "atencao" if indicators else "regular",
+            "indicadores": indicators,
+        })
+    return result
+
+
+def extract_competency_list(text: str) -> list[str]:
+    without_full_dates = re.sub(r"\b\d{2}/\d{2}/\d{4}\b", " ", text)
+    current_year = datetime.now().year
+    return list(dict.fromkeys(
+        match.group(0) for match in re.finditer(r"\b(?:0[1-9]|1[0-2])/\d{4}\b", without_full_dates)
+        if 1900 <= int(match.group(0)[-4:]) <= current_year + 2
+    ))
+
+
+def parse_brazilian_date(value: str) -> datetime | None:
+    return datetime.strptime(value, "%d/%m/%Y") if value and is_valid_date(value) else None
+
+
+def contribution_days(intervals: list[tuple[datetime, datetime]]) -> int:
+    """Sum complete periods without double-counting overlap; result is an estimate."""
+    normalized = sorted((start.date(), end.date()) for start, end in intervals if end >= start)
+    if not normalized:
+        return 0
+    merged = [list(normalized[0])]
+    for start, end in normalized[1:]:
+        if start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return sum((end - start).days + 1 for start, end in merged)
+
+
 def extract_field_value(field_name: str, text: str) -> str:
     lowered = field_name.lower().strip()
     if lowered == "cpf":
@@ -744,6 +998,8 @@ def extract_field_value(field_name: str, text: str) -> str:
     if lowered == "regime":
         match = re.search(r"\b(fechado|semiaberto|aberto)\b", text, flags=re.IGNORECASE)
         return match.group(1).strip() if match else ""
+    if lowered in {"nome", "nome_crianca", "nome_falecido"}:
+        return extract_person_name(text, lowered)
     if lowered in {"empresa", "empregador"}:
         return search_labeled_value(text, ["empresa", "empregador", "razão social"])
     if lowered in {"nome", "nome_crianca", "nome_falecido"}:
@@ -849,6 +1105,45 @@ def search_labeled_value(text: str, labels: list[str]) -> str:
             value = match.group(1).strip(" .;|")
             return value[:240]
     return ""
+
+
+def extract_person_name(text: str, field_name: str = "nome") -> str:
+    """Accept the common CNIS labels, including a value rendered on its own line."""
+    labels = {
+        "nome": [
+            "nome do segurado", "nome do filiado", "nome do trabalhador",
+            "nome do requerente", "nome completo", "nome",
+        ],
+        "nome_crianca": ["nome da crianca", "nome da criança"],
+        "nome_falecido": ["nome do falecido", "instituidor"],
+    }.get(field_name, [field_name.replace("_", " ")])
+    excluded = {"NOME", "SEGURADO", "TRABALHADOR", "FILIADO", "REQUERENTE", "CPF", "NIT", "PIS"}
+    for label in labels:
+        pattern = rf"{re.escape(label)}\s*(?::|\-|\n)\s*([^\n\r]{{4,160}})"
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            candidate = normalize_whitespace(match.group(1)).strip(" .;|")
+            candidate = re.split(r"\b(?:CPF|NIT|PIS|NIS|DATA\s+DE\s+NASCIMENTO)\b", candidate, maxsplit=1, flags=re.IGNORECASE)[0].strip(" .;|")
+            words = re.findall(r"[A-Za-zÀ-ÿ]+", candidate)
+            if is_person_name(candidate, words, excluded):
+                return candidate[:120]
+        reverse_pattern = rf"(?im)^([A-ZÀ-Ý][A-ZÀ-Ý ]{{5,120}})\s*\n\s*{re.escape(label)}\s*$"
+        reverse_match = re.search(reverse_pattern, text)
+        if reverse_match:
+            candidate = normalize_whitespace(reverse_match.group(1)).strip(" .;|")
+            words = re.findall(r"[A-Za-zÀ-ÿ]+", candidate)
+            if is_person_name(candidate, words, excluded):
+                return candidate[:120]
+    return ""
+
+
+def is_person_name(candidate: str, words: list[str], excluded: set[str]) -> bool:
+    forbidden = {"DOC", "DOCUMENTO", "IDENTIDADE", "ORGAO", "EMISSOR", "UF", "DATA", "NASCIMENTO"}
+    return (
+        2 <= len(words) <= 8
+        and not any(word.upper() in excluded or word.upper() in forbidden for word in words)
+        and not re.search(r"[/:;]", candidate)
+        and not re.search(r"\d", candidate)
+    )
 
 
 def search_labeled_date(text: str, labels: list[str]) -> str:

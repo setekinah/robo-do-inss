@@ -126,14 +126,20 @@ class AppEngine {
     this.onboardingStep = 2;
     this.activeKanbanStage = 'all';
     this.triageState = { flowId: null, currentNode: null, history: [], selectedResult: null };
+    this.newLeadDestination = 'lead';
 
     this.initEvents();
+    this.initCatalogControls();
     this.initOCRDropzone();
     this.checkAuthStatus();
     this.loadData();
   }
 
   initEvents() {
+    const sidebarTagline = document.querySelector('.brand-text .tagline');
+    if (sidebarTagline) sidebarTagline.textContent = 'SOF.IA';
+    const relationshipNav = document.querySelector('.nav-item[data-tab="relationship"] span');
+    if (relationshipNav) relationshipNav.textContent = 'Novos Clientes à Base';
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => this.switchTab(item.dataset.tab));
     });
@@ -149,13 +155,27 @@ class AppEngine {
 
     const btnNovo = document.getElementById('btn-novo-atendimento');
     if (btnNovo) {
-      btnNovo.addEventListener('click', () => this.switchTab('triage'));
+      btnNovo.addEventListener('click', () => this.startNewAttendance());
+    }
+
+    const btnNovoLead = document.getElementById('btn-novo-lead');
+    if (btnNovoLead) {
+      btnNovoLead.addEventListener('click', () => this.openNewLead('lead'));
     }
 
     const searchInput = document.getElementById('global-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => this.filterKanban(e.target.value));
     }
+  }
+
+  initCatalogControls() {
+    const monitorButton = document.getElementById('btn-monitorar-fontes');
+    const importButton = document.getElementById('btn-importar-catalogo');
+    const input = document.getElementById('catalog-workbook-input');
+    if (monitorButton) monitorButton.addEventListener('click', () => this.monitorOfficialSources());
+    if (importButton && input) importButton.addEventListener('click', () => input.click());
+    if (input) input.addEventListener('change', () => this.importCatalogWorkbook(input.files?.[0]));
   }
 
   // --- INTELIGÊNCIA DOCUMENTAL & OCR 100% OPERACIONAL ---
@@ -204,6 +224,7 @@ class AppEngine {
 
   async handleOCRFileUpload(file) {
     if (!file) return;
+    return this.processOCRUpload(file);
 
     audio.scan();
 
@@ -280,6 +301,152 @@ class AppEngine {
     }
   }
 
+  async processOCRUpload(file) {
+    const allowedExtensions = /\.(pdf|png|jpe?g|tiff?|webp|bmp)$/i;
+    if (!allowedExtensions.test(file.name)) {
+      this.showOCRError('Formato não suportado. Envie PDF, PNG, JPG, TIFF, WEBP ou BMP.');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      this.showOCRError('Arquivo excede o limite de 50 MB para o OCR local.');
+      return;
+    }
+
+    const statusBox = document.getElementById('ocr-status-box');
+    const statusText = document.getElementById('ocr-status-text');
+    const tree = document.getElementById('ocr-extracted-tree');
+    const title = document.getElementById('ocr-dropzone-title');
+    const sub = document.getElementById('ocr-dropzone-sub');
+    const fileSizeKB = (file.size / 1024).toFixed(1);
+    title.textContent = `Arquivo selecionado: ${file.name}`;
+    sub.textContent = `Tamanho: ${fileSizeKB} KB | Processamento local em andamento`;
+    statusBox.style.display = 'block';
+    statusBox.style.borderColor = 'var(--glass-border-glow)';
+    statusText.style.color = 'var(--primary)';
+    statusText.textContent = `Lendo ${file.name} com OCR local...`;
+    tree.textContent = 'Processando documento localmente...';
+    audio.scan();
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('document_code', 'AUTO');
+      const response = await fetch('/api/documentos/analisar', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || data.technical_notes || 'O documento não pôde ser lido.');
+      }
+      statusBox.style.display = 'none';
+      tree.textContent = JSON.stringify(data, null, 2);
+      this.renderCNISDashboard(data);
+      audio.success();
+    } catch (error) {
+      statusBox.style.display = 'none';
+      this.showOCRError(error.message || 'Falha ao analisar o documento.');
+    }
+  }
+
+  showOCRError(message) {
+    const statusBox = document.getElementById('ocr-status-box');
+    const statusText = document.getElementById('ocr-status-text');
+    if (!statusBox || !statusText) return;
+    statusBox.style.display = 'block';
+    statusBox.style.borderColor = 'rgba(244,63,94,.55)';
+    statusText.style.color = 'var(--accent-rose)';
+    statusText.textContent = message;
+  }
+
+  renderCNISDashboard(data) {
+    const setText = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value || 'Não apurado';
+    };
+    const segurado = data.segurado || {};
+    const metricas = data.metricas || {};
+    const vinculos = Array.isArray(data.vinculos) ? data.vinculos : [];
+    const classification = data.classification || { code: 'CNIS', label: 'CNIS - Extrato Previdenciario' };
+    const documentFields = Array.isArray(data.document_fields) ? data.document_fields : [];
+    const isCNIS = classification.code === 'CNIS';
+    const catalogNotice = document.getElementById('cnis-catalog-notice');
+    const activeCatalog = data.cnis_catalog?.active;
+    if (catalogNotice) {
+      if (isCNIS && activeCatalog) {
+        catalogNotice.style.display = 'block';
+        catalogNotice.textContent = `Indicadores comparados com o catálogo revisado: ${activeCatalog.source_name} (${activeCatalog.total_indicators} indicadores).`;
+      } else if (isCNIS) {
+        catalogNotice.style.display = 'block';
+        catalogNotice.textContent = 'Nenhum catálogo oficial ativo: indicadores encontrados exigem conferência manual.';
+      } else {
+        catalogNotice.style.display = 'none';
+      }
+    }
+    setText('ocr-report-title', isCNIS ? 'Relatório de Inteligência CNIS' : `Documento identificado: ${classification.label}`);
+    document.getElementById('ocr-empty-state').style.display = 'none';
+    document.getElementById('ocr-results-content').style.display = 'block';
+    setText('cnis-nome', segurado.nome);
+    setText('cnis-cpf', segurado.cpf);
+    setText('cnis-nit', segurado.nit_pis);
+    setText('cnis-nasc', segurado.data_nascimento);
+    setText('cnis-diag-title', metricas.diagnostico_principal);
+    setText('cnis-tempo-total', metricas.tempo_contribuicao_total);
+    if (metricas.tempo_nota) setText('cnis-tempo-dias', metricas.tempo_nota);
+    setText('cnis-tempo-dias', metricas.tempo_contribuicao_dias ? `${metricas.tempo_contribuicao_dias} dias apurados` : 'Cálculo pendente de revisão');
+    setText('cnis-carencia-val', metricas.carencia_cumprida);
+    const carenciaNota = document.getElementById('cnis-carencia-val')?.nextElementSibling;
+    if (carenciaNota) {
+      carenciaNota.textContent = metricas.carencia_nota || 'Revisao humana necessaria';
+      carenciaNota.style.color = 'var(--text-muted)';
+    }
+    setText('cnis-rmi-val', metricas.rmi_estimada);
+    const rmiNota = document.getElementById('cnis-rmi-val')?.nextElementSibling;
+    if (rmiNota) rmiNota.textContent = metricas.rmi_nota || 'Calculo tecnico pendente';
+    setText('cnis-alertas-val', `${metricas.alertas_contagem || 0} alertas`);
+    const alertasNota = document.getElementById('cnis-alertas-val')?.nextElementSibling;
+    if (alertasNota) {
+      alertasNota.textContent = metricas.alertas_nota || 'Revisao humana necessaria';
+      alertasNota.style.color = 'var(--text-muted)';
+    }
+    setText('cnis-vinculos-count', `${vinculos.length} vínculos extraídos`);
+    const timeline = document.getElementById('cnis-timeline-container');
+    const timelineTitle = timeline?.parentElement?.querySelector('h4');
+    document.querySelectorAll('.cnis-kpi-card').forEach((card) => {
+      card.style.display = isCNIS ? '' : 'none';
+    });
+    timeline.replaceChildren();
+    if (!isCNIS) {
+      if (timelineTitle) timelineTitle.textContent = `Dados extraidos - ${classification.label}`;
+      setText('cnis-vinculos-count', `${documentFields.filter((field) => field.status === 'extraido').length} campo(s) identificados`);
+      documentFields.forEach((field) => {
+        const item = document.createElement('div');
+        item.className = 'cnis-vinculo-card regular';
+        item.textContent = `${field.label}: ${field.value}`;
+        timeline.appendChild(item);
+      });
+      if (!documentFields.length) {
+        timeline.textContent = 'Nenhum campo estruturado foi extraido. Selecione o Codigo JSON e revise o documento original.';
+      }
+      return;
+    }
+    if (timelineTitle) timelineTitle.textContent = 'Vinculos Empregaticios Identificados';
+    if (!vinculos.length) {
+      timeline.textContent = 'Nenhum vínculo estruturado foi extraído automaticamente. Consulte o Código JSON e revise o documento original.';
+      return;
+    }
+    vinculos.forEach((vinculo) => {
+      const item = document.createElement('div');
+      item.className = `cnis-vinculo-card ${vinculo.status || 'regular'}`;
+      item.textContent = `${vinculo.empregador || 'Vínculo não identificado'} · ${vinculo.data_inicio || '—'} a ${vinculo.data_fim || '—'}`;
+      timeline.appendChild(item);
+    });
+  }
+
+  toggleOCRViewMode(mode) {
+    document.getElementById('ocr-visual-dashboard').style.display = mode === 'visual' ? 'block' : 'none';
+    document.getElementById('ocr-extracted-tree').style.display = mode === 'json' ? 'block' : 'none';
+    document.getElementById('btn-ocr-mode-visual').classList.toggle('active', mode === 'visual');
+    document.getElementById('btn-ocr-mode-json').classList.toggle('active', mode === 'json');
+  }
+
   async checkAuthStatus() {
     try {
       const res = await fetch('/api/auth/status');
@@ -338,19 +505,26 @@ class AppEngine {
     audio.success();
     const officeName = document.getElementById('office-name').value || 'MADE';
     const officeOab = document.getElementById('office-oab').value || '524387';
+    const email = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value;
 
     try {
-      await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: 'advogado@escritorio.adv.br',
-          password: 'Password123!',
+          email,
+          password,
           office_name: officeName,
           oab: officeOab
         })
       });
-    } catch (e) {}
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível criar a conta.');
+    } catch (e) {
+      alert(e.message || 'Não foi possível criar a conta.');
+      return;
+    }
 
     document.getElementById('sidebar-office-name').textContent = officeName;
     document.getElementById('user-display-name').textContent = officeName;
@@ -363,6 +537,19 @@ class AppEngine {
   }
 
   async submitLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível entrar.');
+    } catch (e) {
+      alert(e.message || 'Não foi possível entrar.');
+      return;
+    }
     audio.success();
     const overlay = document.getElementById('login-overlay');
     overlay.style.opacity = '0';
@@ -386,7 +573,11 @@ class AppEngine {
       this.currentTab = tabId;
       if (tabId === 'triage') this.renderTriageFlows();
       if (tabId === 'kanban') this.renderKanban();
-      if (tabId === 'orchestrator') this.loadEvents();
+      if (tabId === 'relationship') this.renderRelationshipBase();
+      if (tabId === 'orchestrator') {
+        this.loadEvents();
+        this.loadOfficialCatalog();
+      }
     };
 
     if (document.startViewTransition) {
@@ -525,18 +716,36 @@ class AppEngine {
 
         card.innerHTML = `
           <span class="card-tag tag-aposentadoria">${lead.flow_name || 'Aposentadoria'}</span>
-          <div class="card-title" onclick="app.openLeadModal(${lead.id})">${lead.lead_name}</div>
+          <button class="card-title card-title-button" type="button">${lead.lead_name}</button>
           <div class="card-sub"><i class="fa-solid fa-phone"></i> ${lead.lead_phone || '(11) 98765-4321'}</div>
           <div class="card-value">${val}</div>
           <div class="card-actions">
-            <button class="btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="app.openLeadModal(${lead.id})">
+            <button class="btn-secondary lead-details-button" type="button" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
               <i class="fa-solid fa-folder-open"></i> Abrir Detalhes
             </button>
-            <button class="icon-btn" style="width: 28px; height: 28px; font-size: 0.75rem;" onclick="app.advanceStage(${lead.id}, '${stage}')" title="Avançar Etapa">
+            <button class="icon-btn lead-advance-button" type="button" style="width: 28px; height: 28px; font-size: 0.75rem;" title="Avançar Etapa">
               <i class="fa-solid fa-chevron-right"></i>
             </button>
           </div>
         `;
+
+        const stopCardInteraction = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        };
+        const openDetails = (event) => {
+          stopCardInteraction(event);
+          this.openLeadModal(lead.id);
+        };
+        card.querySelector('.card-title-button').addEventListener('pointerdown', stopCardInteraction);
+        card.querySelector('.lead-details-button').addEventListener('pointerdown', stopCardInteraction);
+        card.querySelector('.card-title-button').addEventListener('click', openDetails);
+        card.querySelector('.lead-details-button').addEventListener('click', openDetails);
+        card.querySelector('.lead-advance-button').addEventListener('click', (event) => {
+          stopCardInteraction(event);
+          this.advanceStage(lead.id, stage);
+        });
         container.appendChild(card);
       });
     });
@@ -548,18 +757,21 @@ class AppEngine {
     const idx = stageOrder.indexOf(currentStage);
     if (idx < stageOrder.length - 1) {
       const nextStage = stageOrder[idx + 1];
+      if (!window.confirm(`Mover este lead para ${nextStage}?`)) return;
       
-      const item = this.atendimentos.find(a => a.id === leadId);
-      if (item) item.crm_stage = nextStage;
-      this.renderKanban();
-
       try {
-        await fetch(`/api/atendimentos/${leadId}/stage`, {
+        const response = await fetch(`/api/atendimentos/${leadId}/stage`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage: nextStage })
         });
-      } catch (e) {}
+        if (!response.ok) throw new Error('Não foi possível atualizar a etapa do lead.');
+        const item = this.atendimentos.find(a => a.id === leadId);
+        if (item) item.crm_stage = nextStage;
+        this.renderKanban();
+      } catch (error) {
+        console.error('Erro ao avançar etapa:', error);
+      }
     }
   }
 
@@ -568,6 +780,7 @@ class AppEngine {
     audio.click();
     try {
       const res = await fetch(`/api/atendimentos/${leadId}`);
+      if (!res.ok) throw new Error('Não foi possível carregar os detalhes do lead.');
       this.currentLead = await res.json();
     } catch (e) {
       this.currentLead = this.atendimentos.find(a => a.id === leadId) || {
@@ -579,14 +792,16 @@ class AppEngine {
       };
     }
 
-    document.getElementById('modal-lead-name').textContent = this.currentLead.lead_name;
-    document.getElementById('modal-flow-name').textContent = this.currentLead.flow_name;
+    document.getElementById('modal-lead-name').textContent = this.currentLead.lead_name || 'Lead previdenciário';
+    document.getElementById('modal-flow-name').textContent = this.currentLead.flow_name || 'Em triagem';
 
     this.renderModalHistory();
     this.renderModalDocs();
+    this.renderModalStrategy();
     this.loadModalContract();
 
-    document.getElementById('lead-modal').showModal();
+    const modal = document.getElementById('lead-modal');
+    if (!modal.open) modal.showModal();
   }
 
   switchModalTab(tabName) {
@@ -620,6 +835,46 @@ class AppEngine {
       `;
       list.appendChild(item);
     });
+  }
+
+  renderModalStrategy() {
+    const container = document.getElementById('modal-strategy-content');
+    if (!container || !this.currentLead) return;
+
+    const lead = this.currentLead;
+    const docs = Array.isArray(lead.documents) ? lead.documents : [];
+    const requiredDocs = docs.filter(doc => Number(doc.required ?? 1) === 1);
+    const validatedDocs = requiredDocs.filter(doc => ['aprovado', 'validado'].includes(doc.status)).length;
+    const receivedDocs = requiredDocs.filter(doc => ['recebido', 'aprovado', 'validado'].includes(doc.status)).length;
+    const profile = lead.triage_profile || {};
+    const answers = Array.isArray(profile.answers) ? profile.answers.length : (lead.history || []).length;
+    const stageLabels = {
+      triagem: 'Triagem', qualificacao: 'Qualificação', conflito: 'Conflito / LGPD',
+      proposta: 'Proposta', documentos: 'Documentos', concluido: 'Concluído', relacionamento: 'Relacionamento'
+    };
+    const stage = stageLabels[lead.crm_stage] || 'Em análise';
+    const isDisqualified = lead.status === 'desqualificado';
+    const statusLabel = isDisqualified ? 'Sem elegibilidade atual' : (lead.status === 'revisao' ? 'Revisão documental' : 'Potencial identificado');
+    const statusClass = isDisqualified ? 'strategy-risk' : (lead.status === 'revisao' ? 'strategy-warning' : 'strategy-good');
+    const focus = lead.document_strategy?.analysis_focus || 'Consolidar evidências antes da análise jurídica.';
+    const pending = Math.max(0, requiredDocs.length - receivedDocs);
+
+    container.innerHTML = `
+      <div class="strategy-hero ${statusClass}">
+        <div><span>DIAGNÓSTICO OPERACIONAL</span><h3>${statusLabel}</h3><p>${lead.result_title || 'Triagem inicial ainda não concluída.'}</p></div>
+        <div class="strategy-stage"><small>ETAPA ATUAL</small><strong>${stage}</strong></div>
+      </div>
+      <div class="strategy-metrics">
+        <div><span>BENEFÍCIO EM FOCO</span><strong>${lead.flow_name || 'Não definido'}</strong></div>
+        <div><span>TRIAGEM REGISTRADA</span><strong>${answers} respostas</strong></div>
+        <div><span>EVIDÊNCIAS RECEBIDAS</span><strong>${receivedDocs}/${requiredDocs.length || 0}</strong></div>
+        <div><span>VALIDADAS</span><strong>${validatedDocs}/${requiredDocs.length || 0}</strong></div>
+      </div>
+      <div class="strategy-grid">
+        <section><h4><i class="fa-solid fa-bullseye"></i> Estratégia recomendada</h4><p>${lead.next_step || 'Definir a próxima ação jurídica.'}</p><p class="strategy-muted">${focus}</p></section>
+        <section><h4><i class="fa-solid fa-folder-open"></i> Pendências documentais</h4><p>${pending ? `${pending} documento(s) obrigatório(s) ainda precisam ser recebidos.` : 'Nenhuma pendência obrigatória de recebimento.'}</p><button class="btn-secondary strategy-docs-button" type="button">Ver checklist</button></section>
+      </div>`;
+    container.querySelector('.strategy-docs-button').addEventListener('click', () => this.switchModalTab('docs'));
   }
 
   async addActivity() {
@@ -732,35 +987,80 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
   // --- TRIAGEM GUIADA ---
   async renderTriageFlows() {
     const container = document.getElementById('triage-flow-buttons');
+    const error = document.getElementById('triage-flow-error');
     if (!container) return;
 
     try {
       const res = await fetch('/api/triagem/fluxos');
+      if (!res.ok) throw new Error('Não foi possível carregar os benefícios disponíveis.');
       const fluxos = await res.json();
+      if (!Array.isArray(fluxos) || !fluxos.length) throw new Error('Nenhum benefício foi disponibilizado para triagem.');
 
-      container.innerHTML = '';
+      container.replaceChildren();
+      if (error) error.textContent = '';
       fluxos.forEach(f => {
         const btn = document.createElement('button');
+        btn.type = 'button';
         btn.className = 'btn-option';
         btn.innerHTML = `<strong>${f.name}</strong><span>${f.total_nodes} perguntas estruturadas</span>`;
-        btn.addEventListener('click', () => this.startTriageFlow(f.id));
+        btn.addEventListener('click', () => this.selectTriageBenefit(f.id));
         container.appendChild(btn);
       });
-    } catch (e) {}
+    } catch (e) {
+      if (error) error.textContent = e.message || 'Falha ao carregar os benefícios.';
+    }
   }
 
-  async startTriageFlow(flowId) {
+  selectTriageBenefit(flowId) {
     audio.click();
-    this.triageState = { flowId, currentNode: null, history: [], selectedResult: null };
+    const leadName = document.getElementById('triage-lead-name').value.trim();
+    const leadPhone = document.getElementById('triage-lead-phone').value.trim();
+    const error = document.getElementById('triage-lead-error');
+    if (!leadName || !leadPhone) {
+      error.textContent = 'Informe nome e WhatsApp antes de iniciar a triagem.';
+      return;
+    }
+    error.textContent = '';
+    const retirementFilter = document.getElementById('triage-aposentadoria-filter');
+    if (flowId === 'aposentadoria') {
+      retirementFilter.style.display = 'block';
+      this.triageState = { flowId, leadName, leadPhone, prequalification: null, currentNode: null, history: [], selectedResult: null };
+      document.getElementById('btn-start-retirement-triage').onclick = () => this.startRetirementTriage();
+      retirementFilter.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    retirementFilter.style.display = 'none';
+    this.startTriageFlow(flowId, leadName, leadPhone, null);
+  }
+
+  startRetirementTriage() {
+    const sex = document.getElementById('triage-retirement-sex').value;
+    const age = Number(document.getElementById('triage-retirement-age').value);
+    const contributionYears = Number(document.getElementById('triage-retirement-contribution').value);
+    const hasCNIS = document.getElementById('triage-retirement-cnis').value;
+    const error = document.getElementById('triage-retirement-error');
+    if (!sex || !hasCNIS || !Number.isFinite(age) || age < 14 || age > 100 || !Number.isFinite(contributionYears) || contributionYears < 0 || contributionYears > 70) {
+      error.textContent = 'Informe sexo, idade, tempo de contribuição e se possui CNIS antes de iniciar.';
+      return;
+    }
+    error.textContent = '';
+    const prequalification = { sex, age, contribution_years: contributionYears, has_cnis: hasCNIS };
+    const state = this.triageState;
+    this.startTriageFlow('aposentadoria', state.leadName, state.leadPhone, prequalification);
+  }
+
+  async startTriageFlow(flowId, leadName, leadPhone, prequalification = null) {
+    this.triageState = { flowId, leadName, leadPhone, prequalification, currentNode: null, history: [], selectedResult: null };
 
     document.getElementById('triage-selector').style.display = 'none';
     document.getElementById('triage-quiz').style.display = 'block';
     document.getElementById('triage-result').style.display = 'none';
+    document.getElementById('btn-triage-back').onclick = () => this.goBackTriage();
 
     this.sendTriageStep(null, null);
   }
 
-  async sendTriageStep(nodeId, answerLabel) {
+  async sendTriageStep(nodeId, answerLabel, preview = false) {
     try {
       const res = await fetch('/api/triagem/executar', {
         method: 'POST',
@@ -769,10 +1069,13 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
           flow_id: this.triageState.flowId,
           node_id: nodeId,
           answer_label: answerLabel,
+          preview,
           history: this.triageState.history
         })
       });
+      if (!res.ok) throw new Error('Não foi possível carregar a próxima pergunta.');
       const data = await res.json();
+      this.triageState.history = data.history || this.triageState.history;
 
       if (data.is_finished) {
         audio.success();
@@ -780,7 +1083,12 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
       } else {
         this.renderTriageQuestion(data.current_node);
       }
-    } catch (e) {}
+    } catch (e) {
+      const container = document.getElementById('triage-options-container');
+      if (container) {
+        container.innerHTML = `<p class="triage-error">${e.message || 'Falha na triagem. Tente novamente.'}</p>`;
+      }
+    }
   }
 
   renderTriageQuestion(node) {
@@ -797,16 +1105,20 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
       btn.innerHTML = `<strong>${opt.label}</strong><span>${opt.description}</span>`;
       btn.addEventListener('click', () => {
         audio.click();
-        this.triageState.history.push({
-          node_id: node.id,
-          node_code: node.code,
-          question: node.title,
-          answer: opt.label
-        });
         this.sendTriageStep(node.id, opt.label);
       });
       optsContainer.appendChild(btn);
     });
+  }
+
+  goBackTriage() {
+    if (!this.triageState.history.length) {
+      document.getElementById('triage-quiz').style.display = 'none';
+      document.getElementById('triage-selector').style.display = 'block';
+      return;
+    }
+    const previous = this.triageState.history.pop();
+    this.sendTriageStep(previous.node_id, null, true);
   }
 
   renderTriageResult(result) {
@@ -820,6 +1132,9 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     this.triageState.selectedResult = result;
 
     const btnSave = document.getElementById('btn-salvar-triage-lead');
+    btnSave.innerHTML = result.status === 'desqualificado'
+      ? '<i class="fa-solid fa-heart-circle-plus"></i> Salvar na Base de Relacionamento'
+      : '<i class="fa-solid fa-user-plus"></i> Salvar Lead na Esteira Kanban';
     btnSave.onclick = () => this.saveTriageLead();
   }
 
@@ -828,14 +1143,26 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     const result = this.triageState.selectedResult;
 
     const newLead = {
-      lead_name: `Cliente Prev #${Math.floor(Math.random() * 9000 + 1000)}`,
-      lead_phone: '(11) 9' + Math.floor(Math.random() * 89999999 + 10000000),
+      lead_name: this.triageState.leadName,
+      lead_phone: this.triageState.leadPhone,
+      lead_source: 'triagem_guiada',
       flow_id: this.triageState.flowId,
       result_title: result.title,
       summary: result.summary,
       next_step: result.next_step,
       status: result.status || 'aprovado',
-      crm_stage: 'triagem',
+      crm_stage: result.status === 'desqualificado' ? 'relacionamento' : 'triagem',
+      relationship_status: result.status === 'desqualificado' ? 'aguardando_revisao' : 'nao_aplicavel',
+      relationship_next_review_at: result.status === 'desqualificado'
+        ? new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        : null,
+      history: this.triageState.history,
+      triage_profile: {
+        flow_id: this.triageState.flowId,
+        prequalification: this.triageState.prequalification,
+        answers: this.triageState.history,
+        result: { title: result.title, status: result.status }
+      },
       estimated_monthly_value: 3840.0,
       estimated_total_value: 46080.0
     };
@@ -853,7 +1180,119 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     }
 
     this.atendimentos.unshift(newLead);
-    this.switchTab('kanban');
+    this.switchTab(result.status === 'desqualificado' ? 'relationship' : 'kanban');
+  }
+
+  async renderRelationshipBase() {
+    const container = document.getElementById('relationship-list');
+    if (!container) return;
+    container.innerHTML = '<p class="relationship-empty">Carregando base de relacionamento...</p>';
+    try {
+      const response = await fetch('/api/relacionamento');
+      if (!response.ok) throw new Error('Falha ao carregar a base de relacionamento.');
+      const leads = await response.json();
+      document.getElementById('relationship-count').textContent = leads.length;
+      container.innerHTML = '';
+      if (!leads.length) {
+        container.innerHTML = '<p class="relationship-empty">Nenhum lead em acompanhamento. Leads desqualificados com potencial futuro aparecerão aqui.</p>';
+        return;
+      }
+      leads.forEach((lead) => {
+        const card = document.createElement('article');
+        card.className = 'relationship-card';
+        const reviewDate = lead.relationship_next_review_at
+          ? new Date(`${lead.relationship_next_review_at}T00:00:00`).toLocaleDateString('pt-BR')
+          : 'Sem revisão agendada';
+        card.innerHTML = `
+          <div><span class="relationship-badge">Acompanhamento</span><h3>${lead.lead_name}</h3><p>${lead.lead_phone || 'Telefone não informado'} · ${lead.flow_name || 'Triagem previdenciária'}</p></div>
+          <div class="relationship-reason"><strong>Motivo atual:</strong> ${lead.result_title || 'Sem elegibilidade atual'}<br><span>${lead.next_step || lead.summary || ''}</span></div>
+          <div><strong>Revisar em:</strong> ${reviewDate}<br><span class="relationship-consent">${lead.remarketing_opt_in ? 'Contato autorizado' : 'Sem consentimento de remarketing'}</span></div>
+          <div class="relationship-actions"><button class="btn-secondary relationship-detail" type="button">Detalhes</button><button class="btn-primary relationship-reactivate" type="button">Reabrir triagem</button></div>`;
+        card.querySelector('.relationship-detail').addEventListener('click', () => this.openLeadModal(lead.id));
+        card.querySelector('.relationship-reactivate').addEventListener('click', () => this.reactivateLead(lead.id));
+        container.appendChild(card);
+      });
+    } catch (error) {
+      container.innerHTML = `<p class="triage-error">${error.message}</p>`;
+    }
+  }
+
+  async reactivateLead(leadId) {
+    try {
+      const response = await fetch(`/api/atendimentos/${leadId}/reativar`, { method: 'POST' });
+      if (!response.ok) throw new Error('Não foi possível reabrir o lead.');
+      await this.loadData();
+      this.switchTab('kanban');
+    } catch (error) {
+      alert(error.message || 'Falha ao reabrir o lead.');
+    }
+  }
+
+  startNewAttendance() {
+    audio.click();
+    this.triageState = { flowId: null, currentNode: null, history: [], selectedResult: null };
+    document.getElementById('triage-selector').style.display = 'block';
+    document.getElementById('triage-quiz').style.display = 'none';
+    document.getElementById('triage-result').style.display = 'none';
+    document.getElementById('triage-aposentadoria-filter').style.display = 'none';
+    document.getElementById('triage-lead-error').textContent = '';
+    document.getElementById('triage-retirement-error').textContent = '';
+    this.switchTab('triage');
+    window.setTimeout(() => document.getElementById('triage-lead-name')?.focus(), 0);
+  }
+
+  openNewLead(destination = 'lead') {
+    this.newLeadDestination = destination;
+    document.getElementById('new-lead-form').reset();
+    const isRelationship = destination === 'relationship';
+    document.getElementById('new-lead-modal-title').textContent = isRelationship ? 'Adicionar à base' : 'Novo lead';
+    document.getElementById('new-lead-modal-subtitle').textContent = isRelationship
+      ? 'Cadastre o contato para acompanhamento futuro, sem iniciar a triagem agora.'
+      : 'Cadastre e inicie a qualificação previdenciária.';
+    document.getElementById('new-lead-submit-label').textContent = isRelationship ? 'Salvar contato' : 'Criar lead';
+    document.getElementById('new-lead-modal').showModal();
+  }
+
+  async createNewLead() {
+    const name = document.getElementById('new-lead-name').value.trim();
+    const phone = document.getElementById('new-lead-phone').value.trim();
+    const flowId = document.getElementById('new-lead-flow').value;
+    const note = document.getElementById('new-lead-note').value.trim();
+    const remarketingOptIn = document.getElementById('new-lead-remarketing-consent').checked;
+    const feedback = document.getElementById('new-lead-feedback');
+    const isRelationship = this.newLeadDestination === 'relationship';
+    if (!name || !phone) {
+      feedback.textContent = 'Informe nome e WhatsApp para criar o lead.';
+      return;
+    }
+    try {
+      const response = await fetch('/api/atendimentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lead_name: name,
+          lead_phone: phone,
+          flow_id: flowId,
+          result_title: isRelationship ? 'Contato aguardando oportunidade ou reavaliação' : 'Novo lead aguardando triagem',
+          summary: isRelationship ? 'Cadastro direto na Base de Relacionamento.' : 'Lead cadastrado manualmente.',
+          next_step: isRelationship ? 'Revisar o contato e definir a melhor jornada quando houver oportunidade.' : 'Iniciar triagem guiada.',
+          notes: note,
+          status: 'revisao',
+          crm_stage: isRelationship ? 'relacionamento' : 'triagem',
+          relationship_status: isRelationship ? 'aguardando_revisao' : 'nao_aplicavel',
+          relationship_next_review_at: isRelationship ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) : null,
+          lead_source: isRelationship ? 'cadastro_relacionamento' : 'cadastro_manual',
+          remarketing_opt_in: remarketingOptIn
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error('Não foi possível salvar o lead.');
+      document.getElementById('new-lead-modal').close();
+      await this.loadData();
+      this.switchTab(isRelationship ? 'relationship' : 'kanban');
+    } catch (error) {
+      feedback.textContent = error.message || 'Falha ao salvar o lead.';
+    }
   }
 
   async loadEvents() {
@@ -883,6 +1322,144 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
         tbody.appendChild(tr);
       });
     } catch (e) {}
+  }
+
+  setCatalogMessage(message = '', isError = false) {
+    const target = document.getElementById('catalog-status-message');
+    if (!target) return;
+    target.textContent = message;
+    target.style.color = isError ? 'var(--accent-rose)' : 'var(--accent-emerald)';
+  }
+
+  async loadOfficialCatalog() {
+    const summary = document.getElementById('catalog-active-summary');
+    const sourcesContainer = document.getElementById('official-sources-list');
+    const versionsContainer = document.getElementById('catalog-versions-list');
+    if (!summary || !sourcesContainer || !versionsContainer) return;
+    try {
+      const [statusResponse, versionsResponse] = await Promise.all([
+        fetch('/api/catalogo-cnis/status'), fetch('/api/catalogo-cnis/versoes')
+      ]);
+      const statusData = await statusResponse.json();
+      const versionsData = await versionsResponse.json();
+      if (!statusResponse.ok || !versionsResponse.ok) throw new Error('Não foi possível carregar o catálogo oficial.');
+      const active = statusData.catalog?.active;
+      summary.textContent = active
+        ? `Versão ativa #${active.id}: ${active.total_indicators} indicadores, revisada por ${active.reviewed_by || 'responsável do escritório'}.`
+        : 'Nenhuma versão está ativa. O OCR permanece conservador e não aplica indicadores automaticamente.';
+      sourcesContainer.replaceChildren();
+      (statusData.sources || []).forEach((source) => {
+        const card = document.createElement('article');
+        card.className = 'relationship-card';
+        const title = document.createElement('strong');
+        title.textContent = source.title;
+        const scope = document.createElement('p');
+        scope.textContent = source.scope;
+        const detail = document.createElement('p');
+        detail.style.color = 'var(--text-muted)';
+        detail.style.fontSize = '.78rem';
+        detail.textContent = source.source_hash
+          ? `Hash ${source.source_hash.slice(0, 12)}… · última captura ${new Date(source.captured_at).toLocaleString('pt-BR')}`
+          : 'Fonte ainda não verificada.';
+        const link = document.createElement('a');
+        link.href = source.source_url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Abrir fonte oficial';
+        link.style.color = 'var(--primary)';
+        card.append(title, scope, detail, link);
+        sourcesContainer.appendChild(card);
+      });
+      versionsContainer.replaceChildren();
+      const versions = versionsData.versions || [];
+      if (!versions.length) versionsContainer.textContent = 'Nenhuma versão importada.';
+      versions.forEach((version) => {
+        const row = document.createElement('div');
+        row.className = 'doc-item-card';
+        const label = document.createElement('div');
+        const strong = document.createElement('strong');
+        strong.textContent = `#${version.id} · ${version.source_name}`;
+        const description = document.createElement('div');
+        description.style.color = 'var(--text-muted)';
+        description.style.fontSize = '.78rem';
+        description.textContent = `${version.imported_definitions} indicadores · ${version.status}`;
+        label.append(strong, description);
+        row.appendChild(label);
+        if (version.status === 'aguarda_revisao' && Number(version.imported_definitions) > 0) {
+          const activate = document.createElement('button');
+          activate.type = 'button';
+          activate.className = 'btn-primary';
+          activate.textContent = 'Revisar e ativar';
+          activate.addEventListener('click', () => this.activateCatalogVersion(version.id));
+          row.appendChild(activate);
+        }
+        versionsContainer.appendChild(row);
+      });
+    } catch (error) {
+      this.setCatalogMessage(error.message || 'Falha ao carregar o catálogo oficial.', true);
+    }
+  }
+
+  async monitorOfficialSources() {
+    const button = document.getElementById('btn-monitorar-fontes');
+    if (button) button.disabled = true;
+    this.setCatalogMessage('Consultando e preservando as fontes oficiais do Portal IN…');
+    try {
+      const response = await fetch('/api/catalogo-cnis/monitorar', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível verificar as fontes.');
+      const changed = (data.outcomes || []).filter((item) => item.change_detected).length;
+      const failures = (data.outcomes || []).filter((item) => item.success === false).length;
+      this.setCatalogMessage(failures ? `${failures} fonte(s) não puderam ser verificadas.` : changed ? `${changed} fonte(s) alterada(s): aguardam revisão jurídica.` : 'Fontes oficiais verificadas; nenhuma mudança foi ativada automaticamente.', failures > 0);
+      await this.loadOfficialCatalog();
+    } catch (error) {
+      this.setCatalogMessage(error.message || 'Falha ao verificar as fontes.', true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async importCatalogWorkbook(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      this.setCatalogMessage('Envie a planilha de indicadores no formato XLSX.', true);
+      return;
+    }
+    this.setCatalogMessage(`Importando ${file.name}; a versão ficará pendente de revisão jurídica…`);
+    try {
+      const body = new FormData();
+      body.append('file', file, file.name);
+      const response = await fetch('/api/catalogo-cnis/importar-planilha', { method: 'POST', body });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível importar a planilha.');
+      this.setCatalogMessage(`Versão #${data.version.id} importada com ${data.version.total_indicators} indicadores. Revise antes de ativar.`);
+      await this.loadOfficialCatalog();
+    } catch (error) {
+      this.setCatalogMessage(error.message || 'Falha ao importar a planilha.', true);
+    } finally {
+      const input = document.getElementById('catalog-workbook-input');
+      if (input) input.value = '';
+    }
+  }
+
+  async activateCatalogVersion(versionId) {
+    const note = window.prompt('Registre a revisão jurídica antes de ativar esta versão:');
+    if (note === null) return;
+    if (!note.trim()) {
+      this.setCatalogMessage('A ativação exige uma anotação de revisão jurídica.', true);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/catalogo-cnis/versoes/${versionId}/ativar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível ativar a versão.');
+      this.setCatalogMessage(`Versão #${versionId} ativada com revisão jurídica registrada.`);
+      await this.loadOfficialCatalog();
+    } catch (error) {
+      this.setCatalogMessage(error.message || 'Falha ao ativar a versão.', true);
+    }
   }
 }
 

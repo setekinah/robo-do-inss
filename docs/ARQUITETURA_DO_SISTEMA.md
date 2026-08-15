@@ -209,7 +209,7 @@ Cada fluxo contem:
 - `nodes`
 - `results`
 
-Hoje existem 11 fluxos ativos:
+Hoje existem 10 fluxos ativos:
 
 1. Auxilio-Acidente
 2. Aposentadoria
@@ -221,7 +221,6 @@ Hoje existem 11 fluxos ativos:
 8. Auxilio-Reclusao
 9. Revisao de Beneficio
 10. Planejamento Previdenciario
-11. Outros Assuntos
 
 Valor arquitetural:
 

@@ -1316,3 +1316,6 @@ FLOW_DEFINITIONS = {
         },
     },
 }
+
+# Fora do escopo previdenciário definido pelo escritório: não expor na triagem.
+FLOW_DEFINITIONS.pop("outrosAssuntos", None)

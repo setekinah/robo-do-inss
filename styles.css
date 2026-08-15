@@ -333,6 +333,89 @@ body {
   margin-bottom: 0.2rem;
 }
 
+.card-title-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card-title-button:hover {
+  color: var(--primary);
+}
+
+.relationship-notice {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(0, 242, 254, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 242, 254, 0.06);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.relationship-notice i { color: var(--primary); margin-right: 0.45rem; }
+.relationship-total { color: var(--text-muted); font-size: 0.9rem; }
+.relationship-total span { color: var(--primary); font-size: 1.4rem; font-weight: 800; }
+.relationship-list { display: grid; gap: 0.85rem; }
+.relationship-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.5fr) minmax(150px, .75fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1.1rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(22, 28, 45, 0.82);
+}
+.relationship-card h3 { margin: 0.35rem 0; font-size: 1rem; }
+.relationship-card p, .relationship-card span { color: var(--text-muted); font-size: .82rem; }
+.relationship-badge { color: var(--accent-gold) !important; font-size: .72rem !important; font-weight: 700; text-transform: uppercase; }
+.relationship-reason { font-size: .88rem; line-height: 1.45; }
+.relationship-consent { color: var(--accent-gold) !important; }
+.relationship-actions { display: flex; gap: .5rem; }
+.relationship-empty { padding: 2rem; text-align: center; color: var(--text-muted); }
+.remarketing-consent-field { display: flex; align-items: flex-start; gap: .55rem; color: var(--text-muted); font-size: .82rem; line-height: 1.35; cursor: pointer; }
+.remarketing-consent-field input { width: auto !important; margin-top: .16rem; accent-color: var(--primary); }
+.strategy-loading { color: var(--text-muted); padding: 2rem; text-align: center; }
+.strategy-hero { display: flex; justify-content: space-between; gap: 1rem; padding: 1.2rem; border-radius: var(--radius-md); border: 1px solid var(--glass-border); background: rgba(255,255,255,.03); }
+.strategy-hero > div > span, .strategy-metrics span, .strategy-stage small { display: block; font-size: .7rem; font-weight: 700; letter-spacing: .08em; color: var(--text-muted); }
+.strategy-hero h3 { margin: .3rem 0; font-size: 1.15rem; }.strategy-hero p, .strategy-muted { color: var(--text-muted); font-size: .86rem; }
+.strategy-good { border-color: rgba(16,185,129,.45); }.strategy-good h3 { color: var(--accent-emerald); }.strategy-warning { border-color: rgba(245,158,11,.45); }.strategy-warning h3 { color: var(--accent-gold); }.strategy-risk { border-color: rgba(244,63,94,.45); }.strategy-risk h3 { color: var(--accent-rose, #fb7185); }
+.strategy-stage { min-width: 120px; text-align: right; }.strategy-stage strong { display: block; margin-top: .3rem; color: var(--primary); }
+.strategy-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: .65rem; margin: 1rem 0; }.strategy-metrics > div, .strategy-grid section { border: 1px solid var(--glass-border); border-radius: var(--radius-sm); padding: .85rem; background: rgba(255,255,255,.025); }.strategy-metrics strong { display:block; margin-top:.35rem; font-size:.88rem; }
+.strategy-grid { display:grid; grid-template-columns: 1fr 1fr; gap: .8rem; }.strategy-grid h4 { margin:0 0 .6rem; font-size:.92rem; }.strategy-grid h4 i { color:var(--primary); margin-right:.35rem; }.strategy-grid p { font-size:.87rem; line-height:1.45; }.strategy-docs-button { margin-top:.6rem; padding:.45rem .7rem; font-size:.78rem; }
+.triage-lead-capture { margin-bottom: 1.4rem; padding: 1.15rem; border: 1px solid var(--glass-border-glow); border-radius: var(--radius-md); background: linear-gradient(120deg, rgba(0,242,254,.08), rgba(37,99,235,.05)); }.triage-lead-capture h3, .triage-benefit-heading h3 { margin: .35rem 0; font-size: 1.08rem; }.triage-lead-capture p { color: var(--text-muted); font-size: .84rem; }.triage-step-label { color: var(--primary); font-size: .68rem; font-weight: 800; letter-spacing: .1em; }.triage-lead-fields { display:grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .9rem; }.triage-lead-fields .form-group { margin:0; }.triage-benefit-heading { margin-bottom: .85rem; }
+#view-dashboard .section-header { justify-content: flex-start; flex-wrap: wrap; gap: .75rem; }
+#view-dashboard .section-header > div:first-child { flex-basis: 100%; }
+#view-dashboard .section-header > .btn-primary { margin: 0; }
+.sidebar-footer { display: none; }
+#btn-start-retirement-triage { margin-top: 1rem; }
+@media (max-width: 680px) { .strategy-hero, .strategy-grid { grid-template-columns: 1fr; display:grid; }.strategy-stage { text-align:left; }.strategy-metrics { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 680px) { .triage-lead-fields { grid-template-columns: 1fr; } }
+@media (max-width: 980px) { .relationship-card { grid-template-columns: 1fr; } }
+
+/* Campos nativos: evita opções claras com texto claro ao abrir o seletor. */
+select,
+select option {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #151c2b !important;
+  color: #f8fafc !important;
+}
+
+select option:checked,
+select option:hover {
+  background-color: #075c73 !important;
+  color: #ffffff !important;
+}
+
 .card-sub {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -350,9 +433,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.55rem;
   margin-top: 0.6rem;
   padding-top: 0.6rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lead-details-button {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+}
+
+.lead-advance-button {
+  flex: 0 0 28px;
+  position: relative;
+  z-index: 1;
 }
 
 /* --- DROPZONE E INTELIGÊNCIA DOCUMENTAL OCR --- */
@@ -387,6 +483,128 @@ body {
 .dropzone.drag-over i {
   transform: scale(1.15);
 }
+
+/* --- NOVO PAINEL EXECUTIVO GRAFICO CNIS --- */
+.cnis-segurado-card {
+  background: linear-gradient(135deg, rgba(14, 19, 31, 0.95) 0%, rgba(22, 33, 56, 0.9) 100%);
+  border: 1px solid var(--glass-border-glow);
+  border-radius: var(--radius-md);
+  padding: 1.2rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+.cnis-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  background: var(--primary-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  color: #fff;
+  box-shadow: var(--shadow-glow);
+}
+
+.cnis-diagnosis-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: var(--accent-emerald);
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+
+.cnis-diagnosis-badge i {
+  font-size: 1.4rem;
+}
+
+.cnis-kpi-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.cnis-kpi-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cnis-kpi-value {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.cnis-kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+/* Vínculo Empregatício Card na Timeline */
+.cnis-vinculo-item {
+  background: rgba(22, 28, 45, 0.6);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  transition: var(--transition-fast);
+}
+
+.cnis-vinculo-item:hover {
+  background: rgba(28, 38, 62, 0.85);
+  border-color: rgba(0, 242, 254, 0.2);
+}
+
+.cnis-vinculo-item.status-atencao {
+  border-left: 4px solid var(--accent-gold);
+}
+
+.cnis-vinculo-item.status-ativo {
+  border-left: 4px solid var(--accent-emerald);
+}
+
+.cnis-vinculo-item.status-regular {
+  border-left: 4px solid var(--primary-blue);
+}
+
+.badge-inss {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.badge-inss-pext { background: rgba(245, 158, 11, 0.18); color: var(--accent-gold); border: 1px solid rgba(245, 158, 11, 0.3); }
+.badge-inss-prem { background: rgba(244, 63, 94, 0.18); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); }
+.badge-inss-regular { background: rgba(37, 99, 235, 0.18); color: var(--primary); border: 1px solid rgba(37, 99, 235, 0.3); }
+.badge-inss-ativo { background: rgba(16, 185, 129, 0.18); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+
+.triage-error { color: var(--accent-rose, #f43f5e); margin: 1rem 0; font-weight: 600; }
+#new-lead-modal { width: min(520px, calc(100vw - 2rem)); }
+#new-lead-modal select, #new-lead-modal textarea { width: 100%; color: var(--text-main); background: rgba(255,255,255,.06); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); padding: .7rem; font: inherit; }
+.btn-new-lead { min-height: 42px; white-space: nowrap; }
 
 /* --- OVERLAY DE LOGIN / REGISTRO PREVIA --- */
 .login-overlay {

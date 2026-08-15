@@ -11,9 +11,12 @@ Aplicacao local em Python + Streamlit para operacao previdenciaria com:
 
 ## Estado atual
 
-O produto ativo do repositorio e o Streamlit em `app.py`.
+O produto ativo pode ser executado de duas formas:
 
-Arquivos como `index.html`, `app.js`, `flows.js` e `styles.css` pertencem a um prototipo legado e nao sao a interface principal atual.
+- `api_server.py` serve a interface operacional PrevIA (HTML/JS) em `http://localhost:8501`.
+- `app.py` preserva a operação Streamlit local.
+
+A interface PrevIA concentra dashboard, esteira Kanban, base de relacionamento, triagem guiada, documentos/OCR e o monitor de automação.
 
 ## Como rodar
 
@@ -55,6 +58,9 @@ Variáveis opcionais de ambiente:
 ## Documentacao principal
 
 - Arquitetura do sistema: [docs/ARQUITETURA_DO_SISTEMA.md](docs/ARQUITETURA_DO_SISTEMA.md)
+- Catálogo oficial e revisão jurídica: [docs/CATALOGO_OFICIAL_PORTAL_IN.md](docs/CATALOGO_OFICIAL_PORTAL_IN.md)
+- Piloto Papermerge: [docs/PILOTO_PAPERMERGE.md](docs/PILOTO_PAPERMERGE.md)
+- Piloto dArchiva: [docs/darchiva_pilot.md](docs/darchiva_pilot.md)
 
 ## Fluxos atualmente mapeados
 

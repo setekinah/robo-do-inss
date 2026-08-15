@@ -146,6 +146,53 @@ class DocumentIntelligenceTests(unittest.TestCase):
 
         self.assertEqual(result["competencias"], "01/2020 | 12/2024")
 
+    def test_cnis_report_only_exposes_documented_links_and_warnings(self) -> None:
+        text = (
+            "Nome do segurado: Cliente de Teste\n"
+            "CPF: 529.982.247-25\n"
+            "Data de nascimento: 10/05/1970\n"
+            "Empresa: Alfa Servicos Ltda\n"
+            "Admissao: 01/02/2010\n"
+            "Rescisao: 31/01/2012\n"
+            "Indicador: PEXT\n"
+            "Competencias: 01/2010 02/2010 03/2010\n"
+        )
+        fields = intelligence.extract_structured_fields(
+            text, ["nome", "cpf", "nit", "data_nascimento"]
+        )
+        report = intelligence.build_cnis_report(text, fields)
+
+        self.assertEqual(len(report["vinculos"]), 1)
+        self.assertEqual(report["vinculos"][0]["empregador"], "Alfa Servicos Ltda")
+        self.assertEqual(report["metricas"]["alertas_contagem"], 1)
+        self.assertEqual(report["metricas"]["rmi_estimada"], "Nao calculada")
+        self.assertIn("preliminar", report["metricas"]["carencia_nota"])
+        self.assertNotIn("inicio_data", report["vinculos"][0])
+
+    def test_name_extraction_accepts_cnis_label_and_next_line_value(self) -> None:
+        fields = intelligence.extract_structured_fields(
+            "NOME DO FILIADO\nMARIA APARECIDA DOS SANTOS\nCPF: 529.982.247-25",
+            ["nome", "cpf"],
+        )
+
+        self.assertEqual(fields["nome"], "MARIA APARECIDA DOS SANTOS")
+        self.assertEqual(fields["cpf"], "529.982.247-25")
+
+    def test_identity_document_is_not_classified_as_cnis(self) -> None:
+        text = (
+            "DEPARTAMENTO\nNILSON PAULO DA SILVA\nNOME\n"
+            "DOC. IDENTIDADE / ORGAO EMISSOR / UF\n8654541 SSP/SP\n"
+            "029.132.448-74 CPF\n30/08/1961 DATA NASCIMENTO"
+        )
+        classification = intelligence.classify_document("04.4-CHN.pdf", text)
+        fields = intelligence.extract_document_fields(classification["code"], text)
+        values = {field["key"]: field["value"] for field in fields}
+
+        self.assertEqual(classification["code"], "RG")
+        self.assertEqual(values["nome"], "NILSON PAULO DA SILVA")
+        self.assertEqual(values["data_nascimento"], "30/08/1961")
+        self.assertEqual(values["rg"], "8654541")
+
     def test_corrupted_pdf_reports_hard_failure_without_crashing(self) -> None:
         target = self.temp_dir / "corrupted.pdf"
         target.write_bytes(b"not a valid pdf")

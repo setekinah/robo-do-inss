@@ -18,8 +18,10 @@ uploads/
 .venv/
 venv/
 .codex-test-temp/
+.test-runtime/
 .env
 .env.*
+!.env.example
 
 # OS and editors
 .DS_Store
