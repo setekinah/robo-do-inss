@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import json
 from datetime import date
 from typing import Any
@@ -2264,12 +2265,14 @@ def ensure_session_defaults() -> None:
 
 
 def render_panel_header(kicker: str, title: str, subtitle: str = "") -> None:
-    subtitle_markup = f'<div class="panel-subtitle">{subtitle}</div>' if subtitle else ""
+    safe_kicker = escape(str(kicker))
+    safe_title = escape(str(title))
+    subtitle_markup = f'<div class="panel-subtitle">{escape(str(subtitle))}</div>' if subtitle else ""
     st.markdown(
         f"""
         <div class="panel-heading">
-          <div class="panel-kicker">{kicker}</div>
-          <h2 class="panel-title">{title}</h2>
+          <div class="panel-kicker">{safe_kicker}</div>
+          <h2 class="panel-title">{safe_title}</h2>
           {subtitle_markup}
         </div>
         """,
@@ -2283,7 +2286,7 @@ def render_operation_kpis() -> None:
     revision = next((int(row["total"]) for row in dashboard["by_status"] if row["status"] == "revisao"), 0)
     document_backlog = int(dashboard.get("document_backlog", 0))
     recent_rows = list_recent_attendances(limit=1)
-    latest = recent_rows[0]["lead_name"] if recent_rows else "Sem registros"
+    latest = escape(str(recent_rows[0]["lead_name"])) if recent_rows else "Sem registros"
     st.markdown(
         f"""
         <div class="workspace-kpis">
@@ -2330,10 +2333,10 @@ def render_recent_queue() -> None:
         st.markdown(
             (
                 f"<div class='pre-lead-card{selected_class}'>"
-                f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                f"<p>{row['flow_name']} | {row['created_at']}</p>"
+                f"<h5>#{row['id']} - {escape(str(row['lead_name']))}</h5>"
+                f"<p>{escape(str(row['flow_name']))} | {escape(str(row['created_at']))}</p>"
                 f"<p><span class='status-chip' style='background:{background}; color:{color};'>{label}</span></p>"
-                f"<p>{row['result_title']}</p>"
+                f"<p>{escape(str(row['result_title']))}</p>
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -2351,18 +2354,18 @@ def render_active_case_panel(flow: dict[str, Any], form_data: dict[str, Any]) ->
         f"""
         <div class="pre-focus-hero">
           <div class="eyebrow">Lead ativo</div>
-          <h3>{form_data['lead_name'] or 'Nao informado'}</h3>
-          <p>{flow['name']} | {current_step}</p>
+          <h3>{escape(str(form_data['lead_name'] or 'Nao informado'))}</h3>
+          <p>{escape(str(flow['name']))} | {escape(str(current_step))}</p>
         </div>
         <div class="pre-focus-grid">
-          <div class="pre-focus-stat"><strong>{form_data['lead_phone'] or '-'}</strong><span>Contato principal</span></div>
+          <div class="pre-focus-stat"><strong>{escape(str(form_data['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>
           <div class="pre-focus-stat"><strong>{len(triage_state.history)}</strong><span>Respostas registradas</span></div>
           <div class="pre-focus-stat"><strong>{current_step}</strong><span>Etapa corrente</span></div>
           <div class="pre-focus-stat"><strong>{'Concluindo' if current_node is None else 'Em triagem'}</strong><span>Status da sessao</span></div>
         </div>
         <div class="pre-detail-list">
-          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{current_question}</span></div>
-          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{flow['name']}</span></div>
+          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{escape(str(current_question))}</span></div>
+          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{escape(str(flow['name']))}</span></div>
         </div>
         """,
         unsafe_allow_html=True,
