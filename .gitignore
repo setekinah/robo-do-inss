@@ -26,3 +26,12 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+
+# Test, coverage and build artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+*.egg-info/
