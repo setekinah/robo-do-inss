@@ -18,7 +18,11 @@ def resolve_data_dir() -> Path:
 
     for candidate in candidates:
         try:
-            candidate.mkdir(parents=True, exist_ok=True)
+            candidate.mkdir(parents=True, exist_ok=True, mode=0o700)
+            try:
+                os.chmod(candidate, 0o700)
+            except OSError:
+                pass
             probe = candidate / ".write_test"
             probe.write_text("ok", encoding="utf-8")
             probe.unlink(missing_ok=True)

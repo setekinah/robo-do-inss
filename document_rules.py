@@ -317,6 +317,9 @@ FLOW_DOCUMENT_RULES: dict[str, dict[str, Any]] = {
     },
 }
 
+# Mantém o checklist documental alinhado aos fluxos ativos.
+FLOW_DOCUMENT_RULES.pop("outrosAssuntos", None)
+
 
 def build_document_checklist(flow_id: str) -> list[dict[str, Any]]:
     flow_rule = FLOW_DOCUMENT_RULES.get(flow_id, {})

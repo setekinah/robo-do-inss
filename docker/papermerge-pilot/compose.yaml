@@ -1,0 +1,72 @@
+name: previa-papermerge-pilot
+
+services:
+  webapp:
+    image: papermerge/papermerge:3.5.3
+    container_name: previa-papermerge-pilot
+    restart: unless-stopped
+    ports:
+      # A interface fica acessível somente nesta máquina e não disputa a 8000 do PrevIA.
+      - "127.0.0.1:8081:80"
+    environment:
+      PAPERMERGE__SECURITY__SECRET_KEY: ${PAPERMERGE_SECRET_KEY:?Defina PAPERMERGE_SECRET_KEY no .env}
+      PAPERMERGE__AUTH__USERNAME: admin
+      PAPERMERGE__AUTH__PASSWORD: ${PAPERMERGE_ADMIN_PASSWORD:?Defina PAPERMERGE_ADMIN_PASSWORD no .env}
+      PAPERMERGE__DATABASE__URL: postgresql://previa:${PAPERMERGE_DB_PASSWORD:?Defina PAPERMERGE_DB_PASSWORD no .env}@db:5432/previa_papermerge
+      PAPERMERGE__REDIS__URL: redis://redis:6379/0
+      PAPERMERGE__MAIN__MEDIA_ROOT: /var/media/pmg
+      PAPERMERGE__OCR__DEFAULT_LANGUAGE: por
+    volumes:
+      # Documentos e índice permanecem exclusivamente no volume local do Docker.
+      - papermerge_pilot_media:/var/media/pmg
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  ocr_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.ocr-por
+    image: previa-papermerge-ocrworker:3.5.3-por
+    restart: unless-stopped
+    command: worker
+    environment:
+      PAPERMERGE__DATABASE__URL: postgresql://previa:${PAPERMERGE_DB_PASSWORD:?Defina PAPERMERGE_DB_PASSWORD no .env}@db:5432/previa_papermerge
+      PAPERMERGE__REDIS__URL: redis://redis:6379/0
+      PAPERMERGE__MAIN__MEDIA_ROOT: /var/media/pmg
+      OCR_WORKER_ARGS: -Q ocr -c 2
+    volumes:
+      - papermerge_pilot_media:/var/media/pmg
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:16.1
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: previa
+      POSTGRES_PASSWORD: ${PAPERMERGE_DB_PASSWORD:?Defina PAPERMERGE_DB_PASSWORD no .env}
+      POSTGRES_DB: previa_papermerge
+    volumes:
+      - papermerge_pilot_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U previa -d previa_papermerge"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7.2
+    restart: unless-stopped
+
+volumes:
+  papermerge_pilot_media:
+    name: previa_papermerge_pilot_media
+  papermerge_pilot_db:
+    name: previa_papermerge_pilot_db

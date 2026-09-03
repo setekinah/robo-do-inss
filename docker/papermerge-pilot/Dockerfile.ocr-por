@@ -1,0 +1,6 @@
+FROM papermerge/ocrworker:0.3.1
+
+# A imagem oficial inclui inglês e alemão. O PrevIA requer leitura de documentos em português.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr-por \
+    && rm -rf /var/lib/apt/lists/*

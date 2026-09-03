@@ -195,7 +195,7 @@ FLOW_DEFINITIONS = {
                     {
                         "label": "Nao",
                         "description": "Ainda esta distante; avaliar planejamento e regularizacoes.",
-                        "next": "regraTransicao",
+                        "result": "desqualificadoSemRequisitos",
                     },
                 ],
             },
@@ -1316,3 +1316,6 @@ FLOW_DEFINITIONS = {
         },
     },
 }
+
+# Fora do escopo previdenciário definido pelo escritório: não expor na triagem.
+FLOW_DEFINITIONS.pop("outrosAssuntos", None)

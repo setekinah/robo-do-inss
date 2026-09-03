@@ -6,6 +6,7 @@ import importlib.util
 import os
 import re
 import shutil
+import unicodedata
 from datetime import datetime
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
@@ -24,10 +25,13 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
 
 MAX_FILE_BYTES = _env_int("OCR_MAX_FILE_MB", 50, 1, 250) * 1024 * 1024
 MAX_OCR_PAGES = _env_int("OCR_MAX_PAGES", 12, 1, 100)
+MAX_PDF_PAGES = _env_int("OCR_MAX_PDF_PAGES", 50, 1, 500)
+MAX_IMAGE_PIXELS = _env_int("OCR_MAX_IMAGE_PIXELS", 30_000_000, 1_000_000, 100_000_000)
 PDF_OCR_DPI = _env_int("OCR_PDF_DPI", 170, 120, 300)
 MIN_NATIVE_PAGE_CHARS = _env_int("OCR_MIN_NATIVE_CHARS", 32, 12, 500)
 OCR_RETRY_CONFIDENCE = 0.78
 SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
+OCR_ROTATION_RETRY_CONFIDENCE = 0.72
 
 
 def analyze_document_bundle(
@@ -176,6 +180,15 @@ def extract_text_from_pdf(file_path: Path) -> dict[str, Any]:
                 note=f"O PDF {file_path.name} exige senha e não pôde ser analisado.",
                 hard_failure=True,
             )
+        if len(document) > MAX_PDF_PAGES:
+            return extraction_failure(
+                source_type="pdf_excede_paginas",
+                note=(
+                    f"O PDF {file_path.name} possui {len(document)} páginas; o limite seguro "
+                    f"para análise local é {MAX_PDF_PAGES}."
+                ),
+                hard_failure=True,
+            )
 
         chunks: list[str] = []
         confidence_samples: list[tuple[float, int]] = []
@@ -191,7 +204,7 @@ def extract_text_from_pdf(file_path: Path) -> dict[str, Any]:
             dominant_image = page_dominant_image_coverage(page)
             needs_ocr = not is_native_text_usable(native_text) or (
                 dominant_image >= 0.65 and len(native_text) < 800
-            )
+            ) or needs_identity_visual_recovery(file_path, native_text, dominant_image)
             if not needs_ocr:
                 chunks.append(f"[Página {page_index + 1}]\n{native_text}")
                 native_pages += 1
@@ -229,6 +242,19 @@ def extract_text_from_pdf(file_path: Path) -> dict[str, Any]:
             notes.append(f"OCR sem texto útil em {failed_ocr_pages} página(s).")
 
         text = normalize_whitespace("\n\n".join(chunks))
+        # Alguns CNIS nativos expõem texto pelo PyMuPDF em ordem geométrica, o
+        # que embaralha linhas da tabela e pode esconder Nome/Data de nascimento.
+        # Comparamos uma segunda extração local e preservamos a que mantém mais
+        # campos rotulados. Isso não envia o documento para nenhum serviço externo.
+        if native_pages == len(document) and not ocr_pages:
+            pypdf_extraction = extract_text_from_pdf_with_pypdf(file_path)
+            pypdf_text = str(pypdf_extraction.get("text") or "")
+            if pypdf_text and native_pdf_semantic_score(pypdf_text) > native_pdf_semantic_score(text):
+                pypdf_extraction["technical_note"] = (
+                    f"{file_path.name}: pypdf selecionado por preservar melhor a estrutura "
+                    "semântica do PDF nativo (campos cadastrais/tabelas)."
+                )
+                return pypdf_extraction
         if native_pages and ocr_pages:
             source_type = "pdf_hibrido_ocr_neural"
         elif ocr_pages:
@@ -283,7 +309,19 @@ def extract_text_from_pdf_with_pypdf(file_path: Path) -> dict[str, Any]:
         )
     try:
         reader = PdfReader(str(file_path))
-        chunks = [normalize_whitespace(page.extract_text() or "") for page in reader.pages]
+        if len(reader.pages) > MAX_PDF_PAGES:
+            return extraction_failure(
+                source_type="pdf_excede_paginas",
+                note=(
+                    f"O PDF {file_path.name} possui mais de {MAX_PDF_PAGES} páginas e não "
+                    "foi processado automaticamente."
+                ),
+                hard_failure=True,
+            )
+        chunks = [
+            f"[Página {index + 1}]\n{normalize_whitespace(page.extract_text() or '')}"
+            for index, page in enumerate(reader.pages)
+        ]
         text = normalize_whitespace("\n\n".join(chunk for chunk in chunks if chunk))
         if text:
             return {
@@ -321,6 +359,16 @@ def extract_text_from_image(file_path: Path) -> dict[str, Any]:
         )
     try:
         with Image.open(file_path) as opened:
+            width, height = opened.size
+            if width * height > MAX_IMAGE_PIXELS:
+                return extraction_failure(
+                    source_type="imagem_excede_pixels",
+                    note=(
+                        f"A imagem {file_path.name} excede o limite de "
+                        f"{MAX_IMAGE_PIXELS:,} pixels para OCR local."
+                    ),
+                    hard_failure=True,
+                )
             image = ImageOps.exif_transpose(opened).convert("RGB")
             result = run_ocr_image(image, source_label=file_path.name)
         return {
@@ -340,7 +388,13 @@ def extract_text_from_image(file_path: Path) -> dict[str, Any]:
 
 
 def run_ocr_image(image: Any, *, source_label: str = "imagem") -> dict[str, Any]:
-    """Run neural OCR first, retry an enhanced variant, then try Tesseract if available."""
+    """Run local OCR with preparation, orientation recovery and a conservative fallback.
+
+    Phone photographs and scanned attachments frequently arrive sideways.  OCR engines
+    can return a misleadingly high score for a few characters in that situation, so a
+    weak first pass is retried in the four cardinal orientations before we ask the
+    operator to review it.
+    """
     candidates: list[dict[str, Any]] = []
     notes: list[str] = []
     engines_available = False
@@ -357,6 +411,22 @@ def run_ocr_image(image: Any, *, source_label: str = "imagem") -> dict[str, Any]
             retried = ocr_with_rapidocr(enhanced)
             retried["variant"] = "contraste adaptativo"
             candidates.append(retried)
+
+        best_before_rotation = choose_best_ocr_candidate(candidates)
+        if (
+            best_before_rotation is None
+            or (
+                best_before_rotation["confidence"] < OCR_ROTATION_RETRY_CONFIDENCE
+                and text_quality(best_before_rotation["text"]) < 0.62
+            )
+        ):
+            from PIL import Image  # type: ignore
+
+            for angle in (90, 180, 270):
+                rotated = preprocess_document_image(image.rotate(angle, expand=True), aggressive=True)
+                oriented = ocr_with_rapidocr(rotated)
+                oriented["variant"] = f"orientacao {angle} graus + contraste adaptativo"
+                candidates.append(oriented)
     except ImportError:
         notes.append("RapidOCR/ONNX Runtime não está instalado.")
     except Exception as exc:
@@ -660,6 +730,26 @@ def is_native_text_usable(text: str) -> bool:
     return len(text.strip()) >= MIN_NATIVE_PAGE_CHARS and text_quality(text) >= 0.50
 
 
+def needs_identity_visual_recovery(file_path: Path, native_text: str, image_coverage: float) -> bool:
+    """Detect digitally-signed identity PDFs whose personal data is raster-only.
+
+    CNH/RG/CPF PDFs often expose only the certificate/validation notice as
+    selectable text. A valid native layer is not enough if it contains none of
+    the identity fields needed by the document schema.
+    """
+    name_hint = normalize_document_text(file_path.name)
+    identity_hint = any(token in name_hint.split() for token in ("cnh", "rg", "cpf", "identidade", "habilitacao"))
+    if not identity_hint or image_coverage < 0.05:
+        return False
+    has_identity_data = any((
+        extract_person_name(native_text),
+        first_valid_identifier(native_text, "cpf"),
+        extract_rg(native_text),
+        extract_cnh_number(native_text),
+    ))
+    return not has_identity_data
+
+
 def page_dominant_image_coverage(page: Any) -> float:
     """Estimate whether a PDF page is effectively a scan with a weak text overlay."""
     try:
@@ -710,6 +800,660 @@ def extract_structured_fields(raw_text: str, critical_fields: list[str]) -> dict
     return {field: extract_field_value(field, raw_text) for field in critical_fields}
 
 
+def build_cnis_report(raw_text: str, extracted_data: dict[str, str]) -> dict[str, Any]:
+    """Build a CNIS report only from text evidence; it never decides entitlement."""
+    vinculos = extract_cnis_vinculos(raw_text)
+    competencias = extract_competency_list(raw_text)
+    indicadores = [indicator for vinculo in vinculos for indicator in vinculo["indicadores"]]
+    intervals = [
+        (vinculo["inicio_data"], vinculo["fim_data"])
+        for vinculo in vinculos
+        if vinculo.get("inicio_data") and vinculo.get("fim_data")
+    ]
+    days = contribution_days(intervals)
+    for vinculo in vinculos:
+        vinculo.pop("inicio_data", None)
+        vinculo.pop("fim_data", None)
+    if days:
+        years, remainder = divmod(days, 365)
+        months, remaining_days = divmod(remainder, 30)
+        total_time = f"{years} ano(s), {months} mes(es) e {remaining_days} dia(s)"
+        time_note = "Estimativa baseada em periodos com inicio e fim identificados; requer conferencia tecnica."
+    else:
+        total_time = "Nao apurado automaticamente"
+        time_note = "Nao ha periodos completos e confiaveis suficientes no texto extraido."
+    if competencias:
+        carencia = f"{len(competencias)} competencia(s) identificada(s)"
+        carencia_note = "Contagem documental preliminar; nao equivale a carencia homologada pelo INSS."
+    else:
+        carencia = "Nao apurada automaticamente"
+        carencia_note = "Nenhuma competencia valida foi estruturada para calculo."
+    return {
+        "segurado": {
+            "nome": extracted_data.get("nome", "") or "Nao identificado no documento",
+            "cpf": extracted_data.get("cpf", "") or "Nao identificado",
+            "nit_pis": extracted_data.get("nit", "") or "Nao identificado",
+            "data_nascimento": extracted_data.get("data_nascimento", "") or "Nao identificada",
+        },
+        "metricas": {
+            "tempo_contribuicao_total": total_time,
+            "tempo_contribuicao_dias": days or None,
+            "tempo_nota": time_note,
+            "carencia_cumprida": carencia,
+            "carencia_nota": carencia_note,
+            "rmi_estimada": "Nao calculada",
+            "rmi_nota": "A RMI exige base contributiva validada e calculo tecnico.",
+            "diagnostico_principal": "Sem diagnostico automatico",
+            "diagnostico_subtitulo": "A leitura documental nao substitui analise previdenciaria.",
+            "alertas_contagem": len(indicadores),
+            "alertas_nota": (
+                "Indicadores identificados: " + ", ".join(sorted(set(indicadores)))
+                if indicadores else "Nenhum indicador INSS estruturado foi identificado no texto."
+            ),
+        },
+        "vinculos": vinculos,
+        "competencias_identificadas": competencias,
+    }
+
+
+DOCUMENT_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "CNIS": {
+        "label": "CNIS - Extrato Previdenciario",
+        "modules": ["vinculos", "carencia", "simulacao", "qualificacao"],
+        "strong_signals": ["cnis", "extrato previdenciario", "remuneracoes", "vinculos previdenciarios"],
+        "weak_signals": ["nit", "competencias", "indicador"],
+        "required_fields": ["nome", "cpf", "nit"],
+    },
+    "RG": {
+        "label": "Documento de Identidade - RG",
+        "modules": ["cadastro", "qualificacao"],
+        "strong_signals": ["doc identidade", "orgao emissor", "registro geral"],
+        "weak_signals": ["ssp", "rg"],
+        "required_fields": ["nome", "cpf", "rg"],
+    },
+    "CPF": {
+        "label": "Comprovante de Inscrição no CPF",
+        "modules": ["cadastro", "qualificacao"],
+        "strong_signals": ["comprovante de situacao cadastral", "cadastro de pessoas fisicas"],
+        "weak_signals": ["receita federal", "inscricao no cpf", "cpf"],
+        "required_fields": ["nome", "cpf"],
+    },
+    "CNH": {
+        "label": "Carteira Nacional de Habilitacao - CNH",
+        "modules": ["cadastro", "qualificacao"],
+        "strong_signals": ["carteira nacional de habilitacao", "permissao para dirigir"],
+        "weak_signals": ["detran", "cnh", "numero de registro"],
+        "required_fields": ["nome", "cpf", "numero_cnh", "validade"],
+    },
+    "CTPS": {
+        "label": "Carteira de Trabalho - CTPS",
+        "modules": ["cadastro", "vinculos", "qualificacao"],
+        "strong_signals": ["carteira de trabalho", "ctps"],
+        "weak_signals": ["contrato de trabalho", "admissao", "empregador"],
+        "required_fields": ["nome", "empresa", "data_admissao"],
+    },
+    "CAT": {
+        "label": "Comunicacao de Acidente de Trabalho - CAT",
+        "modules": ["auxilio_acidente", "auxilio_doenca", "invalidez", "qualificacao"],
+        "strong_signals": ["comunicacao de acidente de trabalho", "comunicaçao de acidente de trabalho"],
+        "weak_signals": ["cat", "acidente de trabalho", "parte do corpo atingida"],
+        "required_fields": ["nome", "data_acidente", "empresa"],
+    },
+    "PPP": {
+        "label": "Perfil Profissiografico Previdenciario - PPP/LTCAT",
+        "modules": ["aposentadoria_especial", "qualificacao"],
+        "strong_signals": ["perfil profissiografico", "ltcat"],
+        "weak_signals": ["ppp", "agente nocivo"],
+        "required_fields": ["empresa", "funcao", "agente_nocivo"],
+    },
+    "LAUDO_MEDICO": {
+        "label": "Laudo Medico",
+        "modules": ["auxilio_doenca", "invalidez", "auxilio_acidente"],
+        "strong_signals": ["laudo medico", "relatorio medico"],
+        "weak_signals": ["cid", "crm"],
+        "required_fields": ["nome", "cid"],
+    },
+    "ATESTADO_MEDICO": {
+        "label": "Atestado Medico",
+        "modules": ["auxilio_doenca", "invalidez", "auxilio_acidente"],
+        "strong_signals": ["atestado medico", "atesto para os devidos fins"],
+        "weak_signals": ["afastamento", "cid", "crm"],
+        "required_fields": ["nome", "cid", "crm_medico"],
+    },
+    "CADUNICO": {
+        "label": "CadUnico",
+        "modules": ["bpc_loas", "qualificacao"],
+        "strong_signals": ["cadunico", "folha resumo cadastro unico"],
+        "weak_signals": ["nis", "renda familiar", "grupo familiar"],
+        "required_fields": ["nome", "nis"],
+    },
+    "CARTA_CONCESSAO": {
+        "label": "Carta de Concessao",
+        "modules": ["revisao_beneficio", "qualificacao"],
+        "strong_signals": ["carta de concessao", "memoria de calculo"],
+        "weak_signals": ["numero do beneficio", "rmi", "nb"],
+        "required_fields": ["nome", "numero_beneficio"],
+    },
+    "CERTIDAO_NASCIMENTO": {
+        "label": "Certidao de Nascimento",
+        "modules": ["salario_maternidade", "qualificacao"],
+        "strong_signals": ["certidao de nascimento", "certifico que"],
+        "weak_signals": ["nascido", "livro", "termo"],
+        "required_fields": ["nome_crianca", "data_nascimento"],
+    },
+    "CERTIDAO_OBITO": {
+        "label": "Certidao de Obito",
+        "modules": ["pensao_morte", "qualificacao"],
+        "strong_signals": ["certidao de obito", "certidao de falecimento"],
+        "weak_signals": ["falecido", "obito", "declarante"],
+        "required_fields": ["nome_falecido", "data_obito"],
+    },
+    "CTC": {
+        "label": "Certidao de Tempo de Contribuicao - CTC",
+        "modules": ["aposentadoria", "planejamento_previdenciario", "simulacao"],
+        "strong_signals": ["certidao de tempo de contribuicao", "contagem reciproca"],
+        "weak_signals": ["ctc", "tempo de contribuicao", "regime proprio"],
+        "required_fields": ["nome", "tempo_contribuicao"],
+    },
+    "GPS": {
+        "label": "Guia da Previdencia Social - GPS",
+        "modules": ["aposentadoria", "planejamento_previdenciario", "qualificacao"],
+        "strong_signals": ["guia da previdencia social", "identificador gps"],
+        "weak_signals": ["gps", "codigo de pagamento", "competencia"],
+        "required_fields": ["competencia", "valor"],
+    },
+    "CERTIDAO_RECOLHIMENTO": {
+        "label": "Certidao Carceraria / Recolhimento Prisional",
+        "modules": ["auxilio_reclusao", "qualificacao"],
+        "strong_signals": ["certidao carceraria", "recolhimento prisional", "unidade prisional"],
+        "weak_signals": ["regime", "detento", "recluso"],
+        "required_fields": ["nome", "data_recolhimento", "regime"],
+    },
+}
+
+
+def classify_document(file_name: str, raw_text: str) -> dict[str, Any]:
+    """Classify locally by OCR text before choosing a field schema or legal module."""
+    normalized_file_name = normalize_document_text(file_name)
+    normalized_text = normalize_document_text(raw_text)
+    # O modelo oficial do PPP (Anexo XVII) menciona "CAT registrada" como
+    # um dos seus próprios campos. Isso não transforma um PPP em CAT.
+    # Um nome de arquivo que declare PPP, combinado com o cabeçalho do perfil,
+    # é evidência direta e recebe precedência sobre essas referências internas.
+    is_ppp_profile = (
+        "ppp" in normalized_file_name.split()
+        and (
+            "perfil profissiogr" in normalized_text
+            or "anexo xvii" in normalized_text
+        )
+    )
+    is_cnh_document = (
+        "cnh" in normalized_file_name.split()
+        and (
+            "senatran" in normalized_text
+            or "carteira nacional de habilita" in normalized_text
+            or "permissao para dirigir" in normalized_text
+        )
+    )
+    ranked: list[tuple[float, str, list[str]]] = []
+    for code, definition in DOCUMENT_DEFINITIONS.items():
+        strong = [signal for signal in definition["strong_signals"] if normalize_document_text(signal) in normalized_text]
+        weak = [signal for signal in definition["weak_signals"] if normalize_document_text(signal) in normalized_text]
+        file_hits = [signal for signal in [*definition["strong_signals"], *definition["weak_signals"]] if normalize_document_text(signal) in normalized_file_name]
+        score = len(strong) * 2.2 + len(weak) * 0.65 + len(file_hits) * 1.1
+        if code == "PPP" and is_ppp_profile:
+            score += 8.0
+            strong = [*strong, "perfil profissiografico/anexo xvii"]
+        if code == "CNH" and is_cnh_document:
+            score += 8.0
+            strong = [*strong, "arquivo CNH/SENATRAN"]
+        # Um sinal fraco isolado (por exemplo, NIT ou CRM) nao identifica o documento.
+        if strong or len(weak) >= 2 or file_hits:
+            ranked.append((score, code, [*strong, *weak, *[f"arquivo:{item}" for item in file_hits]]))
+    if not ranked:
+        return {
+            "code": "NAO_CLASSIFICADO",
+            "label": "Documento nao classificado",
+            "confidence": 0.0,
+            "evidence": [],
+            "modules": ["triagem_manual"],
+        }
+    score, code, evidence = max(ranked, key=lambda candidate: candidate[0])
+    definition = DOCUMENT_DEFINITIONS[code]
+    return {
+        "code": code,
+        "label": definition["label"],
+        "confidence": round(min(0.95, 0.35 + score * 0.14), 2),
+        "evidence": evidence,
+        "modules": definition["modules"],
+    }
+
+
+def normalize_document_text(value: str) -> str:
+    """Normaliza acentos, pontuacao e espacos para sinais resistentes ao OCR."""
+    decomposed = unicodedata.normalize("NFKD", value or "")
+    without_accents = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", " ", without_accents.casefold()).strip()
+
+
+def extract_document_fields(document_code: str, raw_text: str) -> list[dict[str, str]]:
+    """Return a typed, reviewable field contract for the classified document."""
+    common = [
+        ("nome", "Nome completo", extract_person_name(raw_text)),
+        ("cpf", "CPF", first_valid_identifier(raw_text, "cpf")),
+        ("data_nascimento", "Data de nascimento", extract_date_with_reverse_label(raw_text, ["data nascimento", "nascimento"])),
+    ]
+    specific: list[tuple[str, str, str]] = []
+    if document_code == "RG":
+        specific = [
+            ("rg", "RG", extract_rg(raw_text)),
+            ("orgao_emissor", "Orgao emissor", extract_issuing_agency(raw_text)),
+            ("data_expedicao", "Data de expedicao", extract_date_with_reverse_label(raw_text, ["data expedicao", "expedicao", "data emissao", "emissao"])),
+        ]
+    elif document_code == "CPF":
+        specific = [
+            ("situacao_cadastral", "Situacao cadastral", extract_cpf_status(raw_text)),
+            ("data_inscricao", "Data de inscricao", extract_date_with_reverse_label(raw_text, ["data de inscricao", "inscricao"])),
+        ]
+    elif document_code == "CNH":
+        specific = [
+            ("numero_cnh", "Numero de registro da CNH", extract_cnh_number(raw_text)),
+            ("categoria_cnh", "Categoria", extract_cnh_category(raw_text)),
+            ("validade", "Validade", extract_cnh_validity(raw_text)),
+            ("primeira_habilitacao", "Primeira habilitacao", extract_date_with_reverse_label(raw_text, ["primeira habilitacao", "1a habilitacao", "1ª habilitacao"])),
+            ("orgao_emissor", "Orgao emissor", extract_issuing_agency(raw_text)),
+        ]
+    elif document_code == "CNIS":
+        specific = [
+            ("nit", "NIT/PIS", first_valid_nit(raw_text)),
+            ("competencias", "Competencias", extract_competencies(raw_text)),
+            ("indicadores", "Indicadores INSS", summarize_keywords(raw_text, "indicadores")),
+        ]
+    elif document_code == "CTPS":
+        vinculos_ctps = extract_ctps_vinculos(raw_text)
+        primeiro_vinculo = vinculos_ctps[0] if vinculos_ctps else {}
+        specific = [
+            ("empresa", "Empresa", primeiro_vinculo.get("empregador") or search_labeled_value(raw_text, ["empresa", "empregador", "razao social"])),
+            ("data_admissao", "Data de admissao", primeiro_vinculo.get("data_inicio") or search_labeled_date(raw_text, ["admissao", "data admissao"])),
+            ("data_saida", "Data de saida", primeiro_vinculo.get("data_fim") or search_labeled_date(raw_text, ["saida", "demissao", "rescisao"])),
+            ("vinculos_identificados", "Vinculos identificados", str(len(vinculos_ctps)) if vinculos_ctps else ""),
+        ]
+    elif document_code == "CAT":
+        specific = [
+            ("empresa", "Empresa", search_labeled_value(raw_text, ["empresa", "empregador", "razao social"])),
+            ("data_acidente", "Data do acidente", search_labeled_date(raw_text, ["data do acidente", "data acidente", "ocorrencia"])),
+            ("cid", "CID", extract_cid(raw_text)),
+            ("descricao_evento", "Descricao do acidente", search_labeled_value(raw_text, ["descricao do acidente", "descricao da ocorrencia", "descricao"])),
+        ]
+    elif document_code == "PPP":
+        specific = [
+            ("empresa", "Empresa", search_labeled_value(raw_text, ["empresa", "empregador", "razao social"])),
+            ("funcao", "Funcao", search_labeled_value(raw_text, ["funcao", "cargo"])),
+            ("agente_nocivo", "Agente nocivo", search_labeled_value(raw_text, ["agente nocivo", "agentes nocivos"])),
+        ]
+    elif document_code == "LAUDO_MEDICO":
+        specific = [
+            ("cid", "CID", extract_cid(raw_text)),
+            ("crm_medico", "CRM do profissional", extract_crm(raw_text)),
+        ]
+    elif document_code == "ATESTADO_MEDICO":
+        specific = [
+            ("cid", "CID", extract_cid(raw_text)),
+            ("crm_medico", "CRM do profissional", extract_crm(raw_text)),
+            ("periodo_afastamento", "Periodo de afastamento", extract_field_value("periodo_afastamento", raw_text)),
+        ]
+    elif document_code == "CADUNICO":
+        specific = [
+            ("nis", "NIS", first_valid_nit(raw_text)),
+            ("renda_familiar", "Renda familiar", extract_currency_after_label(raw_text, ["renda familiar", "renda per capita"])),
+        ]
+    elif document_code == "CARTA_CONCESSAO":
+        specific = [
+            ("numero_beneficio", "Numero do beneficio", extract_benefit_number(raw_text)),
+            ("dib", "DIB", search_labeled_date(raw_text, ["dib", "data inicio beneficio"])),
+            ("rmi", "RMI", extract_currency_after_label(raw_text, ["rmi", "renda mensal inicial"])),
+        ]
+    elif document_code == "CERTIDAO_NASCIMENTO":
+        specific = [
+            ("nome_crianca", "Nome da crianca", extract_person_name(raw_text, "nome_crianca")),
+        ]
+    elif document_code == "CERTIDAO_OBITO":
+        specific = [
+            ("nome_falecido", "Nome do falecido", extract_person_name(raw_text, "nome_falecido")),
+            ("data_obito", "Data do obito", search_labeled_date(raw_text, ["data do obito", "data obito", "falecimento"])),
+        ]
+    elif document_code == "CTC":
+        specific = [
+            ("tempo_contribuicao", "Tempo de contribuicao", search_labeled_value(raw_text, ["tempo de contribuicao", "tempo liquido"])),
+            ("orgao_emissor", "Orgao emissor", search_labeled_value(raw_text, ["orgao emissor", "entidade expedidora"])),
+        ]
+    elif document_code == "GPS":
+        specific = [
+            ("competencia", "Competencia", extract_competencies(raw_text)),
+            ("valor", "Valor recolhido", extract_currency_after_label(raw_text, ["valor", "total", "valor do documento"])),
+        ]
+    elif document_code == "CERTIDAO_RECOLHIMENTO":
+        specific = [
+            ("data_recolhimento", "Data de recolhimento", search_labeled_date(raw_text, ["data de recolhimento", "recolhimento", "data de ingresso"])),
+            ("regime", "Regime prisional", extract_field_value("regime", raw_text)),
+        ]
+    fields = common + specific
+    return [
+        {
+            "key": key,
+            "label": label,
+            "value": value or "Nao identificado",
+            "status": "extraido" if value else "pendente_revisao",
+        }
+        for key, label, value in fields
+    ]
+
+
+def assess_document_extraction(
+    classification: dict[str, Any],
+    fields: list[dict[str, str]],
+    *,
+    raw_text: str,
+    source_confidence: float,
+) -> dict[str, Any]:
+    """Recalcula status usando os campos do tipo detectado, nao um schema de CNIS."""
+    if not raw_text.strip():
+        return {"status": "sem_texto", "confidence": 0.0, "missing_fields": []}
+    code = str(classification.get("code") or "NAO_CLASSIFICADO")
+    required = DOCUMENT_DEFINITIONS.get(code, {}).get("required_fields", ["nome", "cpf"])
+    values = {field["key"]: field.get("value", "") for field in fields}
+    missing = [key for key in required if not values.get(key) or values[key] == "Nao identificado"]
+    coverage = (len(required) - len(missing)) / len(required) if required else 1.0
+    confidence = round(max(0.0, min(0.99, source_confidence * 0.60 + coverage * 0.25 + float(classification.get("confidence") or 0.0) * 0.15)), 2)
+    if code == "NAO_CLASSIFICADO":
+        status = "parcial"
+    elif not missing and confidence >= 0.62:
+        status = "extraido"
+    else:
+        status = "parcial"
+    return {"status": status, "confidence": confidence, "missing_fields": missing}
+
+
+def extract_date_with_reverse_label(text: str, labels: list[str]) -> str:
+    labelled = search_labeled_date(text, labels)
+    if labelled:
+        return labelled
+    for label in labels:
+        pattern = rf"(\d{{2}}/\d{{2}}/\d{{4}})\s*(?:{re.escape(label)})"
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match and is_valid_date(match.group(1)):
+            return match.group(1)
+    return ""
+
+
+def extract_rg(text: str) -> str:
+    patterns = [
+        r"\b(\d{5,12})\s+(?:SSP|DETRAN|PC|IGP)[/\-]?[A-Z]{0,2}\b",
+        r"(?:rg|registro geral|documento de identidade|numero do rg|n[úu]mero do rg)\s*[:\-]?\s*(\d{5,12})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def extract_issuing_agency(text: str) -> str:
+    match = re.search(r"\b((?:SSP|DETRAN|PC|IGP)[/\-]?[A-Z]{0,2})\b", text, flags=re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
+def extract_cnh_number(text: str) -> str:
+    match = re.search(
+        r"(?:n[úu]mero\s+de\s+registro|registro\s+nacional|registro|cnh)\s*[:\-]?\s*(\d{9,12})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        return match.group(1)
+    label = re.search(r"(?:\d+\s*)?n[º°o]?\s*registro\b", text, flags=re.IGNORECASE)
+    if not label:
+        return ""
+    trailing = text[label.end():label.end() + 220]
+    for candidate in re.findall(r"(?<!\d)\d{9,12}(?!\d)", trailing):
+        if not validate_identifier_digits(candidate):
+            return candidate
+    return ""
+
+
+def extract_cnh_category(text: str) -> str:
+    match = re.search(r"(?:categoria|cat\.)\s*[:\-]?\s*([A-E](?:\s*[A-E])?)\b", text, flags=re.IGNORECASE)
+    if match:
+        return re.sub(r"\s+", "", match.group(1)).upper()
+    label = re.search(r"(?:\d+\s*)?cat\.?\s*hab\b", text, flags=re.IGNORECASE)
+    if label:
+        candidate = re.search(r"\b([A-E])\b", text[label.end():label.end() + 280], flags=re.IGNORECASE)
+        return candidate.group(1).upper() if candidate else ""
+    return ""
+
+
+def extract_cnh_validity(text: str) -> str:
+    match = re.search(r"(?:validade|v[aá]lida\s+at[eé])\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})", text, flags=re.IGNORECASE)
+    if not match:
+        # Campos da CNH visual são lidos por coluna: a data pode preceder o
+        # rótulo "4b Validade" na sequência do OCR.
+        match = re.search(r"(\d{2}/\d{2}/\d{4})\s*(?:\d+\s*[a-z]\s*)?validade\b", text, flags=re.IGNORECASE)
+    if not match:
+        return ""
+    try:
+        # Uma CNH pode ter validade superior ao horizonte usado para datas de
+        # documentos previdenciários; por isso não reutilizamos is_valid_date.
+        parsed = datetime.strptime(match.group(1), "%d/%m/%Y")
+    except ValueError:
+        return ""
+    return match.group(1) if 1900 <= parsed.year <= datetime.now().year + 20 else ""
+
+
+def extract_cpf_status(text: str) -> str:
+    match = re.search(r"situa[cç][aã]o\s+cadastral\s*[:\-]\s*([A-Za-zÀ-ÿ ]{3,50})", text, flags=re.IGNORECASE)
+    return normalize_whitespace(match.group(1)).strip(" .;|") if match else ""
+
+
+def extract_cid(text: str) -> str:
+    match = re.search(r"\bCID(?:[-\s]?[A-Z])?\s*[:\-]?\s*([A-Z]\d{2}(?:\.\d{1,2})?)\b", text, flags=re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
+def extract_crm(text: str) -> str:
+    match = re.search(r"\bCRM(?:[-/]?[A-Z]{2})?\s*[:\-]?\s*(\d{3,8})\b", text, flags=re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
+def extract_currency_after_label(text: str, labels: list[str]) -> str:
+    for label in labels:
+        match = re.search(
+            rf"{re.escape(label)}\s*[:\-]?\s*(R\$\s*[\d.]+,\d{{2}})",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return re.sub(r"\s+", " ", match.group(1)).strip()
+    return ""
+
+
+def extract_benefit_number(text: str) -> str:
+    labels = ["numero do beneficio", "número do benefício", "beneficio", "benefício", "nb"]
+    for label in labels:
+        match = re.search(
+            rf"{re.escape(label)}\s*[:\-]?\s*(\d{{3}}[.\s]?\d{{3}}[.\s]?\d{{3}}[-\s]?\d)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def extract_cnis_vinculos(raw_text: str) -> list[dict[str, Any]]:
+    """Extract employer blocks only when the OCR supplied labelled evidence."""
+    labels = re.compile(
+        r"(?im)^(?:empregador|empresa|raz[aã]o\s+social|nome\s+do\s+empregador)\s*[:\-]\s*(?P<name>[^\n\r]+)"
+    )
+    matches = list(labels.finditer(raw_text))
+    indicator_pattern = re.compile(r"\b(?:PEXT|PREM|IREC|PADM|AEXT|ACNIS|IDINV|PEND)\b", re.IGNORECASE)
+    result: list[dict[str, Any]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else min(len(raw_text), match.end() + 1400)
+        block = raw_text[match.start():end]
+        employer = normalize_whitespace(match.group("name")).strip(" .;|")[:180]
+        start = search_labeled_date(block, ["admissão", "admissao", "início", "inicio", "data início", "data inicio"])
+        finish = search_labeled_date(block, ["rescisão", "rescisao", "término", "termino", "fim", "data fim", "data saída", "data saida"])
+        cnpj = first_valid_identifier(block, "cnpj")
+        indicators = list(dict.fromkeys(item.upper() for item in indicator_pattern.findall(block)))
+        if not employer or not (start or finish or cnpj or indicators):
+            continue
+        result.append({
+            "seq": len(result) + 1,
+            "empregador": employer,
+            "cnpj": cnpj or "Nao identificado",
+            "tipo_filiacao": search_labeled_value(block, ["categoria", "tipo filiação", "tipo filiacao"]) or "Nao identificado",
+            "data_inicio": start or "Nao identificada",
+            "data_fim": finish or "Nao identificada",
+            "inicio_data": parse_brazilian_date(start),
+            "fim_data": parse_brazilian_date(finish),
+            "status": "atencao" if indicators else "regular",
+            "indicadores": indicators,
+        })
+    # O CNIS oficial costuma trazer vínculos em tabela, sem os rótulos
+    # "Empresa:" ou "Empregador:" que a primeira estratégia procura.
+    # Trata apenas linhas com CNPJ e duas datas, evitando inferir vínculos por
+    # competências ou valores de remuneração.
+    table_pattern = re.compile(
+        r"(?im)^\s*(?P<seq>\d+)\s+"
+        r"(?P<cnpj>\d{2}[.\s]?\d{3}[.\s]?\d{3}[/-]?\d{4}[-\s]?\d{2})\s+"
+        r"(?P<employer>.+?)\s+"
+        r"(?P<category>Empregado|Contribuinte|Avulso|Dom[eé]stico|Segurado)"
+    )
+    table_matches = list(table_pattern.finditer(raw_text))
+    existing_keys = {(item.get("cnpj"), item.get("data_inicio"), item.get("data_fim")) for item in result}
+    for index, match in enumerate(table_matches):
+        cnpj = match.group("cnpj").strip()
+        # Each row ends before the next CNPJ row or its remuneration section.
+        end = table_matches[index + 1].start() if index + 1 < len(table_matches) else len(raw_text)
+        block = raw_text[match.start():end]
+        end_markers = [
+            marker for marker in (
+                block.find("Competência"), block.find("Competencia"), block.find("Remunerações"),
+                block.find("Remuneracoes"), block.find("Relações Previdenciárias"),
+                block.find("Relacoes Previdenciarias"), block.find("[Página"),
+            ) if marker >= 0
+        ]
+        if end_markers:
+            block = block[:min(end_markers)]
+        # Alguns extratos colam o NIT imediatamente após a data final
+        # (ex.: 21/10/1980108.818...). Não exigimos fronteira à direita.
+        dates = re.findall(r"(?<!\d)\d{2}/\d{2}/\d{4}", block)
+        start = dates[0] if dates else ""
+        finish = dates[1] if len(dates) > 1 else ""
+        if not start:
+            continue
+        key = (cnpj, start, finish)
+        if key in existing_keys:
+            continue
+        employer = normalize_whitespace(match.group("employer")).strip(" .;|")[:180]
+        if not employer or not first_valid_identifier(cnpj, "cnpj"):
+            continue
+        indicators = list(dict.fromkeys(item.upper() for item in indicator_pattern.findall(block)))
+        result.append({
+            "seq": len(result) + 1,
+            "empregador": employer,
+            "cnpj": first_valid_identifier(cnpj, "cnpj"),
+            "tipo_filiacao": normalize_whitespace(match.group("category")),
+            "data_inicio": start,
+            "data_fim": finish or "Nao identificada",
+            "inicio_data": parse_brazilian_date(start),
+            "fim_data": parse_brazilian_date(finish),
+            "status": "atencao" if indicators or not finish else "regular",
+            "indicadores": indicators,
+        })
+        existing_keys.add(key)
+    return result
+
+
+def extract_ctps_vinculos(raw_text: str) -> list[dict[str, Any]]:
+    """Extract official CTPS Digital contract blocks without guessing unlabeled data."""
+    contract_pattern = re.compile(
+        r"(?im)^\s*(?P<inicio>\d{2}/\d{2}/\d{4})\s*-\s*"
+        r"(?P<fim>\d{2}/\d{2}/\d{4})\s*\n+\s*"
+        r"(?P<empregador>[^\n\r]{3,180})\s*\n+\s*"
+        r"CNPJ\s*:\s*(?P<cnpj>\d{2}[.\s]?\d{3}[.\s]?\d{3}[/-]?\d{4}[-\s]?\d{2})"
+    )
+    result: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for match in contract_pattern.finditer(raw_text):
+        inicio = match.group("inicio")
+        fim = match.group("fim")
+        cnpj = first_valid_identifier(match.group("cnpj"), "cnpj")
+        empregador = normalize_whitespace(match.group("empregador")).strip(" .;|")[:180]
+        if not (cnpj and empregador and is_valid_date(inicio) and is_valid_date(fim)):
+            continue
+        key = (cnpj, inicio, fim)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "seq": len(result) + 1,
+            "empregador": empregador,
+            "cnpj": cnpj,
+            "data_inicio": inicio,
+            "data_fim": fim,
+            "inicio_data": parse_brazilian_date(inicio),
+            "fim_data": parse_brazilian_date(fim),
+            "fonte": "CTPS Digital",
+            "status": "regular",
+        })
+    return result
+
+
+def native_pdf_semantic_score(text: str) -> float:
+    """Score local for choosing the native PDF reader that preserves labels."""
+    normalized = normalize_whitespace(text)
+    signals = 0
+    if extract_person_name(normalized):
+        signals += 3
+    if extract_field_value("data_nascimento", normalized):
+        signals += 2
+    if first_valid_identifier(normalized, "cpf"):
+        signals += 1
+    if first_valid_nit(normalized):
+        signals += 1
+    if re.search(r"\b\d{2}[.]\d{3}[.]\d{3}/\d{4}-\d{2}\b", normalized):
+        signals += 2
+    return signals * 10 + min(9, text_quality(normalized) * 10)
+
+
+def extract_competency_list(text: str) -> list[str]:
+    without_full_dates = re.sub(r"\b\d{2}/\d{2}/\d{4}\b", " ", text)
+    current_year = datetime.now().year
+    return list(dict.fromkeys(
+        match.group(0) for match in re.finditer(r"\b(?:0[1-9]|1[0-2])/\d{4}\b", without_full_dates)
+        if 1900 <= int(match.group(0)[-4:]) <= current_year + 2
+    ))
+
+
+def parse_brazilian_date(value: str) -> datetime | None:
+    return datetime.strptime(value, "%d/%m/%Y") if value and is_valid_date(value) else None
+
+
+def contribution_days(intervals: list[tuple[datetime, datetime]]) -> int:
+    """Sum complete periods without double-counting overlap; result is an estimate."""
+    normalized = sorted((start.date(), end.date()) for start, end in intervals if end >= start)
+    if not normalized:
+        return 0
+    merged = [list(normalized[0])]
+    for start, end in normalized[1:]:
+        if start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return sum((end - start).days + 1 for start, end in merged)
+
+
 def extract_field_value(field_name: str, text: str) -> str:
     lowered = field_name.lower().strip()
     if lowered == "cpf":
@@ -744,6 +1488,8 @@ def extract_field_value(field_name: str, text: str) -> str:
     if lowered == "regime":
         match = re.search(r"\b(fechado|semiaberto|aberto)\b", text, flags=re.IGNORECASE)
         return match.group(1).strip() if match else ""
+    if lowered in {"nome", "nome_crianca", "nome_falecido"}:
+        return extract_person_name(text, lowered)
     if lowered in {"empresa", "empregador"}:
         return search_labeled_value(text, ["empresa", "empregador", "razão social"])
     if lowered in {"nome", "nome_crianca", "nome_falecido"}:
@@ -849,6 +1595,47 @@ def search_labeled_value(text: str, labels: list[str]) -> str:
             value = match.group(1).strip(" .;|")
             return value[:240]
     return ""
+
+
+def extract_person_name(text: str, field_name: str = "nome") -> str:
+    """Accept the common CNIS labels, including a value rendered on its own line."""
+    labels = {
+        "nome": [
+            "nome do segurado", "nome do filiado", "nome do trabalhador",
+            "nome do requerente", "nome completo", "nome civil", "nome e sobrenome", "nome",
+        ],
+        "nome_crianca": ["nome da crianca", "nome da criança"],
+        "nome_falecido": ["nome do falecido", "instituidor"],
+    }.get(field_name, [field_name.replace("_", " ")])
+    excluded = {"NOME", "SEGURADO", "TRABALHADOR", "FILIADO", "REQUERENTE", "CPF", "NIT", "PIS"}
+    for label in labels:
+        pattern = rf"{re.escape(label)}\s*(?::|\-|\n)\s*([^\n\r]{{4,160}})"
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            candidate = normalize_whitespace(match.group(1)).strip(" .;|")
+            candidate = re.split(r"\b(?:CPF|NIT|PIS|NIS|DATA\s+DE\s+NASCIMENTO)\b", candidate, maxsplit=1, flags=re.IGNORECASE)[0].strip(" .;|")
+            words = re.findall(r"[A-Za-zÀ-ÿ]+", candidate)
+            if is_person_name(candidate, words, excluded):
+                return candidate[:120]
+        reverse_pattern = rf"(?im)^([A-ZÀ-Ý][A-ZÀ-Ý ]{{5,120}})\s*\n\s*{re.escape(label)}\s*$"
+        reverse_match = re.search(reverse_pattern, text)
+        if reverse_match:
+            candidate = normalize_whitespace(reverse_match.group(1)).strip(" .;|")
+            words = re.findall(r"[A-Za-zÀ-ÿ]+", candidate)
+            if is_person_name(candidate, words, excluded):
+                return candidate[:120]
+    return ""
+
+
+def is_person_name(candidate: str, words: list[str], excluded: set[str]) -> bool:
+    # "Nascimento" é um sobrenome brasileiro válido; "Data de Nascimento"
+    # continua bloqueado por conter "DATA".
+    forbidden = {"DOC", "DOCUMENTO", "IDENTIDADE", "ORGAO", "EMISSOR", "UF", "DATA"}
+    return (
+        2 <= len(words) <= 8
+        and not any(word.upper() in excluded or word.upper() in forbidden for word in words)
+        and not re.search(r"[/:;]", candidate)
+        and not re.search(r"\d", candidate)
+    )
 
 
 def search_labeled_date(text: str, labels: list[str]) -> str:

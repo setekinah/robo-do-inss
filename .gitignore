@@ -18,11 +18,25 @@ uploads/
 .venv/
 venv/
 .codex-test-temp/
+.test-runtime/
+tmp/
+tmp_*.html
+tmp_*.js
 .env
 .env.*
+!.env.example
 
 # OS and editors
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+
+# Test, coverage and build artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+*.egg-info/
