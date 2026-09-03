@@ -18,6 +18,7 @@ uploads/
 .venv/
 venv/
 .codex-test-temp/
+.codex-test-temp-multiuser/
 .test-runtime/
 tmp/
 tmp_*.html

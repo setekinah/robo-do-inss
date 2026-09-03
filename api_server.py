@@ -388,8 +388,9 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": "Conta ainda não configurada. Faça o cadastro inicial."}, 403)
             return
 
-        if auth_security.verify_credentials(email, password):
-            token = auth_security.create_session()
+        user_email = auth_security.authenticate(email, password)
+        if user_email:
+            token = auth_security.create_session(user_email)
             self.send_response(200)
             self._send_session_cookie(token)
             payload = json.dumps({"success": True, "email": email}, ensure_ascii=False).encode("utf-8")
@@ -406,21 +407,23 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         password = body.get("password", "")
         office_name = body.get("office_name", "")
         oab = body.get("oab", "")
-        if auth_security.credentials_configured():
-            self._send_json({"error": "Cadastro inicial já concluído."}, 403)
+        if auth_security.credentials_configured() and self.client_address[0] not in {"127.0.0.1", "::1"}:
+            self._send_json({"error": "Cadastros adicionais só podem ser feitos no computador local."}, 403)
             return
 
         try:
-            auth_security.save_credentials(email, password)
-            office_settings.save_office_settings({
-                "office_name": office_name,
-                "oab": oab,
-                "responsavel_email": email
-            })
-            token = auth_security.create_session()
+            is_first_user = not auth_security.credentials_configured()
+            user_email = auth_security.create_user(email, password)
+            if is_first_user:
+                office_settings.save_office_settings({
+                    "office_name": office_name,
+                    "oab": oab,
+                    "responsavel_email": user_email
+                })
+            token = auth_security.create_session(user_email)
             self.send_response(201)
             self._send_session_cookie(token)
-            payload = json.dumps({"success": True, "office_name": office_name}, ensure_ascii=False).encode("utf-8")
+            payload = json.dumps({"success": True, "office_name": office_name, "email": user_email}, ensure_ascii=False).encode("utf-8")
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
