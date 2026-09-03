@@ -141,6 +141,8 @@ class AppEngine {
     this.atendimentos = [];
     this.currentLead = null;
     this.stats = null;
+    this.dashboardFilters = { stage: '', benefit: '' };
+    this.filteredDashboardStats = null;
     this.onboardingStep = 2;
     this.activeKanbanStage = 'all';
     this.triageState = { flowId: null, currentNode: null, history: [], selectedResult: null };
@@ -212,6 +214,20 @@ class AppEngine {
     if (searchInput) {
       searchInput.addEventListener('input', (e) => this.filterKanban(e.target.value));
     }
+    document.getElementById('dashboard-stage-filter')?.addEventListener('change', (event) => {
+      this.dashboardFilters.stage = event.target.value;
+      this.applyDashboardFilters();
+    });
+    document.getElementById('dashboard-benefit-filter')?.addEventListener('change', (event) => {
+      this.dashboardFilters.benefit = event.target.value;
+      this.applyDashboardFilters();
+    });
+    document.getElementById('btn-dashboard-clear')?.addEventListener('click', () => {
+      this.dashboardFilters = { stage: '', benefit: '' };
+      document.getElementById('dashboard-stage-filter').value = '';
+      document.getElementById('dashboard-benefit-filter').value = '';
+      this.applyDashboardFilters();
+    });
   }
 
   toggleNotifications() {
@@ -719,6 +735,8 @@ class AppEngine {
 
       const resAtt = await fetch('/api/atendimentos');
       this.atendimentos = await resAtt.json();
+      this.populateDashboardBenefitFilter();
+      this.applyDashboardFilters();
       this.renderKanban();
     } catch (e) {
       this.renderMockData();
@@ -744,13 +762,58 @@ class AppEngine {
     this.renderDashboardStats();
   }
 
-  renderDashboardStats() {
+  populateDashboardBenefitFilter() {
+    const select = document.getElementById('dashboard-benefit-filter');
+    if (!select) return;
+
+    const selectedBenefit = this.dashboardFilters.benefit;
+    const benefits = [...new Set(this.atendimentos.map((item) => item.flow_name).filter(Boolean))].sort();
+    select.replaceChildren(new Option('Todos os benefícios', ''));
+    benefits.forEach((benefit) => select.add(new Option(benefit, benefit)));
+    select.value = selectedBenefit;
+  }
+
+  applyDashboardFilters() {
     if (!this.stats) return;
 
-    document.getElementById('stat-total').textContent = this.stats.total_atendimentos || 0;
-    document.getElementById('stat-value').textContent = (this.stats.total_estimated_value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    document.getElementById('stat-docs').textContent = this.stats.docs_pending || 0;
-    document.getElementById('stat-events').textContent = this.stats.events_pending || 0;
+    const { stage, benefit } = this.dashboardFilters;
+    const filteredRows = this.atendimentos.filter((item) =>
+      (!stage || (item.crm_stage || 'triagem') === stage) &&
+      (!benefit || item.flow_name === benefit)
+    );
+    const stages = Object.fromEntries(
+      Object.keys(this.stats.stages || {}).map((key) => [key, { count: 0, value: 0 }])
+    );
+
+    filteredRows.forEach((item) => {
+      const key = item.crm_stage || 'triagem';
+      if (!stages[key]) stages[key] = { count: 0, value: 0 };
+      stages[key].count += 1;
+      stages[key].value += Number(item.estimated_total_value || 0);
+    });
+
+    this.filteredDashboardStats = {
+      ...this.stats,
+      total_atendimentos: filteredRows.length,
+      total_estimated_value: filteredRows.reduce(
+        (total, item) => total + Number(item.estimated_total_value || 0), 0
+      ),
+      stages,
+    };
+
+    const summary = document.getElementById('dashboard-filter-summary');
+    if (summary) summary.textContent = `${filteredRows.length} caso(s) na visão atual`;
+    this.renderDashboardStats();
+  }
+
+  renderDashboardStats() {
+    if (!this.stats) return;
+    const stats = this.filteredDashboardStats || this.stats;
+
+    document.getElementById('stat-total').textContent = stats.total_atendimentos || 0;
+    document.getElementById('stat-value').textContent = (stats.total_estimated_value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('stat-docs').textContent = stats.docs_pending || 0;
+    document.getElementById('stat-events').textContent = stats.events_pending || 0;
 
     this.renderMetricsChart();
   }
@@ -767,9 +830,11 @@ class AppEngine {
 
     ctx.clearRect(0, 0, width, height);
 
+    const stats = this.filteredDashboardStats || this.stats || { stages: {} };
     const stages = ['Triagem', 'Qualificação', 'Conflito', 'Proposta', 'Documentos', 'Concluído'];
-    const values = [36, 24, 18.5, 32, 28, 10];
-    const maxVal = 40;
+    const stageKeys = ['triagem', 'qualificacao', 'conflito', 'proposta', 'documentos', 'concluido'];
+    const values = stageKeys.map((key) => Number(stats.stages?.[key]?.value || 0) / 1000);
+    const maxVal = Math.max(1, ...values);
 
     const barWidth = (width - 100) / stages.length;
 

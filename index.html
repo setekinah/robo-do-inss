@@ -279,6 +279,13 @@
           </button>
         </div>
 
+        <div class="glass-panel" style="display:flex; flex-wrap:wrap; gap:.75rem; align-items:end; padding:1rem; margin-bottom:1.25rem;">
+          <div class="form-group" style="margin:0; min-width:190px;"><label for="dashboard-stage-filter">Etapa do caso</label><select id="dashboard-stage-filter"><option value="">Todas as etapas</option><option value="triagem">Triagem</option><option value="qualificacao">Qualificação</option><option value="conflito">Conflito / LGPD</option><option value="proposta">Proposta</option><option value="documentos">Documentos</option><option value="concluido">Concluído</option></select></div>
+          <div class="form-group" style="margin:0; min-width:190px;"><label for="dashboard-benefit-filter">Benefício</label><select id="dashboard-benefit-filter"><option value="">Todos os benefícios</option></select></div>
+          <button class="btn-secondary" id="btn-dashboard-clear" type="button">Limpar filtros</button>
+          <span id="dashboard-filter-summary" style="color:var(--text-muted); font-size:.85rem; padding-bottom:.4rem;"></span>
+        </div>
+
         <div class="metrics-grid">
           <div class="glass-panel metric-card">
             <div class="metric-header">
