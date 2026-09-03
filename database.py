@@ -34,6 +34,64 @@ def get_connection() -> Iterator[sqlite3.Connection]:
 
 def init_database() -> None:
     with get_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cnis_catalog_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                source_hash TEXT NOT NULL UNIQUE, source_name TEXT NOT NULL, source_url TEXT NOT NULL,
+                total_indicators INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'aguarda_revisao',
+                review_notes TEXT, activated_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cnis_indicator_definitions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, catalog_version_id INTEGER NOT NULL,
+                code TEXT NOT NULL, indicator_type TEXT NOT NULL, indicator_group TEXT NOT NULL,
+                official_description TEXT NOT NULL, general_guidance TEXT, canonical_key TEXT NOT NULL,
+                FOREIGN KEY(catalog_version_id) REFERENCES cnis_catalog_versions(id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cnis_source_monitor_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, checked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                source_key TEXT NOT NULL, source_url TEXT NOT NULL, source_hash TEXT,
+                success INTEGER NOT NULL, change_detected INTEGER NOT NULL DEFAULT 0, technical_note TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS official_source_registry (
+                source_key TEXT PRIMARY KEY, title TEXT NOT NULL, scope TEXT NOT NULL,
+                source_url TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        ensure_source_monitor_column(conn, "source_key", "TEXT")
+        ensure_source_monitor_column(conn, "source_url", "TEXT")
+        ensure_source_monitor_column(conn, "source_hash", "TEXT")
+        ensure_source_monitor_column(conn, "success", "INTEGER NOT NULL DEFAULT 0")
+        ensure_source_monitor_column(conn, "change_detected", "INTEGER NOT NULL DEFAULT 0")
+        ensure_source_monitor_column(conn, "technical_note", "TEXT")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS official_source_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, source_key TEXT NOT NULL,
+                source_hash TEXT NOT NULL, content_type TEXT, content_length INTEGER,
+                local_path TEXT, captured_at TEXT NOT NULL,
+                UNIQUE(source_key, source_hash),
+                FOREIGN KEY(source_key) REFERENCES official_source_registry(source_key)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cnis_catalog_review_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, catalog_version_id INTEGER NOT NULL,
+                action TEXT NOT NULL, reviewer TEXT NOT NULL, note TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(catalog_version_id) REFERENCES cnis_catalog_versions(id)
+            )
+        """)
+        ensure_catalog_column(conn, "official_clarification", "TEXT")
+        ensure_catalog_column(conn, "source_url", "TEXT")
+        ensure_catalog_column(conn, "source_page", "TEXT")
+        ensure_catalog_version_column(conn, "reviewed_by", "TEXT")
+        ensure_catalog_version_column(conn, "reviewed_at", "TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS atendimentos (
@@ -74,6 +132,10 @@ def init_database() -> None:
         ensure_column(conn, "privacy_legal_basis", "TEXT")
         ensure_column(conn, "privacy_acknowledged_at", "TEXT")
         ensure_column(conn, "triage_profile_json", "TEXT NOT NULL DEFAULT '{}'")
+        ensure_column(conn, "relationship_status", "TEXT NOT NULL DEFAULT 'nao_aplicavel'")
+        ensure_column(conn, "relationship_next_review_at", "TEXT")
+        ensure_column(conn, "remarketing_opt_in", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(conn, "remarketing_opt_in_at", "TEXT")
         conn.execute(
             """
             UPDATE atendimentos
@@ -193,6 +255,24 @@ def init_database() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS atendimento_auditorias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                audit_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(attendance_id, audit_type),
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_atendimento_auditorias_attendance ON atendimento_auditorias(attendance_id, audit_type)"
+        )
         ensure_document_column(conn, "raw_text", "TEXT")
         ensure_document_column(conn, "extracted_data_json", "TEXT")
         ensure_document_column(conn, "source_type", "TEXT")
@@ -232,6 +312,196 @@ def ensure_task_column(conn: sqlite3.Connection, column_name: str, column_type: 
         conn.execute(f"ALTER TABLE crm_tarefas ADD COLUMN {column_name} {column_type}")
 
 
+def ensure_catalog_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(cnis_indicator_definitions)").fetchall()}
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE cnis_indicator_definitions ADD COLUMN {column_name} {column_type}")
+
+
+def ensure_catalog_version_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(cnis_catalog_versions)").fetchall()}
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE cnis_catalog_versions ADD COLUMN {column_name} {column_type}")
+
+
+def ensure_source_monitor_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(cnis_source_monitor_runs)").fetchall()}
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE cnis_source_monitor_runs ADD COLUMN {column_name} {column_type}")
+
+
+def get_active_cnis_indicator_definitions() -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT d.code, d.indicator_type, d.indicator_group, d.official_description,
+                   d.official_clarification, d.general_guidance, d.source_url, d.source_page,
+                   d.canonical_key, v.id AS catalog_version_id, v.source_name AS catalog_source_name
+            FROM cnis_indicator_definitions d
+            JOIN cnis_catalog_versions v ON v.id = d.catalog_version_id
+            WHERE v.status = 'ativo' ORDER BY d.code, d.id
+        """).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_cnis_catalog_status() -> dict[str, Any]:
+    with get_connection() as conn:
+        active = conn.execute("SELECT id, source_name, source_url, total_indicators, activated_at, reviewed_by, reviewed_at FROM cnis_catalog_versions WHERE status='ativo' ORDER BY id DESC LIMIT 1").fetchone()
+        pending = conn.execute("SELECT COUNT(*) FROM cnis_catalog_versions WHERE status='aguarda_revisao'").fetchone()[0]
+    return {"active": dict(active) if active else None, "pending_versions": pending}
+
+
+def register_official_sources(sources: list[dict[str, str]]) -> None:
+    with get_connection() as conn:
+        for source in sources:
+            conn.execute("""
+                INSERT INTO official_source_registry (source_key, title, scope, source_url)
+                VALUES (:key, :title, :scope, :url)
+                ON CONFLICT(source_key) DO UPDATE SET
+                  title=excluded.title, scope=excluded.scope, source_url=excluded.source_url,
+                  updated_at=CURRENT_TIMESTAMP
+            """, source)
+
+
+def record_official_source_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    with get_connection() as conn:
+        previous = conn.execute("""
+            SELECT source_hash FROM official_source_snapshots
+            WHERE source_key=? ORDER BY id DESC LIMIT 1
+        """, (snapshot["source_key"],)).fetchone()
+        changed = bool(previous and previous["source_hash"] != snapshot["source_hash"])
+        conn.execute("""
+            INSERT OR IGNORE INTO official_source_snapshots
+              (source_key, source_hash, content_type, content_length, local_path, captured_at)
+            VALUES (:source_key, :source_hash, :content_type, :content_length, :local_path, :captured_at)
+        """, snapshot)
+        conn.execute("""
+            INSERT INTO cnis_source_monitor_runs
+              (source_key, source_url, source_hash, success, change_detected, technical_note)
+            VALUES (?, ?, ?, 1, ?, ?)
+        """, (snapshot["source_key"], snapshot["source_url"], snapshot["source_hash"], int(changed), "Documento oficial capturado e preservado por hash."))
+    return {**snapshot, "change_detected": changed}
+
+
+def record_official_source_failure(source: dict[str, str], technical_note: str) -> None:
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO cnis_source_monitor_runs
+              (source_key, source_url, success, change_detected, technical_note)
+            VALUES (?, ?, 0, 0, ?)
+        """, (source["key"], source["url"], technical_note[:500]))
+
+
+def list_official_sources() -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT r.source_key, r.title, r.scope, r.source_url, r.enabled,
+                   s.source_hash, s.captured_at, s.content_type, s.content_length,
+                   m.success AS last_success, m.change_detected, m.technical_note, m.checked_at
+            FROM official_source_registry r
+            LEFT JOIN official_source_snapshots s ON s.id = (
+                SELECT id FROM official_source_snapshots WHERE source_key=r.source_key ORDER BY id DESC LIMIT 1
+            )
+            LEFT JOIN cnis_source_monitor_runs m ON m.id = (
+                SELECT id FROM cnis_source_monitor_runs WHERE source_key=r.source_key ORDER BY id DESC LIMIT 1
+            )
+            ORDER BY r.source_key
+        """).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_cnis_catalog_version(*, source_name: str, source_url: str, source_hash: str, definitions: list[dict[str, Any]], review_notes: str = "") -> dict[str, Any]:
+    with get_connection() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(cnis_catalog_versions)").fetchall()}
+        hash_fields = [field for field in ("source_hash", "content_hash") if field in columns]
+        if not hash_fields:
+            raise RuntimeError("Tabela de versões não possui coluna de hash compatível.")
+        lookup = " OR ".join(f"{field}=?" for field in hash_fields)
+        existing = conn.execute(
+            f"SELECT * FROM cnis_catalog_versions WHERE {lookup}",
+            tuple(source_hash for _ in hash_fields),
+        ).fetchone()
+        if existing:
+            return {"version": dict(existing), "created": False}
+        insert_fields = [*hash_fields, "source_name", "source_url", "total_indicators", "review_notes"]
+        if "source_file_name" in columns:
+            insert_fields.append("source_file_name")
+        if "unique_codes" in columns:
+            insert_fields.append("unique_codes")
+        placeholders = ", ".join("?" for _ in insert_fields)
+        insert_values: list[Any] = [
+            *[source_hash for _ in hash_fields], source_name, source_url, len(definitions), review_notes,
+        ]
+        if "source_file_name" in columns:
+            insert_values.append(source_name)
+        if "unique_codes" in columns:
+            insert_values.append(len({str(item.get("code") or "").upper() for item in definitions if item.get("code")}))
+        cursor = conn.execute(
+            f"INSERT INTO cnis_catalog_versions ({', '.join(insert_fields)}) VALUES ({placeholders})",
+            tuple(insert_values),
+        )
+        version_id = cursor.lastrowid
+        definition_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(cnis_indicator_definitions)").fetchall()
+        }
+        definition_fields = [
+            field for field in (
+                "catalog_version_id", "source_row_number", "code", "indicator_type", "indicator_group",
+                "official_description", "official_clarification", "general_guidance", "source_url",
+                "source_page", "official_source_url", "reference_url", "canonical_key",
+            ) if field in definition_columns
+        ]
+        records = []
+        for row_number, item in enumerate(definitions, start=1):
+            record = dict(item, catalog_version_id=version_id, source_row_number=row_number)
+            record.setdefault("official_source_url", source_url)
+            record.setdefault("reference_url", source_url)
+            records.append(record)
+        fields_sql = ", ".join(definition_fields)
+        values_sql = ", ".join(f":{field}" for field in definition_fields)
+        conn.executemany(
+            f"INSERT INTO cnis_indicator_definitions ({fields_sql}) VALUES ({values_sql})",
+            records,
+        )
+        conn.execute("""
+            INSERT INTO cnis_catalog_review_log (catalog_version_id, action, reviewer, note)
+            VALUES (?, 'importada', 'sistema', ?)
+        """, (version_id, review_notes or "Versão importada; aguarda revisão jurídica."))
+        version = conn.execute("SELECT * FROM cnis_catalog_versions WHERE id=?", (version_id,)).fetchone()
+    return {"version": dict(version), "created": True}
+
+
+def list_cnis_catalog_versions() -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT v.*, (SELECT COUNT(*) FROM cnis_indicator_definitions d WHERE d.catalog_version_id=v.id) AS imported_definitions
+            FROM cnis_catalog_versions v ORDER BY v.id DESC LIMIT 20
+        """).fetchall()
+    return [dict(row) for row in rows]
+
+
+def activate_cnis_catalog_version(version_id: int, reviewer: str, note: str) -> dict[str, Any]:
+    with get_connection() as conn:
+        version = conn.execute("SELECT * FROM cnis_catalog_versions WHERE id=?", (version_id,)).fetchone()
+        if not version:
+            raise ValueError("Versão de catálogo não encontrada.")
+        count = conn.execute("SELECT COUNT(*) FROM cnis_indicator_definitions WHERE catalog_version_id=?", (version_id,)).fetchone()[0]
+        if count == 0:
+            raise ValueError("Não é possível ativar uma versão sem indicadores.")
+        conn.execute("UPDATE cnis_catalog_versions SET status='arquivado' WHERE status='ativo'")
+        conn.execute("""
+            UPDATE cnis_catalog_versions
+            SET status='ativo', activated_at=CURRENT_TIMESTAMP, reviewed_by=?, reviewed_at=CURRENT_TIMESTAMP,
+                review_notes=COALESCE(NULLIF(?, ''), review_notes)
+            WHERE id=?
+        """, (reviewer or "Responsável do escritório", note, version_id))
+        conn.execute("""
+            INSERT INTO cnis_catalog_review_log (catalog_version_id, action, reviewer, note)
+            VALUES (?, 'ativada', ?, ?)
+        """, (version_id, reviewer or "Responsável do escritório", note or "Ativação manual após revisão jurídica."))
+        activated = conn.execute("SELECT * FROM cnis_catalog_versions WHERE id=?", (version_id,)).fetchone()
+    return dict(activated)
+
+
 def save_attendance(
     *,
     lead_name: str,
@@ -252,6 +522,10 @@ def save_attendance(
     privacy_notice_acknowledged: bool = False,
     privacy_legal_basis: str = "",
     triage_profile: dict[str, Any] | None = None,
+    crm_stage: str = "triagem",
+    relationship_status: str = "nao_aplicavel",
+    relationship_next_review_at: str | None = None,
+    remarketing_opt_in: bool = False,
 ) -> int:
     with get_connection() as conn:
         cursor = conn.execute(
@@ -296,7 +570,7 @@ def save_attendance(
                 benefit_category,
                 estimated_monthly_value,
                 estimated_total_value,
-                "triagem",
+                crm_stage,
                 "pendente",
                 lead_email.strip(),
                 lead_source.strip(),
@@ -307,6 +581,22 @@ def save_attendance(
             ),
         )
         attendance_id = int(cursor.lastrowid)
+        conn.execute(
+            """
+            UPDATE atendimentos
+            SET relationship_status = ?, relationship_next_review_at = ?,
+                remarketing_opt_in = ?,
+                remarketing_opt_in_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END
+            WHERE id = ?
+            """,
+            (
+                relationship_status,
+                relationship_next_review_at,
+                1 if remarketing_opt_in else 0,
+                1 if remarketing_opt_in else 0,
+                attendance_id,
+            ),
+        )
         if status in {"aprovado", "revisao"}:
             seed_document_checklist(conn, attendance_id=attendance_id, flow_id=flow_id)
         conn.commit()
@@ -632,6 +922,44 @@ def list_attendance_documents(attendance_id: int) -> list[sqlite3.Row]:
             (attendance_id,),
         ).fetchall()
     return rows
+
+
+def save_attendance_audit(*, attendance_id: int, audit_type: str, status: str, report: dict[str, Any]) -> None:
+    """Persist only a generated, reviewable report for the attendance."""
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO atendimento_auditorias (attendance_id, audit_type, status, report_json)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(attendance_id, audit_type) DO UPDATE SET
+                status=excluded.status,
+                report_json=excluded.report_json,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (attendance_id, audit_type, status, json.dumps(report, ensure_ascii=False)),
+        )
+
+
+def get_attendance_audit(attendance_id: int, audit_type: str) -> dict[str, Any] | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, attendance_id, audit_type, status, report_json, created_at, updated_at
+            FROM atendimento_auditorias
+            WHERE attendance_id = ? AND audit_type = ?
+            """,
+            (attendance_id, audit_type),
+        ).fetchone()
+    if not row:
+        return None
+    report = json.loads(row["report_json"] or "{}")
+    return {**dict(row), "report": report, "report_json": None}
+
+
+def invalidate_attendance_document_audits(attendance_id: int) -> None:
+    """A new upload changes the evidence base; stored audits must not look current."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM atendimento_auditorias WHERE attendance_id = ?", (attendance_id,))
 
 
 def update_attendance_document(

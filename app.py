@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from html import escape as escape_html
 from typing import Any
 
 import pandas as pd
@@ -2204,6 +2205,207 @@ def render_admin_topbar() -> None:
                 st.rerun()
 
 
+def inject_previa_visual_theme() -> None:
+    """Map the legacy PrevIA visual language onto the active Streamlit UI only."""
+    st.markdown(
+        """
+        <style>
+        :root {
+            --previa-bg: #07090e;
+            --previa-surface: #0e131f;
+            --previa-card: rgba(19, 26, 42, .78);
+            --previa-card-hover: rgba(28, 38, 62, .9);
+            --previa-border: rgba(255,255,255,.09);
+            --previa-text: #f8fafc;
+            --previa-muted: #94a3b8;
+            --previa-dim: #64748b;
+            --previa-cyan: #00f2fe;
+            --previa-blue: #2563eb;
+            --previa-violet: #9d4edd;
+            --previa-green: #10b981;
+            --previa-gold: #fbbf24;
+            --previa-rose: #f43f5e;
+        }
+        .stApp {
+            background-color: var(--previa-bg) !important;
+            background-image: radial-gradient(circle at 14% 8%, rgba(37,99,235,.18), transparent 28%), radial-gradient(circle at 88% 82%, rgba(0,242,254,.10), transparent 32%) !important;
+            color: var(--previa-text) !important;
+        }
+        html, body, [class*="css"], [data-testid="stAppViewContainer"] { color:var(--previa-text) !important; }
+        [data-testid="stHeader"] { background:rgba(7,9,14,.86) !important; border-bottom:1px solid var(--previa-border) !important; }
+        [data-testid="stDecoration"], footer { display:none !important; }
+        .block-container { max-width:1580px !important; padding:1rem 1.2rem 3rem !important; }
+        .previa-topbar {
+            display:flex; align-items:center; justify-content:space-between; gap:1rem;
+            min-height:54px; margin-bottom:1rem; padding:.7rem 1rem;
+            color:var(--previa-text); background:rgba(14,19,31,.78); border:1px solid var(--previa-border);
+            border-radius:14px; box-shadow:0 12px 30px rgba(0,0,0,.25); backdrop-filter:blur(16px);
+        }
+        .previa-topbar-left { display:flex; align-items:center; gap:.7rem; font-size:.9rem; color:var(--previa-muted); }
+        .previa-topbar-title { color:var(--previa-text); font-weight:800; letter-spacing:.015em; }
+        .previa-live { color:var(--previa-green); font-size:.78rem; font-weight:700; }
+        .previa-live::before { content:""; display:inline-block; width:7px; height:7px; margin-right:.35rem; border-radius:50%; background:var(--previa-green); box-shadow:0 0 9px var(--previa-green); }
+        .previa-sidebar-marker { display:none; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.previa-sidebar-marker) {
+            background:rgba(14,19,31,.82) !important; border:1px solid var(--previa-border) !important;
+            border-radius:16px !important; padding:.75rem !important; box-shadow:0 14px 32px rgba(0,0,0,.27) !important;
+            backdrop-filter:blur(16px); position:sticky; top:1rem;
+        }
+        .previa-brand { padding:.55rem .6rem 1rem; border-bottom:1px solid var(--previa-border); margin-bottom:.55rem; }
+        .previa-brand strong { display:block; color:var(--previa-text); font:800 1.2rem/1 "Outfit","Manrope",sans-serif; letter-spacing:.02em; }
+        .previa-brand strong span { color:var(--previa-cyan); }
+        .previa-brand small { color:var(--previa-muted); font-size:.72rem; }
+        .previa-nav-label { color:var(--previa-dim); font-size:.67rem; font-weight:800; letter-spacing:.12em; margin:.45rem .6rem .2rem; }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.previa-sidebar-marker) .stButton > button {
+            min-height:2.55rem !important; padding:.45rem .6rem !important; border:1px solid transparent !important; border-radius:9px !important;
+            color:var(--previa-muted) !important; background:transparent !important; justify-content:flex-start !important; text-align:left !important;
+            box-shadow:none !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.previa-sidebar-marker) .stButton > button:hover {
+            background:rgba(255,255,255,.055) !important; color:var(--previa-text) !important; border-color:var(--previa-border) !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.previa-sidebar-marker) .stButton > button[kind="primary"] {
+            color:#06131b !important; background:linear-gradient(135deg,var(--previa-blue),var(--previa-cyan)) !important; border-color:transparent !important; font-weight:800 !important;
+        }
+        .previa-sidebar-foot { margin:.7rem .15rem 0; padding:.75rem .55rem 0; border-top:1px solid var(--previa-border); color:var(--previa-dim); font-size:.7rem; }
+        .pre-page-header { padding:.35rem 0 1rem !important; background:transparent !important; border:0 !important; box-shadow:none !important; }
+        .pre-page-header h2, .panel-title, .pre-section-title { color:var(--previa-text) !important; font-family:"Outfit","Manrope",sans-serif !important; }
+        .pre-page-header h2 { font-size:1.65rem !important; }
+        .pre-page-header p, .panel-subtitle, .stCaption, [data-testid="stCaptionContainer"] { color:var(--previa-muted) !important; }
+        /* A autenticação é exibida antes da navegação e também precisa usar a
+           paleta PrevIA, sem herdar os títulos escuros do tema anterior. */
+        .auth-step-title { color:var(--previa-text) !important; }
+        .auth-step-copy, .auth-login-meta, .auth-footer-note { color:var(--previa-muted) !important; }
+        .auth-login-strip { background:rgba(255,255,255,.07) !important; border-color:var(--previa-border) !important; }
+        .auth-login-strip strong { color:var(--previa-text) !important; }
+        .auth-login-strip span { color:var(--previa-muted) !important; }
+        .pre-card, .pre-metric-card, .pre-stage-card, .panel-box, .surface-card,
+        [data-testid="stVerticalBlockBorderWrapper"]:not(:has(.previa-sidebar-marker)),
+        [data-testid="stMetric"], [data-testid="stDataFrame"], [data-testid="stVegaLiteChart"] {
+            background:var(--previa-card) !important; border-color:var(--previa-border) !important;
+            color:var(--previa-text) !important; box-shadow:0 12px 26px rgba(0,0,0,.22) !important;
+        }
+        .pre-card, .pre-metric-card, .pre-stage-card, .panel-box, .surface-card { border-radius:14px !important; }
+        .pre-metric-card h3, .kpi-value { color:var(--previa-cyan) !important; }
+        .pre-metric-card.soft-green h3 { color:var(--previa-green) !important; }
+        .pre-metric-card.soft-orange h3 { color:var(--previa-gold) !important; }
+        .pre-metric-card.soft-red h3, .pre-task-priority.alta { color:var(--previa-rose) !important; }
+        .pre-spotlight, .pre-focus-hero { background:linear-gradient(135deg,#142b71,#075e7a) !important; border:1px solid rgba(0,242,254,.22) !important; }
+        .pre-focus-stat, .pre-detail-row, .pre-task-item, .history-item { background:rgba(255,255,255,.035) !important; border-color:var(--previa-border) !important; color:var(--previa-text) !important; }
+        .pre-detail-row span, .pre-task-item p, .pre-focus-stat span { color:var(--previa-muted) !important; }
+        .law-dashboard-primary, .law-dashboard-secondary { gap:1rem !important; }
+        .law-results-card, .law-stat-panel, .law-funnel-panel, .law-revenue-panel {
+            background:var(--previa-card) !important; border:1px solid var(--previa-border) !important; border-radius:14px !important; box-shadow:0 12px 26px rgba(0,0,0,.22) !important;
+        }
+        .law-result-segment.lost { background:linear-gradient(145deg,#7f1d3e,#f43f5e) !important; }
+        .law-result-segment.won { background:linear-gradient(145deg,#153d91,#00a9ba) !important; }
+        .law-panel-heading h3, .law-stat-value, .law-revenue-value, .law-funnel-count { color:var(--previa-text) !important; }
+        .law-panel-heading span, .law-panel-legend, .law-revenue-note, .law-funnel-label { color:var(--previa-muted) !important; }
+        .law-mini-chart { border-color:var(--previa-border) !important; }
+        .law-funnel-track { background:rgba(255,255,255,.08) !important; }
+        .law-alert-card { background:rgba(251,191,36,.12) !important; color:#fcd34d !important; border-color:rgba(251,191,36,.25) !important; }
+        .law-dashboard-details { background:rgba(14,19,31,.6) !important; border-color:var(--previa-border) !important; }
+        .law-dashboard-details summary { color:var(--previa-muted) !important; border-color:var(--previa-border) !important; }
+        .stTabs [data-baseweb="tab-list"] { border-color:var(--previa-border) !important; }
+        .stTabs [data-baseweb="tab"] { color:var(--previa-muted) !important; }
+        .stTabs [aria-selected="true"] { color:var(--previa-cyan) !important; border-bottom-color:var(--previa-cyan) !important; }
+        button[kind="primary"] { background:linear-gradient(135deg,var(--previa-blue),var(--previa-cyan)) !important; color:#06131b !important; border:0 !important; }
+        .stButton > button:not([kind="primary"]) { border-radius:9px !important; border-color:var(--previa-border) !important; color:var(--previa-text) !important; background:rgba(255,255,255,.04) !important; }
+        /*
+         * Os widgets nativos podem receber o fundo branco de regras anteriores
+         * do Streamlit. Nessa situacao, manter o texto claro torna os dados
+         * invisiveis. Este bloco final trata o controle como uma superficie
+         * clara: valor, placeholder e selecao permanecem legiveis em todos os
+         * navegadores.
+         */
+        .stTextInput input,
+        .stTextArea textarea,
+        .stNumberInput input,
+        .stDateInput input,
+        .stSelectbox div[data-baseweb="select"] > div {
+            background:#ffffff !important;
+            color:#17243b !important;
+            -webkit-text-fill-color:#17243b !important;
+            border:1px solid #d7dfec !important;
+            border-radius:9px !important;
+            caret-color:#17243b !important;
+        }
+        .stTextInput input::placeholder,
+        .stTextArea textarea::placeholder,
+        .stNumberInput input::placeholder,
+        .stDateInput input::placeholder {
+            color:#667085 !important;
+            -webkit-text-fill-color:#667085 !important;
+            opacity:1 !important;
+        }
+        .stTextInput input:focus,
+        .stTextArea textarea:focus,
+        .stNumberInput input:focus,
+        .stDateInput input:focus,
+        .stSelectbox div[data-baseweb="select"] > div:focus-within {
+            border-color:var(--previa-cyan) !important;
+            box-shadow:0 0 0 3px rgba(0,242,254,.16) !important;
+        }
+        .stTextInput input::selection,
+        .stTextArea textarea::selection,
+        .stNumberInput input::selection,
+        .stDateInput input::selection {
+            color:#06131b !important;
+            background:#a5f3fc !important;
+        }
+        label, [data-testid="stWidgetLabel"] p { color:var(--previa-muted) !important; }
+        [data-baseweb="popover"], [role="listbox"] { background:var(--previa-surface) !important; color:var(--previa-text) !important; border-color:var(--previa-border) !important; }
+        [role="option"] { color:var(--previa-text) !important; background:var(--previa-surface) !important; }
+        [role="option"]:hover { background:rgba(0,242,254,.10) !important; }
+        @media(max-width:900px) {
+            .block-container { padding:.75rem !important; }
+            div[data-testid="stVerticalBlockBorderWrapper"]:has(.previa-sidebar-marker) { position:static; }
+            .previa-topbar-left span:not(.previa-topbar-title) { display:none; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_previa_topbar() -> None:
+    office_settings = st.session_state.get("office_settings", {})
+    office_name = office_settings.get("office_name") or "Painel do escritório"
+    st.markdown(
+        (
+            "<header class='previa-topbar'>"
+            "<div class='previa-topbar-left'><span class='previa-topbar-title'>Central de Operações</span>"
+            f"<span>{escape_html(str(office_name))}</span></div>"
+            "<div class='previa-live'>Sistema seguro e ativo</div>"
+            "</header>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_previa_navigation() -> None:
+    with st.container(border=True):
+        st.markdown("<span class='previa-sidebar-marker'></span>", unsafe_allow_html=True)
+        st.markdown("<div class='previa-brand'><strong>Prev<span>IA</span></strong><small>Inteligência previdenciária</small></div>", unsafe_allow_html=True)
+        st.markdown("<div class='previa-nav-label'>OPERAÇÃO</div>", unsafe_allow_html=True)
+        for view_id, label, _emoji in NAV_ITEMS:
+            if st.button(
+                label,
+                key=f"previa_nav_{view_id}",
+                icon=NAV_MATERIAL_ICONS[view_id],
+                type="primary" if st.session_state.current_view == view_id else "tertiary",
+                use_container_width=True,
+            ):
+                set_current_view(view_id)
+                st.rerun()
+        st.markdown("<div class='previa-sidebar-foot'>Dados locais protegidos<br>SQLite · LGPD · Auditoria</div>", unsafe_allow_html=True)
+        if st.button("Sair", key="previa_logout", icon=":material/logout:", type="tertiary", use_container_width=True):
+            st.session_state.is_authenticated = False
+            st.session_state.auth_mode = "login"
+            st.session_state.auth_login_password = ""
+            st.rerun()
+
+
 def ensure_session_defaults() -> None:
     if "selected_flow_id" not in st.session_state:
         st.session_state.selected_flow_id = next(iter(FLOW_DEFINITIONS.keys()))
@@ -2330,10 +2532,10 @@ def render_recent_queue() -> None:
         st.markdown(
             (
                 f"<div class='pre-lead-card{selected_class}'>"
-                f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                f"<p>{row['flow_name']} | {row['created_at']}</p>"
+                f"<h5>#{row['id']} - {escape_html(str(row['lead_name']))}</h5>"
+                f"<p>{escape_html(str(row['flow_name']))} | {escape_html(str(row['created_at']))}</p>"
                 f"<p><span class='status-chip' style='background:{background}; color:{color};'>{label}</span></p>"
-                f"<p>{row['result_title']}</p>"
+                f"<p>{escape_html(str(row['result_title']))}</p>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -2351,18 +2553,18 @@ def render_active_case_panel(flow: dict[str, Any], form_data: dict[str, Any]) ->
         f"""
         <div class="pre-focus-hero">
           <div class="eyebrow">Lead ativo</div>
-          <h3>{form_data['lead_name'] or 'Nao informado'}</h3>
-          <p>{flow['name']} | {current_step}</p>
+          <h3>{escape_html(str(form_data['lead_name'] or 'Nao informado'))}</h3>
+          <p>{escape_html(str(flow['name']))} | {escape_html(str(current_step))}</p>
         </div>
         <div class="pre-focus-grid">
-          <div class="pre-focus-stat"><strong>{form_data['lead_phone'] or '-'}</strong><span>Contato principal</span></div>
+          <div class="pre-focus-stat"><strong>{escape_html(str(form_data['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>
           <div class="pre-focus-stat"><strong>{len(triage_state.history)}</strong><span>Respostas registradas</span></div>
           <div class="pre-focus-stat"><strong>{current_step}</strong><span>Etapa corrente</span></div>
           <div class="pre-focus-stat"><strong>{'Concluindo' if current_node is None else 'Em triagem'}</strong><span>Status da sessao</span></div>
         </div>
         <div class="pre-detail-list">
-          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{current_question}</span></div>
-          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{flow['name']}</span></div>
+          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{escape_html(str(current_question))}</span></div>
+          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{escape_html(str(flow['name']))}</span></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -2559,9 +2761,9 @@ def render_history(history: list[dict[str, str]]) -> None:
         st.markdown(
             (
                 '<div class="history-item">'
-                f"<strong>{index}. {item['node_code']}</strong><br>"
-                f"{item['question']}<br>"
-                f"<span class='muted'>Resposta: {item['answer']}</span>"
+                f"<strong>{index}. {escape_html(str(item['node_code']))}</strong><br>"
+                f"{escape_html(str(item['question']))}<br>"
+                f"<span class='muted'>Resposta: {escape_html(str(item['answer']))}</span>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -4967,56 +5169,50 @@ def render_settings_view() -> None:
     settings = st.session_state.office_settings
     render_shell_page_header("Configuracoes do Escritorio", f"{AGENT_NAME} aplicada ao escritorio com honorarios e materiais de assinatura.")
 
-    st.markdown("<div class='pre-two-column'>", unsafe_allow_html=True)
     left, right = st.columns(2, gap="large")
     with left:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Seus dados</h3>", unsafe_allow_html=True)
-        responsavel_nome = st.text_input("Nome completo", value=settings.get("responsavel_nome", ""), key="settings_responsavel_nome")
-        responsavel_email = st.text_input("Email", value=settings.get("responsavel_email", ""), key="settings_responsavel_email")
-        responsavel_whatsapp = st.text_input("WhatsApp", value=settings.get("responsavel_whatsapp", ""), key="settings_responsavel_whatsapp")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<h3 class='pre-section-title'>Seus dados</h3>", unsafe_allow_html=True)
+            responsavel_nome = st.text_input("Nome completo", value=settings.get("responsavel_nome", ""), key="settings_responsavel_nome")
+            responsavel_email = st.text_input("Email", value=settings.get("responsavel_email", ""), key="settings_responsavel_email")
+            responsavel_whatsapp = st.text_input("WhatsApp", value=settings.get("responsavel_whatsapp", ""), key="settings_responsavel_whatsapp")
 
-        st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Dados do escritorio</h3>", unsafe_allow_html=True)
-        office_name = st.text_input("Nome do Escritorio", value=settings.get("office_name", ""), key="settings_office_name")
-        oab = st.text_input("OAB", value=settings.get("oab", ""), key="settings_oab")
-        tutorial_video_url = st.text_input(
-            "Video tutorial de assinatura",
-            value=settings.get("tutorial_video_url", ""),
-            key="settings_tutorial_video_url",
-            placeholder="https://storage.exemplo.com/tutorial-assinatura.mp4",
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<h3 class='pre-section-title'>Dados do escritorio</h3>", unsafe_allow_html=True)
+            office_name = st.text_input("Nome do Escritorio", value=settings.get("office_name", ""), key="settings_office_name")
+            oab = st.text_input("OAB", value=settings.get("oab", ""), key="settings_oab")
+            tutorial_video_url = st.text_input(
+                "Video tutorial de assinatura",
+                value=settings.get("tutorial_video_url", ""),
+                key="settings_tutorial_video_url",
+                placeholder="https://storage.exemplo.com/tutorial-assinatura.mp4",
+            )
 
     with right:
-        st.markdown("<div class='pre-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Honorarios por beneficio (%)</h3>", unsafe_allow_html=True)
-        fee_percentages = dict(settings.get("fee_percentages", {}))
-        fee_cols = st.columns(2, gap="medium")
-        fee_keys = list(fee_percentages.keys())
-        for index, key in enumerate(fee_keys):
-            with fee_cols[index % 2]:
-                fee_percentages[key] = st.number_input(
-                    key,
-                    min_value=0,
-                    max_value=100,
-                    value=int(fee_percentages.get(key, 30)),
-                    key=f"fee_{key}",
-                )
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<h3 class='pre-section-title'>Honorarios por beneficio (%)</h3>", unsafe_allow_html=True)
+            fee_percentages = dict(settings.get("fee_percentages", {}))
+            fee_cols = st.columns(2, gap="medium")
+            fee_keys = list(fee_percentages.keys())
+            for index, key in enumerate(fee_keys):
+                with fee_cols[index % 2]:
+                    fee_percentages[key] = st.number_input(
+                        key,
+                        min_value=0,
+                        max_value=100,
+                        value=int(fee_percentages.get(key, 30)),
+                        key=f"fee_{key}",
+                    )
 
-        st.markdown("<div class='pre-card' style='margin-top:1rem;'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='pre-section-title'>Resumo operacional</h3>", unsafe_allow_html=True)
-        st.markdown(
-            (
-                f"<p><strong>Escritorio:</strong> {office_name or 'Nao configurado'}</p>"
-                f"<p><strong>Responsavel:</strong> {responsavel_nome or 'Nao configurado'}</p>"
-            ),
-            unsafe_allow_html=True,
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<h3 class='pre-section-title'>Resumo operacional</h3>", unsafe_allow_html=True)
+            st.markdown(
+                (
+                    f"<p><strong>Escritorio:</strong> {office_name or 'Nao configurado'}</p>"
+                    f"<p><strong>Responsavel:</strong> {responsavel_nome or 'Nao configurado'}</p>"
+                ),
+                unsafe_allow_html=True,
+            )
 
     if st.button("Salvar Configuracoes", key="save_settings", use_container_width=False):
         updated_settings = {
@@ -5903,9 +6099,9 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-hero'>"
-                f"<div class='eyebrow'>{details['flow_name']}</div>"
-                f"<h3>#{details['id']} | {details['lead_name']}</h3>"
-                f"<p>{details['result_title']} | {label}</p>"
+                f"<div class='eyebrow'>{escape_html(str(details['flow_name']))}</div>"
+                f"<h3>#{details['id']} | {escape_html(str(details['lead_name']))}</h3>"
+                f"<p>{escape_html(str(details['result_title']))} | {escape_html(str(label))}</p>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -5913,8 +6109,8 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-grid'>"
-                f"<div class='pre-focus-stat'><strong>{focus_benefit}</strong><span>Beneficio dominante</span></div>"
-                f"<div class='pre-focus-stat'><strong>{details['lead_phone'] or '-'}</strong><span>Contato principal</span></div>"
+                f"<div class='pre-focus-stat'><strong>{escape_html(str(focus_benefit))}</strong><span>Beneficio dominante</span></div>"
+                f"<div class='pre-focus-stat'><strong>{escape_html(str(details['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>"
                 f"<div class='pre-focus-stat'><strong>{validated_total}/{required_total}</strong><span>Obrigatorios validados</span></div>"
                 f"<div class='pre-focus-stat'><strong>{score['score']}/100</strong><span>Score documental</span></div>"
                 "</div>"
@@ -5928,10 +6124,10 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-detail-list'>"
-                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{details['summary']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{details['next_step']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{details['notes'] or 'Sem observacoes adicionais.'}</span></div>"
-                f"<div class='pre-detail-row'><strong>Data do registro</strong><span>{details['created_at']}</span></div>"
+                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{escape_html(str(details['summary']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{escape_html(str(details['next_step']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{escape_html(str(details['notes'] or 'Sem observacoes adicionais.'))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Data do registro</strong><span>{escape_html(str(details['created_at']))}</span></div>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -5942,7 +6138,7 @@ def render_attendance_consultation() -> None:
             st.markdown(
                 (
                     "<div class='pre-meta-list' style='margin-top:1rem;'>"
-                    f"<div class='pre-meta-item'><strong>Categoria especifica</strong><span>{details['benefit_category'] or 'Nao informada'}</span></div>"
+                    f"<div class='pre-meta-item'><strong>Categoria especifica</strong><span>{escape_html(str(details['benefit_category'] or 'Nao informada'))}</span></div>"
                     f"<div class='pre-meta-item'><strong>Valor mensal estimado</strong><span>{format_currency(monthly) if monthly else 'Nao informado'}</span></div>"
                     f"<div class='pre-meta-item'><strong>Total estimado</strong><span>{format_currency(total) if total else 'Nao informado'}</span></div>"
                     "</div>"
@@ -5961,9 +6157,9 @@ def render_attendance_consultation() -> None:
                 st.markdown(
                     (
                         '<div class="history-item">'
-                        f"<strong>{index}. {item['node_code']}</strong><br>"
-                        f"{item['question']}<br>"
-                        f"<span class='muted'>Resposta: {item['answer']}</span>"
+                        f"<strong>{index}. {escape_html(str(item['node_code']))}</strong><br>"
+                        f"{escape_html(str(item['question']))}<br>"
+                        f"<span class='muted'>Resposta: {escape_html(str(item['answer']))}</span>"
                         "</div>"
                     ),
                     unsafe_allow_html=True,
@@ -5990,13 +6186,19 @@ def render_current_view() -> None:
 def main() -> None:
     init_database()
     inject_styles()
-    inject_lawfirm_admin_theme()
+    # O tema administrativo claro e uma referencia antiga. O PrevIA abaixo e
+    # o tema ativo e deve ser a unica camada de identidade visual da aplicacao.
+    inject_previa_visual_theme()
     ensure_session_defaults()
     if not st.session_state.is_authenticated:
         render_auth_screen()
         return
-    render_admin_topbar()
-    render_current_view()
+    render_previa_topbar()
+    navigation_column, content_column = st.columns([0.23, 0.77], gap="large")
+    with navigation_column:
+        render_previa_navigation()
+    with content_column:
+        render_current_view()
 
 
 if __name__ == "__main__":
