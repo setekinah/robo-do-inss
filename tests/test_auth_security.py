@@ -28,10 +28,25 @@ class AuthSecurityTests(unittest.TestCase):
 
         stored = json.loads(auth_security.CREDENTIALS_PATH.read_text(encoding="utf-8"))
         self.assertNotIn(password, auth_security.CREDENTIALS_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(stored["email"], "advogado@exemplo.com.br")
+        self.assertEqual(stored["version"], 2)
+        self.assertEqual(stored["users"][0]["email"], "advogado@exemplo.com.br")
         self.assertTrue(auth_security.verify_credentials("advogado@exemplo.com.br", password))
         self.assertFalse(auth_security.verify_credentials("outro@exemplo.com.br", password))
         self.assertFalse(auth_security.verify_credentials("advogado@exemplo.com.br", "SenhaErrada2026"))
+
+    def test_multiple_local_users_have_independent_credentials_and_sessions(self) -> None:
+        auth_security.create_user("primeiro@exemplo.com.br", "SenhaForte2026")
+        auth_security.create_user("segundo@exemplo.com.br", "OutraSenha2026")
+
+        self.assertEqual(auth_security.user_count(), 2)
+        self.assertTrue(auth_security.verify_credentials("primeiro@exemplo.com.br", "SenhaForte2026"))
+        self.assertTrue(auth_security.verify_credentials("segundo@exemplo.com.br", "OutraSenha2026"))
+        self.assertFalse(auth_security.verify_credentials("primeiro@exemplo.com.br", "OutraSenha2026"))
+        with self.assertRaises(ValueError):
+            auth_security.create_user("PRIMEIRO@EXEMPLO.COM.BR", "OutraSenha2026")
+
+        token = auth_security.create_session("segundo@exemplo.com.br")
+        self.assertEqual(auth_security.get_session_user(token), "segundo@exemplo.com.br")
 
     def test_invalid_registration_data_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
