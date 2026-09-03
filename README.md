@@ -36,6 +36,15 @@ Ou usar o launcher:
 
 Os dados operacionais (banco SQLite, configurações e documentos enviados) são armazenados localmente em `%LOCALAPPDATA%\Robo do INSS\data` e não devem ser adicionados ao Git.
 
+## Assinatura digital local (DocuSeal)
+
+Com o contêiner DocuSeal ativo em `http://localhost:3000`, copie a chave
+`X-Auth-Token` em **Configurações > API** e, no PowerShell dentro deste
+repositório, execute `./configurar_docuseal.ps1`. O script solicita a chave
+sem exibi-la e grava a configuração fora do repositório, em
+`%LOCALAPPDATA%\Robo do INSS\data\docuseal.json`. Nunca adicione essa chave
+ao Git, a um `.env` versionado ou a conversas.
+
 ## Inteligência documental e OCR
 
 O `requirements.txt` instala o pipeline documental completo:

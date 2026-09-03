@@ -189,6 +189,118 @@ def import_indicator_workbook(file_path: Path) -> ImportedCatalog:
     )
 
 
+def _indicator_rows_from_pdf_pages(page_texts: list[str], source_url: str) -> list[dict[str, Any]]:
+    """Extract auditable rows from the official PT 990 Annex V text layer.
+
+    The PDF is a visual table, but its native text stream is column-linear.
+    Rows are accepted only when a ``CsPendencia``, ``CsAlerta`` or ``CsAcerto``
+    marker immediately precedes an indicator code. This prevents headings and
+    narrative acronyms from entering the catalog as rules.
+    """
+    marker_pattern = re.compile(r"\b(CsPendencia|CsAlerta|CsAcerto)\b", re.IGNORECASE)
+    code_pattern = re.compile(r"(?m)^\s*([A-Z][A-Z0-9]{2,}(?:-[A-Z0-9]+){0,5})\s*$")
+    excluded_codes = {
+        "TIPO", "GRUPO", "SIGLA", "DESCRICAO", "ESCLARECIMENTOS", "CNIS", "INSS",
+        "CPF", "CNPJ", "NIT", "PIS", "SEI", "GPS", "DARF", "EC", "RPS",
+    }
+    definitions: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    explanation_starts = re.compile(
+        r"^(?:O indicador|A pend[êe]ncia|Trata-se|Indicador|Este indicador|"
+        r"O registro|Refere-se|Sinaliza|Informa|Aponta)\b",
+        re.IGNORECASE,
+    )
+
+    for page_number, raw_page in enumerate(page_texts, start=1):
+        text = raw_page or ""
+        # O PDF quebra algumas siglas longas exatamente após o hífen
+        # (por exemplo, ``PREC-\nFACULTCONC``). Reconstruímos somente linhas
+        # integralmente em maiúsculas, antes de procurar códigos.
+        text = re.sub(
+            r"(?m)^([A-Z][A-Z0-9-]*-)\s*\n\s*([A-Z][A-Z0-9-]*)\s*$",
+            r"\1\2",
+            text,
+        )
+        code_matches = list(code_pattern.finditer(text))
+        for index, match in enumerate(code_matches):
+            code = match.group(1).upper()
+            # Group names are uppercase too and may match ``code_pattern``.
+            # Read a bounded window instead of using the preceding uppercase
+            # line as a delimiter; only a nearby Cs* marker authorizes a row.
+            prefix = text[max(0, match.start() - 700):match.start()]
+            type_matches = list(marker_pattern.finditer(prefix))
+            if not type_matches or code in excluded_codes:
+                continue
+            type_match = type_matches[-1]
+            # The table prints the type, then its group, then the indicator code.
+            group = _safe_cell(prefix[type_match.end():])
+            group = re.sub(r"\b(?:TIPO|GRUPO|SIGLA|DESCRI[CÇ][AÃ]O|ESCLARECIMENTOS)\b", "", group, flags=re.IGNORECASE).strip(" -:;")
+            if not group or len(group) > 180:
+                continue
+            next_start = code_matches[index + 1].start() if index + 1 < len(code_matches) else len(text)
+            body = text[match.end():next_start]
+            next_marker = marker_pattern.search(body)
+            if next_marker:
+                body = body[:next_marker.start()]
+            lines = [
+                _safe_cell(line)
+                for line in body.splitlines()
+                if _safe_cell(line) and not re.search(r"\b(?:Anexo|SEI)\b.*\bpg\.\s*\d+", line, re.IGNORECASE)
+            ]
+            if not lines:
+                continue
+            split_at = next((line_index for line_index, line in enumerate(lines) if explanation_starts.match(line)), None)
+            description_lines = lines if split_at is None else lines[:split_at]
+            clarification_lines = [] if split_at is None else lines[split_at:]
+            description = _safe_cell(" ".join(description_lines))[:800]
+            clarification = _safe_cell(" ".join(clarification_lines))[:6000]
+            if len(description) < 8:
+                continue
+            canonical_key = hashlib.sha256(f"{code}|{description}".encode("utf-8")).hexdigest()[:24]
+            key = (code, canonical_key)
+            if key in seen:
+                continue
+            seen.add(key)
+            definitions.append({
+                "code": code,
+                "indicator_type": type_match.group(1),
+                "indicator_group": group,
+                "official_description": description,
+                "official_clarification": clarification,
+                "general_guidance": "Indicador extraído do Anexo V oficial; exige revisão jurídica e contexto da competência/vínculo.",
+                "source_url": source_url,
+                "source_page": str(page_number),
+                "canonical_key": canonical_key,
+            })
+    return definitions
+
+
+def import_official_indicator_pdf(file_path: Path) -> ImportedCatalog:
+    """Create a review-only catalog version from PT 990 Annex V downloaded locally."""
+    content = file_path.read_bytes()
+    if not content or len(content) > MAX_SOURCE_BYTES:
+        raise ValueError("Anexo V vazio ou maior que 25 MB.")
+    try:
+        from pypdf import PdfReader
+    except ImportError as error:  # pragma: no cover - depends on runtime
+        raise RuntimeError("Importação do Anexo V requer a dependência pypdf.") from error
+    try:
+        reader = PdfReader(str(file_path))
+        page_texts = [page.extract_text() or "" for page in reader.pages]
+    except Exception as error:
+        raise ValueError("Não foi possível ler o PDF oficial do Anexo V.") from error
+    source_url = OFFICIAL_SOURCE_REGISTRY[0]["url"]
+    definitions = _indicator_rows_from_pdf_pages(page_texts, source_url)
+    if not definitions:
+        raise ValueError("Nenhum indicador estruturado foi encontrado no Anexo V oficial.")
+    return ImportedCatalog(
+        source_name="PT 990 — Anexo V oficial do Portal IN",
+        source_url=source_url,
+        source_hash=hashlib.sha256(content).hexdigest(),
+        definitions=definitions,
+    )
+
+
 def fetch_official_source(source: dict[str, str]) -> dict[str, Any]:
     """Baixa uma única URL previamente permitida e guarda cópia com hash."""
     request = Request(source["url"], headers={"User-Agent": "SOFIA-PREVI/1.0 official-source-monitor"})

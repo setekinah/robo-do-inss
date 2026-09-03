@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.parse
 import time
@@ -21,10 +22,14 @@ if str(BASE_DIR) not in sys.path:
 import auth_security
 import cnis_knowledge
 import database
+import docuseal_integration
+import document_audit
 import document_intelligence
 import document_rules
+import document_storage
 import official_catalog
 import office_settings
+import retirement_prefilter
 from flows_data import FLOW_DEFINITIONS
 from triage_engine import answer_current_question, create_state, get_current_node, get_result
 
@@ -36,8 +41,32 @@ database.register_official_sources(list(official_catalog.OFFICIAL_SOURCE_REGISTR
 class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
     """Handler HTTP customizado para API REST e arquivos estaticos."""
 
+    # O servidor web nunca deve funcionar como um explorador do diretório do
+    # projeto.  Código, logs, banco, .git e eventuais arquivos de configuração
+    # são deliberadamente inacessíveis pela porta HTTP.
+    STATIC_FILES = {"/index.html", "/styles.css", "/app.js", "/flows.js"}
+    MAX_JSON_BODY_BYTES = 256 * 1024
+    MAX_RATE_BUCKETS = 2_048
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(BASE_DIR), **kwargs)
+
+    def end_headers(self) -> None:
+        """Add baseline browser protections to every response, including errors."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        # Scripts são somente arquivos locais versionados; handlers inline são
+        # proibidos para reduzir o impacto de qualquer futura falha de XSS.
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
+            "form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+            "script-src 'self'; connect-src 'self'",
+        )
+        super().end_headers()
 
     def _send_json(self, data: dict | list, status_code: int = 200) -> None:
         payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
@@ -48,6 +77,14 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         self.wfile.write(payload)
 
     _rate_windows: dict[str, list[float]] = {}
+
+    def _rate_bucket(self) -> str:
+        """Avoid unbounded memory consumption from attacker-controlled paths."""
+        path = urllib.parse.urlparse(self.path).path
+        normalized = re.sub(r"/\\d+(?=/|$)", "/:id", path)
+        if not normalized.startswith("/api/"):
+            normalized = "/static"
+        return f"{self.client_address[0]}:{self.command}:{normalized}"
 
     def _session_token(self) -> str:
         cookies = self.headers.get("Cookie", "")
@@ -66,7 +103,18 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
     def _allow_request(self, limit: int = 60, window_seconds: int = 60) -> bool:
         ip = self.client_address[0]
         now = time.monotonic()
-        key = f"{ip}:{self.command}:{urllib.parse.urlparse(self.path).path}"
+        key = self._rate_bucket()
+        if len(self._rate_windows) >= self.MAX_RATE_BUCKETS and key not in self._rate_windows:
+            # Descarta janelas expiradas antes de aceitar uma nova chave. Se a
+            # pressão persistir, o pedido é rejeitado sem crescer a estrutura.
+            self._rate_windows = {
+                bucket: values
+                for bucket, values in self._rate_windows.items()
+                if any(value > now - window_seconds for value in values)
+            }
+            if len(self._rate_windows) >= self.MAX_RATE_BUCKETS:
+                self._send_json({"error": "Servidor temporariamente ocupado."}, 429)
+                return False
         recent = [value for value in self._rate_windows.get(key, []) if value > now - window_seconds]
         if len(recent) >= limit:
             self._rate_windows[key] = recent
@@ -77,13 +125,21 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         return True
 
     def _send_session_cookie(self, token: str) -> None:
-        secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
-        self.send_header("Set-Cookie", f"sofia_session={token}; HttpOnly; SameSite=Strict; Path=/{secure}")
+        secure = "; Secure" if os.environ.get("ROBO_INSS_COOKIE_SECURE") == "1" else ""
+        self.send_header(
+            "Set-Cookie",
+            f"sofia_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={auth_security.SESSION_TTL_SECONDS}{secure}",
+        )
 
     def _read_json_body(self) -> dict:
-        content_length = int(self.headers.get("Content-Length", 0))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError as exc:
+            raise ValueError("Content-Length inválido.") from exc
         if content_length == 0:
             return {}
+        if content_length < 0 or content_length > self.MAX_JSON_BODY_BYTES:
+            raise ValueError("Corpo JSON excede o limite permitido.")
         body = self.rfile.read(content_length).decode("utf-8")
         return json.loads(body) if body else {}
 
@@ -141,6 +197,9 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_get_atendimentos(query)
         elif path == "/api/relacionamento":
             self.handle_get_relacionamento()
+        elif path.startswith("/api/atendimentos/") and path.endswith("/auditoria-documental"):
+            attendance_id = path.split("/")[3]
+            self.handle_get_document_audit(int(attendance_id))
         elif path.startswith("/api/atendimentos/") and path.endswith("/documentos"):
             attendance_id = path.split("/")[3]
             self.handle_get_documentos(int(attendance_id))
@@ -158,14 +217,31 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_get_catalog_status()
         elif path == "/api/catalogo-cnis/versoes":
             self.handle_get_catalog_versions()
+        elif path == "/api/assinatura/status":
+            self._send_json(docuseal_integration.status())
         else:
-            if path == "/" or not os.path.exists(os.path.join(BASE_DIR, path.lstrip("/"))):
-                self.path = "/index.html"
+            requested = "/index.html" if path == "/" else path
+            if requested not in self.STATIC_FILES:
+                self._send_json({"error": "Recurso não encontrado."}, 404)
+                return
+            self.path = requested
             super().do_GET()
 
     def do_POST(self) -> None:
+        try:
+            self._do_post()
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.close_connection = True
+            status = 413 if "limite" in str(exc).lower() else 400
+            self._send_json({"error": str(exc) or "Requisição inválida."}, status)
+
+    def _do_post(self) -> None:
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
+        if path.startswith("/api/assinatura/webhook/"):
+            if self._allow_request(30):
+                self.handle_post_docuseal_webhook(path.rsplit("/", 1)[-1])
+            return
         login_limit = 5 if path in {"/api/auth/login", "/api/auth/register"} else 60
         if not self._allow_request(login_limit):
             return
@@ -176,6 +252,8 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_post_login()
         elif path == "/api/auth/register":
             self.handle_post_register()
+        elif path == "/api/auth/logout":
+            self.handle_post_logout()
         elif path == "/api/office":
             self.handle_post_office()
         elif path == "/api/atendimentos":
@@ -188,14 +266,24 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             parts = path.split("/")
             attendance_id = int(parts[3])
             self.handle_post_tarefa(attendance_id)
+        elif path.startswith("/api/atendimentos/") and path.endswith("/assinatura"):
+            self.handle_post_assinatura(int(path.split("/")[3]))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/auditoria-documental"):
+            self.handle_post_document_audit(int(path.split("/")[3]))
         elif path == "/api/triagem/executar":
             self.handle_post_triagem_executar()
+        elif path == "/api/triagem/aposentadoria/pre-filtro":
+            self.handle_post_retirement_prefilter()
         elif path == "/api/documentos/analisar":
             self.handle_post_documento_analisar()
         elif path == "/api/catalogo-cnis/monitorar":
             self.handle_post_monitor_official_sources()
+        elif path == "/api/assinatura/verificar":
+            self._send_json(docuseal_integration.verify_connection())
         elif path == "/api/catalogo-cnis/importar-planilha":
             self.handle_post_import_catalog_workbook()
+        elif path == "/api/catalogo-cnis/importar-anexo-oficial":
+            self.handle_post_import_official_indicator_catalog()
         elif path.startswith("/api/catalogo-cnis/versoes/") and path.endswith("/ativar"):
             version_id = int(path.split("/")[4])
             self.handle_post_activate_catalog_version(version_id)
@@ -213,7 +301,53 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         else:
             self._send_json({"error": "Rota nao encontrada"}, 404)
 
+    def handle_post_docuseal_webhook(self, path_token: str) -> None:
+        """Receive only verified DocuSeal events; no browser session is accepted here."""
+        if not docuseal_integration.verify_webhook_path_token(path_token):
+            self._send_json({"error": "Webhook não autorizado."}, 401)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if not 0 < length <= self.MAX_JSON_BODY_BYTES:
+            self._send_json({"error": "Payload inválido."}, 400)
+            return
+        raw_body = self.rfile.read(length)
+        if not docuseal_integration.verify_webhook_signature(raw_body, self.headers.get("X-Docuseal-Signature", "")):
+            self._send_json({"error": "Assinatura do webhook inválida."}, 401)
+            return
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except json.JSONDecodeError:
+            self._send_json({"error": "JSON inválido."}, 400)
+            return
+        event_type = str(payload.get("event_type", ""))
+        allowed = {"form.completed", "form.declined", "submission.completed", "submission.expired"}
+        if event_type not in allowed:
+            self._send_json({"success": True, "ignored": True})
+            return
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        submission = data.get("submission") if isinstance(data.get("submission"), dict) else data
+        reference = str(submission.get("id") or data.get("submission_id") or data.get("id") or "unknown")
+        event_key = f"docuseal:{event_type}:{reference}:{payload.get('timestamp', '')}"
+        safe_payload = {"event_type": event_type, "submission_id": reference, "status": submission.get("status"), "timestamp": payload.get("timestamp")}
+        event_id, created = database.enqueue_integration_event(
+            event_key=event_key, event_type=event_type, source="docuseal", attendance_id=None,
+            external_reference=reference, payload=safe_payload, priority="alta", requires_review=True,
+            occurred_at=str(payload.get("timestamp") or ""),
+        )
+        self._send_json({"success": True, "event_id": event_id, "created": created})
+
     def do_PUT(self) -> None:
+        try:
+            self._do_put()
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.close_connection = True
+            status = 413 if "limite" in str(exc).lower() else 400
+            self._send_json({"error": str(exc) or "Requisição inválida."}, status)
+
+    def _do_put(self) -> None:
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
         if not self._allow_request() or not self._require_auth():
@@ -234,12 +368,7 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
 
     def handle_get_auth_status(self) -> None:
         configured = auth_security.credentials_configured()
-        settings = office_settings.load_office_settings()
-        self._send_json({
-            "configured": configured,
-            "office_name": settings.get("office_name", ""),
-            "oab": settings.get("oab", "")
-        })
+        self._send_json({"configured": configured})
 
     def handle_get_office(self) -> None:
         settings = office_settings.load_office_settings()
@@ -298,6 +427,16 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(payload)
         except ValueError as e:
             self._send_json({"error": str(e)}, 400)
+
+    def handle_post_logout(self) -> None:
+        """Revoke the current server-side session and expire its browser cookie."""
+        auth_security.revoke_session(self._session_token())
+        self.send_response(204)
+        self.send_header(
+            "Set-Cookie",
+            "sofia_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+        )
+        self.end_headers()
 
     # --- Handlers Principais & Novos Módulos ---
 
@@ -444,6 +583,41 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             ).fetchall()
         self._send_json([dict(d) for d in docs])
 
+    def handle_get_document_audit(self, attendance_id: int) -> None:
+        audit = database.get_attendance_audit(
+            attendance_id, document_audit.AUDIT_TYPE_CNIS_CTPS
+        )
+        if not audit:
+            self._send_json(
+                {
+                    "success": False,
+                    "error": "Ainda não há auditoria CNIS × CTPS para este dossiê.",
+                    "requires_generation": True,
+                },
+                404,
+            )
+            return
+        self._send_json({"success": True, **audit})
+
+    def handle_post_document_audit(self, attendance_id: int) -> None:
+        """Generate an evidence-only CNIS × CTPS audit for an existing dossier."""
+        documents = [dict(item) for item in database.list_attendance_documents(attendance_id)]
+        report = document_audit.build_cnis_ctps_audit_from_documents(documents)
+        database.save_attendance_audit(
+            attendance_id=attendance_id,
+            audit_type=document_audit.AUDIT_TYPE_CNIS_CTPS,
+            status=str(report["status"]),
+            report=report,
+        )
+        self._send_json(
+            {
+                "success": True,
+                "attendance_id": attendance_id,
+                "audit": report,
+                "message": "Auditoria documental gerada. Ela não substitui revisão técnica ou decisão previdenciária.",
+            }
+        )
+
     def handle_put_documento_status(self, doc_id: int) -> None:
         body = self._read_json_body()
         new_status = body.get("status", "aprovado")
@@ -528,6 +702,36 @@ ___________________________________________________
             "fee_percentage": fee_pct,
             "contract_text": contract_text.strip()
         })
+
+    def handle_post_assinatura(self, attendance_id: int) -> None:
+        body = self._read_json_body()
+        with database.get_connection() as conn:
+            row = conn.execute("SELECT * FROM atendimentos WHERE id = ?", (attendance_id,)).fetchone()
+            if not row:
+                self._send_json({"error": "Atendimento não encontrado."}, 404); return
+            att = dict(row)
+            client_email = str(body.get("client_email") or att.get("lead_email") or "").strip().lower()
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", client_email):
+                self._send_json({"error": "Informe um e-mail válido do contratante."}, 400); return
+            conn.execute("UPDATE atendimentos SET lead_email = ? WHERE id = ?", (client_email, attendance_id))
+        settings = office_settings.load_office_settings()
+        office_email = str(settings.get("responsavel_email") or "").strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", office_email):
+            self._send_json({"error": "Configure o e-mail responsável do escritório antes de enviar."}, 400); return
+        try:
+            result = docuseal_integration.create_submission(
+                client_name=att["lead_name"], client_email=client_email,
+                office_name=settings.get("office_name") or "SOF.IA", office_email=office_email,
+                attendance_id=attendance_id,
+            )
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, 400); return
+        submission = result[0] if isinstance(result, list) and result else result
+        reference = str(submission.get("id") or submission.get("submission_id") or "") if isinstance(submission, dict) else ""
+        with database.get_connection() as conn:
+            conn.execute("INSERT INTO crm_atividades (attendance_id, activity_type, body) VALUES (?, 'contrato', ?)",
+                         (attendance_id, f"Solicitação de assinatura criada no DocuSeal{f' (#{reference})' if reference else ''}."))
+        self._send_json({"success": True, "submission_id": reference, "message": "Solicitação enviada para assinatura."}, 201)
 
     def handle_get_fluxos(self) -> None:
         fluxos = []
@@ -724,6 +928,14 @@ ___________________________________________________
                 "history": new_state.history
             })
 
+    def handle_post_retirement_prefilter(self) -> None:
+        """Evaluate the mandatory retirement gate before opening the decision tree."""
+        body = self._read_json_body()
+        try:
+            self._send_json(retirement_prefilter.evaluate_retirement_prefilter(body))
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, 400)
+
     def handle_post_documento_analisar(self) -> None:
         self._handle_uploaded_document_analysis()
         return
@@ -855,7 +1067,10 @@ ___________________________________________________
             analysis = document_intelligence.analyze_document_bundle(
                 document_code=document_code,
                 uploaded_files=[str(local_file)],
-                critical_fields=["nome", "cpf", "nit", "data_nascimento", "competencias", "indicadores", "vinculos"],
+                # A primeira passagem é neutra: o tipo só é conhecido depois
+                # da leitura. Campos de CNIS não podem reduzir a confiança de
+                # uma CNH, laudo, CAT ou documento de identidade legítimo.
+                critical_fields=[],
             )
 
         extracted = analysis["extracted_data"]
@@ -919,6 +1134,51 @@ ___________________________________________________
             }
         status = assessment["status"]
         success = status in {"extraido", "parcial"}
+        dossier_document: dict | None = None
+        attendance_value = fields.get("attendance_id", "").strip()
+        document_value = fields.get("document_id", "").strip()
+        if attendance_value or document_value:
+            try:
+                attendance_id = int(attendance_value)
+                document_id = int(document_value)
+            except ValueError:
+                self._send_json({"success": False, "error": "Dossiê documental inválido."}, 400)
+                return
+            with database.get_connection() as conn:
+                document_row = conn.execute(
+                    "SELECT id, document_code FROM atendimento_documentos WHERE id = ? AND attendance_id = ?",
+                    (document_id, attendance_id),
+                ).fetchone()
+            if not document_row:
+                self._send_json({"success": False, "error": "Item documental não encontrado no dossiê."}, 404)
+                return
+            stored_path = document_storage.save_document_bytes(
+                attendance_id=attendance_id,
+                document_code=str(document_row["document_code"]),
+                original_name=file_name,
+                content=file_content,
+            )
+            document_status = "recebido" if success else "ilegivel"
+            database.update_attendance_document(
+                document_id=document_id,
+                status=document_status,
+                notes=str(analysis["technical_notes"]),
+                uploaded_files=[stored_path],
+                raw_text=str(analysis["raw_text"]),
+                extracted_data=extracted,
+                source_type=str(analysis["source_type"]),
+                extraction_status=status,
+                extraction_confidence=float(assessment["confidence"]),
+                technical_notes=str(analysis["technical_notes"]),
+            )
+            if classification["code"] in {"CNIS", "CTPS"}:
+                database.invalidate_attendance_document_audits(attendance_id)
+            dossier_document = {
+                "attendance_id": attendance_id,
+                "document_id": document_id,
+                "status": document_status,
+                "stored": True,
+            }
         self._send_json(
             {
                 "success": success,
@@ -960,6 +1220,7 @@ ___________________________________________________
                 "extracted_data": extracted,
                 "raw_text": analysis["raw_text"][:50000],
                 "technical_notes": analysis["technical_notes"],
+                "dossier_document": dossier_document,
             },
             200 if success else 422,
         )
@@ -1030,6 +1291,34 @@ ___________________________________________________
             "message": "Versão importada e mantida em revisão. Ela não é usada pelo OCR até ativação manual.",
         }, 201 if result["created"] else 200)
 
+    def handle_post_import_official_indicator_catalog(self) -> None:
+        """Refresh and structure PT 990 Annex V as a review-only catalog version."""
+        source = official_catalog.OFFICIAL_SOURCE_REGISTRY[0]
+        try:
+            snapshot = official_catalog.fetch_official_source(source)
+            database.record_official_source_snapshot(snapshot)
+            imported = official_catalog.import_official_indicator_pdf(Path(snapshot["local_path"]))
+            result = database.create_cnis_catalog_version(
+                source_name=imported.source_name,
+                source_url=imported.source_url,
+                source_hash=imported.source_hash,
+                definitions=imported.definitions,
+                review_notes=(
+                    "Extração local do PT 990 — Anexo V oficial do Portal IN. "
+                    "Versão aguardando revisão jurídica; não ativada automaticamente."
+                ),
+            )
+        except (ValueError, RuntimeError, OSError) as error:
+            self._send_json({"success": False, "error": str(error)}, 400)
+            return
+        self._send_json({
+            "success": True,
+            "created": result["created"],
+            "version": result["version"],
+            "indicators_extracted": len(imported.definitions),
+            "message": "Anexo V oficial estruturado e mantido em revisão jurídica.",
+        }, 201 if result["created"] else 200)
+
     def handle_post_activate_catalog_version(self, version_id: int) -> None:
         body = self._read_json_body()
         settings = office_settings.load_office_settings()
@@ -1044,13 +1333,26 @@ ___________________________________________________
 
 
 def run_server(port: int = 8000) -> None:
-    server_address = ("", port)
+    # Dados previdenciários não devem ser publicados na rede por acidente.
+    # Para expor o robô atrás de um proxy HTTPS, configure explicitamente:
+    # ROBO_INSS_BIND_HOST, ROBO_INSS_ALLOW_NETWORK=1 e ROBO_INSS_COOKIE_SECURE=1.
+    host = os.environ.get("ROBO_INSS_BIND_HOST", "127.0.0.1")
+    loopback_hosts = {"127.0.0.1", "::1", "localhost"}
+    if host not in loopback_hosts and os.environ.get("ROBO_INSS_ALLOW_NETWORK") != "1":
+        raise RuntimeError(
+            "Exposição em rede bloqueada. Use ROBO_INSS_ALLOW_NETWORK=1 somente atrás de HTTPS."
+        )
+    if host not in loopback_hosts and os.environ.get("ROBO_INSS_COOKIE_SECURE") != "1":
+        raise RuntimeError(
+            "Exposição em rede exige ROBO_INSS_COOKIE_SECURE=1 e um proxy HTTPS confiável."
+        )
+    server_address = (host, port)
     # A leitura de PDF/OCR pode levar alguns segundos. Um servidor concorrente
     # impede que essa tarefa bloqueie CRM, Kanban e o cadastro de novos leads.
     httpd = ThreadingHTTPServer(server_address, SofiPreviRequestHandler)
     print(f"============================================================")
     print(f"  SOFI.IA PREVI (PrevIA) - Servidor Web Revolucionario Rodando!")
-    print(f"  Acesse no seu navegador: http://localhost:{port}")
+    print(f"  Acesse no seu navegador: http://{host}:{port}")
     print(f"============================================================")
     try:
         httpd.serve_forever()

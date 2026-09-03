@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from html import escape as escape_html
 from typing import Any
 
 import pandas as pd
@@ -2374,7 +2375,7 @@ def render_previa_topbar() -> None:
         (
             "<header class='previa-topbar'>"
             "<div class='previa-topbar-left'><span class='previa-topbar-title'>Central de Operações</span>"
-            f"<span>{office_name}</span></div>"
+            f"<span>{escape_html(str(office_name))}</span></div>"
             "<div class='previa-live'>Sistema seguro e ativo</div>"
             "</header>"
         ),
@@ -2531,10 +2532,10 @@ def render_recent_queue() -> None:
         st.markdown(
             (
                 f"<div class='pre-lead-card{selected_class}'>"
-                f"<h5>#{row['id']} - {row['lead_name']}</h5>"
-                f"<p>{row['flow_name']} | {row['created_at']}</p>"
+                f"<h5>#{row['id']} - {escape_html(str(row['lead_name']))}</h5>"
+                f"<p>{escape_html(str(row['flow_name']))} | {escape_html(str(row['created_at']))}</p>"
                 f"<p><span class='status-chip' style='background:{background}; color:{color};'>{label}</span></p>"
-                f"<p>{row['result_title']}</p>"
+                f"<p>{escape_html(str(row['result_title']))}</p>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -2552,18 +2553,18 @@ def render_active_case_panel(flow: dict[str, Any], form_data: dict[str, Any]) ->
         f"""
         <div class="pre-focus-hero">
           <div class="eyebrow">Lead ativo</div>
-          <h3>{form_data['lead_name'] or 'Nao informado'}</h3>
-          <p>{flow['name']} | {current_step}</p>
+          <h3>{escape_html(str(form_data['lead_name'] or 'Nao informado'))}</h3>
+          <p>{escape_html(str(flow['name']))} | {escape_html(str(current_step))}</p>
         </div>
         <div class="pre-focus-grid">
-          <div class="pre-focus-stat"><strong>{form_data['lead_phone'] or '-'}</strong><span>Contato principal</span></div>
+          <div class="pre-focus-stat"><strong>{escape_html(str(form_data['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>
           <div class="pre-focus-stat"><strong>{len(triage_state.history)}</strong><span>Respostas registradas</span></div>
           <div class="pre-focus-stat"><strong>{current_step}</strong><span>Etapa corrente</span></div>
           <div class="pre-focus-stat"><strong>{'Concluindo' if current_node is None else 'Em triagem'}</strong><span>Status da sessao</span></div>
         </div>
         <div class="pre-detail-list">
-          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{current_question}</span></div>
-          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{flow['name']}</span></div>
+          <div class="pre-detail-row"><strong>Pergunta atual</strong><span>{escape_html(str(current_question))}</span></div>
+          <div class="pre-detail-row"><strong>Fluxo monitorado</strong><span>{escape_html(str(flow['name']))}</span></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -2760,9 +2761,9 @@ def render_history(history: list[dict[str, str]]) -> None:
         st.markdown(
             (
                 '<div class="history-item">'
-                f"<strong>{index}. {item['node_code']}</strong><br>"
-                f"{item['question']}<br>"
-                f"<span class='muted'>Resposta: {item['answer']}</span>"
+                f"<strong>{index}. {escape_html(str(item['node_code']))}</strong><br>"
+                f"{escape_html(str(item['question']))}<br>"
+                f"<span class='muted'>Resposta: {escape_html(str(item['answer']))}</span>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -6098,9 +6099,9 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-hero'>"
-                f"<div class='eyebrow'>{details['flow_name']}</div>"
-                f"<h3>#{details['id']} | {details['lead_name']}</h3>"
-                f"<p>{details['result_title']} | {label}</p>"
+                f"<div class='eyebrow'>{escape_html(str(details['flow_name']))}</div>"
+                f"<h3>#{details['id']} | {escape_html(str(details['lead_name']))}</h3>"
+                f"<p>{escape_html(str(details['result_title']))} | {escape_html(str(label))}</p>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -6108,8 +6109,8 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-focus-grid'>"
-                f"<div class='pre-focus-stat'><strong>{focus_benefit}</strong><span>Beneficio dominante</span></div>"
-                f"<div class='pre-focus-stat'><strong>{details['lead_phone'] or '-'}</strong><span>Contato principal</span></div>"
+                f"<div class='pre-focus-stat'><strong>{escape_html(str(focus_benefit))}</strong><span>Beneficio dominante</span></div>"
+                f"<div class='pre-focus-stat'><strong>{escape_html(str(details['lead_phone'] or '-'))}</strong><span>Contato principal</span></div>"
                 f"<div class='pre-focus-stat'><strong>{validated_total}/{required_total}</strong><span>Obrigatorios validados</span></div>"
                 f"<div class='pre-focus-stat'><strong>{score['score']}/100</strong><span>Score documental</span></div>"
                 "</div>"
@@ -6123,10 +6124,10 @@ def render_attendance_consultation() -> None:
         st.markdown(
             (
                 "<div class='pre-detail-list'>"
-                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{details['summary']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{details['next_step']}</span></div>"
-                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{details['notes'] or 'Sem observacoes adicionais.'}</span></div>"
-                f"<div class='pre-detail-row'><strong>Data do registro</strong><span>{details['created_at']}</span></div>"
+                f"<div class='pre-detail-row'><strong>Resumo executivo</strong><span>{escape_html(str(details['summary']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Proximo passo</strong><span>{escape_html(str(details['next_step']))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Observacoes</strong><span>{escape_html(str(details['notes'] or 'Sem observacoes adicionais.'))}</span></div>"
+                f"<div class='pre-detail-row'><strong>Data do registro</strong><span>{escape_html(str(details['created_at']))}</span></div>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -6137,7 +6138,7 @@ def render_attendance_consultation() -> None:
             st.markdown(
                 (
                     "<div class='pre-meta-list' style='margin-top:1rem;'>"
-                    f"<div class='pre-meta-item'><strong>Categoria especifica</strong><span>{details['benefit_category'] or 'Nao informada'}</span></div>"
+                    f"<div class='pre-meta-item'><strong>Categoria especifica</strong><span>{escape_html(str(details['benefit_category'] or 'Nao informada'))}</span></div>"
                     f"<div class='pre-meta-item'><strong>Valor mensal estimado</strong><span>{format_currency(monthly) if monthly else 'Nao informado'}</span></div>"
                     f"<div class='pre-meta-item'><strong>Total estimado</strong><span>{format_currency(total) if total else 'Nao informado'}</span></div>"
                     "</div>"
@@ -6156,9 +6157,9 @@ def render_attendance_consultation() -> None:
                 st.markdown(
                     (
                         '<div class="history-item">'
-                        f"<strong>{index}. {item['node_code']}</strong><br>"
-                        f"{item['question']}<br>"
-                        f"<span class='muted'>Resposta: {item['answer']}</span>"
+                        f"<strong>{index}. {escape_html(str(item['node_code']))}</strong><br>"
+                        f"{escape_html(str(item['question']))}<br>"
+                        f"<span class='muted'>Resposta: {escape_html(str(item['answer']))}</span>"
                         "</div>"
                     ),
                     unsafe_allow_html=True,

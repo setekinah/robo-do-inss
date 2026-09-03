@@ -195,7 +195,7 @@ FLOW_DEFINITIONS = {
                     {
                         "label": "Nao",
                         "description": "Ainda esta distante; avaliar planejamento e regularizacoes.",
-                        "next": "regraTransicao",
+                        "result": "desqualificadoSemRequisitos",
                     },
                 ],
             },

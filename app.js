@@ -6,12 +6,15 @@
 class AudioSynth {
   constructor() {
     this.ctx = null;
-    this.enabled = true;
+    this.enabled = false;
   }
 
   init() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -46,9 +49,24 @@ class AudioSynth {
     this.playTone(1200, 'sawtooth', 0.05, 0.02);
     setTimeout(() => this.playTone(1500, 'sawtooth', 0.05, 0.02), 50);
   }
+
+  toggle() {
+    this.enabled = !this.enabled;
+    if (this.enabled) this.success();
+    return this.enabled;
+  }
 }
 
 const audio = new AudioSynth();
+
+// Valores provenientes de documentos, API ou formulários nunca entram em
+// innerHTML sem codificação. Prefira textContent sempre que possível.
+const escapeHTML = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
 class NeuralCanvas {
   constructor(canvasId) {
@@ -133,6 +151,7 @@ class AppEngine {
     this.initOCRDropzone();
     this.checkAuthStatus();
     this.loadData();
+    this.runSilentCatalogCheck();
   }
 
   initEvents() {
@@ -143,15 +162,29 @@ class AppEngine {
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => this.switchTab(item.dataset.tab));
     });
+    document.querySelectorAll('[data-finance-tab]').forEach((button) => {
+      button.addEventListener('click', () => this.switchFinanceTab(button.dataset.financeTab));
+    });
 
     const btnAudio = document.getElementById('btn-audio-toggle');
     if (btnAudio) {
+      const icon = document.getElementById('audio-toggle-icon');
+      btnAudio.setAttribute('aria-pressed', 'false');
+      btnAudio.title = 'Ativar efeitos sonoros';
+      if (icon) icon.innerHTML = '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6m0-6-5 6"/>';
       btnAudio.addEventListener('click', () => {
-        audio.enabled = !audio.enabled;
-        btnAudio.style.color = audio.enabled ? 'var(--primary)' : 'var(--text-muted)';
-        if (audio.enabled) audio.click();
+        const enabled = audio.toggle();
+        btnAudio.style.color = enabled ? 'var(--primary)' : 'var(--text-muted)';
+        btnAudio.setAttribute('aria-pressed', String(enabled));
+        btnAudio.title = enabled ? 'Desativar efeitos sonoros' : 'Ativar efeitos sonoros';
+        if (icon) icon.innerHTML = enabled
+          ? '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 9a4 4 0 0 1 0 6m2-9a8 8 0 0 1 0 12"/>'
+          : '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6m0-6-5 6"/>';
       });
     }
+
+    document.getElementById('btn-logout')?.addEventListener('click', () => this.logout());
+    document.getElementById('btn-notifications')?.addEventListener('click', () => this.toggleNotifications());
 
     const btnNovo = document.getElementById('btn-novo-atendimento');
     if (btnNovo) {
@@ -163,10 +196,84 @@ class AppEngine {
       btnNovoLead.addEventListener('click', () => this.openNewLead('lead'));
     }
 
+    document.getElementById('auth-form')?.addEventListener('submit', (event) => event.preventDefault());
+    document.getElementById('new-lead-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.createNewLead();
+    });
+    document.getElementById('btn-start-retirement-triage')?.addEventListener('click', () => this.startRetirementTriage());
+    document.getElementById('btn-upload-retirement-cnis')?.addEventListener('click', () => document.getElementById('triage-retirement-cnis-file')?.click());
+    document.getElementById('triage-retirement-cnis-file')?.addEventListener('change', (event) => this.uploadRetirementCNIS(event.target.files?.[0]));
+    document.getElementById('btn-triage-back')?.addEventListener('click', () => this.goBackTriage());
+    document.getElementById('btn-salvar-triage-lead')?.addEventListener('click', () => this.saveTriageLead());
+    document.addEventListener('click', (event) => this.handleAction(event));
+
     const searchInput = document.getElementById('global-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => this.filterKanban(e.target.value));
     }
+  }
+
+  toggleNotifications() {
+    const panel = document.getElementById('notifications-popover');
+    const button = document.getElementById('btn-notifications');
+    if (!panel || !button) return;
+    const isOpen = panel.matches(':popover-open') || !panel.hidden;
+    if (isOpen) {
+      if (typeof panel.hidePopover === 'function' && panel.matches(':popover-open')) panel.hidePopover();
+      panel.hidden = true;
+    } else {
+      panel.hidden = false;
+      if (typeof panel.showPopover === 'function') panel.showPopover();
+    }
+    button.setAttribute('aria-expanded', String(!isOpen));
+    audio.click();
+  }
+
+  switchFinanceTab(tab) {
+    const views = {
+      geral: ['VISÃO GERAL', 'O escritório em números', 'Receita, carteira, margem e recebimentos em uma leitura operacional.', ['R$ 4.122.000', 'R$ 2.213.580', 'R$ 817.810', 'R$ 324.270']],
+      receita: ['RECEITA', 'De onde vem o dinheiro', 'Faturamento realizado, meios de pagamento e origem dos contratos.', ['R$ 301.942', 'R$ 184.468', 'R$ 852.209', '1.753']],
+      inadimplencia: ['INADIMPLÊNCIA', 'Recebimentos sob atenção', 'Acompanhe parcelas em aberto e priorize ações de recuperação.', ['68 clientes', 'R$ 324.270', '12,3%', 'R$ 74.527']],
+      carteira: ['CARTEIRA', 'Contratos e clientes', 'Contratos ativos, valor contratado e ticket médio por unidade.', ['473 contratos', 'R$ 4.122.000', 'R$ 8.250', 'R$ 1.800.000']],
+      custos: ['ÁREAS E CUSTOS', 'Onde o escritório ganha dinheiro', 'Resultado e participação por área de atuação.', ['Previdenciário', 'R$ 381.248', '17,2%', '6 áreas']],
+      equipe: ['EQUIPE', 'Produção por responsável', 'Carteira e receita por responsável, com leitura de risco.', ['4 sócios', 'R$ 637.602', 'R$ 561.521', 'R$ 491.760']],
+    };
+    const view = views[tab] || views.geral;
+    document.querySelectorAll('[data-finance-tab]').forEach((button) => button.classList.toggle('active', button.dataset.financeTab === tab));
+    document.getElementById('finance-kicker').textContent = view[0];
+    document.getElementById('finance-title').textContent = view[1];
+    document.getElementById('finance-description').textContent = view[2];
+    view[3].forEach((value, index) => { const element = document.getElementById(`finance-kpi-${index + 1}`); if (element) element.textContent = value; });
+    const chartTitle = document.getElementById('finance-chart-title');
+    if (chartTitle) chartTitle.textContent = tab === 'inadimplencia' ? 'Evolução de valores em aberto' : tab === 'equipe' ? 'Receita por responsável' : 'Receita, custo e resultado';
+    audio.click();
+  }
+
+  handleAction(event) {
+    const control = event.target.closest('[data-action]');
+    if (!control) return;
+    const { action, step, dialog, modaltab, stagefilter, destination, mode } = control.dataset;
+    event.preventDefault();
+    if (action === 'show-login') this.showLoginMode();
+    else if (action === 'onboarding-step') this.nextOnboardingStep(Number(step));
+    else if (action === 'register') this.submitRegistration();
+    else if (action === 'login') this.submitLogin();
+    else if (action === 'close-dialog') document.getElementById(dialog)?.close();
+    else if (action === 'modal-tab') this.switchModalTab(modaltab);
+    else if (action === 'add-activity') this.addActivity();
+    else if (action === 'print') window.print();
+    else if (action === 'send-signature') this.sendContractForSignature();
+    else if (action === 'new-lead') this.openNewLead(destination || 'lead');
+    else if (action === 'kanban-filter') this.filterKanbanStage(stagefilter);
+    else if (action === 'choose-ocr-file') {
+      event.stopPropagation();
+      document.getElementById('ocr-file-input')?.click();
+    } else if (action === 'ocr-mode') this.toggleOCRViewMode(mode);
+    else if (action === 'convert-cnis-lead') this.convertCNISToLead();
+    else if (action === 'confirm-retirement-prefilter') this.confirmRetirementPrefilter();
+    else if (action === 'save-retirement-prefilter') this.saveRetirementPrefilterLead(control.dataset.route);
+    else if (action === 'logout') this.logout();
   }
 
   initCatalogControls() {
@@ -239,7 +346,7 @@ class AppEngine {
     sub.textContent = `Tamanho: ${fileSizeKB} KB | Tipo: ${file.type || 'Documento Previdenciário'}`;
 
     statusBox.style.display = 'block';
-    statusText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Lendo "${file.name}" com OCR local ONNX...`;
+    statusText.textContent = `Lendo "${file.name}" com OCR local ONNX...`;
     tree.textContent = `// Processando "${file.name}" (${fileSizeKB} KB)...\n// Extraindo campos de contribuição, carência e dados cadastrais do INSS...`;
 
     // Chamada à API de análise documental
@@ -451,6 +558,9 @@ class AppEngine {
     try {
       const res = await fetch('/api/auth/status');
       const data = await res.json();
+      if (data.configured) {
+        this.showLoginMode();
+      }
       if (data.office_name) {
         document.getElementById('sidebar-office-name').textContent = data.office_name;
         document.getElementById('user-display-name').textContent = data.office_name;
@@ -498,7 +608,22 @@ class AppEngine {
     document.getElementById('step-indicator').style.display = 'none';
     document.getElementById('login-subtitle').textContent = 'Acesse sua conta no PrevIA';
 
-    document.getElementById('login-toggle-container').innerHTML = `Não tem conta? <a href="#" onclick="app.nextOnboardingStep(2); return false;">Criar em minutos</a>`;
+    const toggle = document.getElementById('login-toggle-container');
+    toggle.replaceChildren('Não tem conta? ');
+    const link = document.createElement('a');
+    link.href = '#';
+    link.dataset.action = 'onboarding-step';
+    link.dataset.step = '2';
+    link.textContent = 'Criar em minutos';
+    toggle.appendChild(link);
+  }
+
+  async logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      window.location.reload();
+    }
   }
 
   async submitRegistration() {
@@ -576,7 +701,6 @@ class AppEngine {
       if (tabId === 'relationship') this.renderRelationshipBase();
       if (tabId === 'orchestrator') {
         this.loadEvents();
-        this.loadOfficialCatalog();
       }
     };
 
@@ -715,9 +839,9 @@ class AppEngine {
         const val = (lead.estimated_total_value || 12500).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
         card.innerHTML = `
-          <span class="card-tag tag-aposentadoria">${lead.flow_name || 'Aposentadoria'}</span>
-          <button class="card-title card-title-button" type="button">${lead.lead_name}</button>
-          <div class="card-sub"><i class="fa-solid fa-phone"></i> ${lead.lead_phone || '(11) 98765-4321'}</div>
+          <span class="card-tag tag-aposentadoria">${escapeHTML(lead.flow_name || 'Aposentadoria')}</span>
+          <button class="card-title card-title-button" type="button">${escapeHTML(lead.lead_name)}</button>
+          <div class="card-sub"><i class="fa-solid fa-phone"></i> ${escapeHTML(lead.lead_phone || '(11) 98765-4321')}</div>
           <div class="card-value">${val}</div>
           <div class="card-actions">
             <button class="btn-secondary lead-details-button" type="button" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
@@ -778,6 +902,7 @@ class AppEngine {
   // --- MODAL DE DETALHES DO LEAD ---
   async openLeadModal(leadId) {
     audio.click();
+    this.currentDocumentAudit = null;
     try {
       const res = await fetch(`/api/atendimentos/${leadId}`);
       if (!res.ok) throw new Error('Não foi possível carregar os detalhes do lead.');
@@ -830,8 +955,8 @@ class AppEngine {
       item.style.border = '1px solid var(--glass-border)';
 
       item.innerHTML = `
-        <div style="font-size: 0.8rem; color: var(--primary); font-weight: 600;">${act.activity_type.toUpperCase()}</div>
-        <div style="font-size: 0.9rem; margin-top: 0.2rem;">${act.body}</div>
+        <div style="font-size: 0.8rem; color: var(--primary); font-weight: 600;">${escapeHTML(String(act.activity_type || '').toUpperCase())}</div>
+        <div style="font-size: 0.9rem; margin-top: 0.2rem;">${escapeHTML(act.body)}</div>
       `;
       list.appendChild(item);
     });
@@ -861,17 +986,17 @@ class AppEngine {
 
     container.innerHTML = `
       <div class="strategy-hero ${statusClass}">
-        <div><span>DIAGNÓSTICO OPERACIONAL</span><h3>${statusLabel}</h3><p>${lead.result_title || 'Triagem inicial ainda não concluída.'}</p></div>
-        <div class="strategy-stage"><small>ETAPA ATUAL</small><strong>${stage}</strong></div>
+        <div><span>DIAGNÓSTICO OPERACIONAL</span><h3>${escapeHTML(statusLabel)}</h3><p>${escapeHTML(lead.result_title || 'Triagem inicial ainda não concluída.')}</p></div>
+        <div class="strategy-stage"><small>ETAPA ATUAL</small><strong>${escapeHTML(stage)}</strong></div>
       </div>
       <div class="strategy-metrics">
-        <div><span>BENEFÍCIO EM FOCO</span><strong>${lead.flow_name || 'Não definido'}</strong></div>
+        <div><span>BENEFÍCIO EM FOCO</span><strong>${escapeHTML(lead.flow_name || 'Não definido')}</strong></div>
         <div><span>TRIAGEM REGISTRADA</span><strong>${answers} respostas</strong></div>
         <div><span>EVIDÊNCIAS RECEBIDAS</span><strong>${receivedDocs}/${requiredDocs.length || 0}</strong></div>
         <div><span>VALIDADAS</span><strong>${validatedDocs}/${requiredDocs.length || 0}</strong></div>
       </div>
       <div class="strategy-grid">
-        <section><h4><i class="fa-solid fa-bullseye"></i> Estratégia recomendada</h4><p>${lead.next_step || 'Definir a próxima ação jurídica.'}</p><p class="strategy-muted">${focus}</p></section>
+        <section><h4><i class="fa-solid fa-bullseye"></i> Estratégia recomendada</h4><p>${escapeHTML(lead.next_step || 'Definir a próxima ação jurídica.')}</p><p class="strategy-muted">${escapeHTML(focus)}</p></section>
         <section><h4><i class="fa-solid fa-folder-open"></i> Pendências documentais</h4><p>${pending ? `${pending} documento(s) obrigatório(s) ainda precisam ser recebidos.` : 'Nenhuma pendência obrigatória de recebimento.'}</p><button class="btn-secondary strategy-docs-button" type="button">Ver checklist</button></section>
       </div>`;
     container.querySelector('.strategy-docs-button').addEventListener('click', () => this.switchModalTab('docs'));
@@ -915,24 +1040,115 @@ class AppEngine {
     const completed = docs.filter(d => d.status === 'aprovado').length;
     document.getElementById('modal-docs-progress').textContent = `${completed} de ${docs.length} Aprovados`;
 
+    const auditButton = document.getElementById('modal-docs-audit-button');
+    if (auditButton) auditButton.onclick = () => this.runDocumentAudit();
+    this.renderDocumentAuditResult();
+
     list.innerHTML = '';
     docs.forEach(doc => {
       const card = document.createElement('div');
       card.className = 'doc-item-card';
+      const safeStatus = ['pendente', 'recebido', 'aprovado', 'rejeitado', 'validado', 'ilegivel', 'inconsistente'].includes(doc.status)
+        ? doc.status
+        : 'pendente';
+      const auditNote = doc.extraction_status
+        ? `Leitura: ${doc.extraction_status}${doc.extraction_confidence != null ? ` · confiança ${Math.round(Number(doc.extraction_confidence) * 100)}%` : ''}`
+        : 'Ainda não enviado para leitura.';
 
       card.innerHTML = `
         <div>
-          <strong style="font-size: 0.9rem;">${doc.document_name}</strong>
+          <strong style="font-size: 0.9rem;">${escapeHTML(doc.document_name)}</strong>
+          <small class="doc-audit-note">${escapeHTML(auditNote)}</small>
         </div>
         <div style="display: flex; align-items: center; gap: 0.8rem;">
-          <span class="doc-status-badge doc-status-${doc.status || 'pendente'}">${doc.status || 'pendente'}</span>
-          <button class="icon-btn" style="width: 30px; height: 30px; font-size: 0.8rem;" onclick="app.toggleDocStatus(${doc.id}, '${doc.status}')" title="Alternar Status">
+          <span class="doc-status-badge doc-status-${safeStatus}">${escapeHTML(safeStatus)}</span>
+          <button class="icon-btn doc-upload-button" style="width: 30px; height: 30px; font-size: 0.8rem;" title="Enviar e ler documento">
+            <i class="fa-solid fa-file-arrow-up"></i>
+          </button>
+          <button class="icon-btn doc-status-toggle" style="width: 30px; height: 30px; font-size: 0.8rem;" title="Alternar Status">
             <i class="fa-solid fa-rotate"></i>
           </button>
         </div>
       `;
+      card.querySelector('.doc-status-toggle').addEventListener('click', () => this.toggleDocStatus(Number(doc.id), safeStatus));
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp';
+      fileInput.hidden = true;
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files?.[0];
+        if (file) this.uploadCaseDocument(file, doc);
+      });
+      card.querySelector('.doc-upload-button').addEventListener('click', () => fileInput.click());
+      card.appendChild(fileInput);
       list.appendChild(card);
     });
+  }
+
+  renderDocumentAuditResult() {
+    const container = document.getElementById('modal-docs-audit-result');
+    if (!container) return;
+    const audit = this.currentDocumentAudit;
+    if (!audit) { container.hidden = true; container.innerHTML = ''; return; }
+    const summary = audit.resumo || {};
+    const review = Number(summary.divergentes || 0) + Number(summary.nao_localizados || 0);
+    container.hidden = false;
+    container.innerHTML = `
+      <strong><i class="fa-solid fa-shield-halved"></i> Auditoria CNIS × CTPS</strong>
+      <span>${escapeHTML(audit.conclusao || 'Auditoria documental concluída.')}</span>
+      <small>${Number(summary.confirmados || 0)} confirmado(s) · ${review} para revisão · não calcula elegibilidade.</small>`;
+  }
+
+  async runDocumentAudit() {
+    if (!this.currentLead?.id) return;
+    const button = document.getElementById('modal-docs-audit-button');
+    if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Auditando'; }
+    try {
+      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/auditoria-documental`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível gerar a auditoria documental.');
+      this.currentDocumentAudit = data.audit;
+      this.renderDocumentAuditResult();
+    } catch (error) {
+      alert(error.message || 'Não foi possível gerar a auditoria documental.');
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-code-compare"></i> Auditar CNIS × CTPS'; }
+    }
+  }
+
+  async uploadCaseDocument(file, doc) {
+    if (!this.currentLead?.id || !doc?.id) return;
+    const allowedExtensions = /\.(pdf|png|jpe?g|tiff?|webp|bmp)$/i;
+    if (!allowedExtensions.test(file.name)) {
+      alert('Envie PDF, PNG, JPG, TIFF, WEBP ou BMP.');
+      return;
+    }
+    const originalStatus = doc.status;
+    doc.status = 'recebido';
+    this.renderModalDocs();
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('document_code', doc.document_code || 'AUTO');
+      formData.append('attendance_id', String(this.currentLead.id));
+      formData.append('document_id', String(doc.id));
+      const response = await fetch('/api/documentos/analisar', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || data.technical_notes || 'Falha na leitura documental.');
+      doc.status = data.dossier_document?.status || 'recebido';
+      doc.extraction_status = data.extraction_status;
+      doc.extraction_confidence = data.extraction_confidence;
+      doc.technical_notes = data.technical_notes;
+      if (['CNIS', 'CTPS'].includes(data.document_code)) this.currentDocumentAudit = null;
+      this.renderModalDocs();
+      this.renderCNISDashboard(data);
+      this.switchTab('ocr');
+      alert(`Documento incluído no dossiê. Leitura: ${data.extraction_status}.`);
+    } catch (error) {
+      doc.status = originalStatus;
+      this.renderModalDocs();
+      alert(error.message || 'Não foi possível anexar o documento ao dossiê.');
+    }
   }
 
   async toggleDocStatus(docId, currentStatus) {
@@ -963,6 +1179,8 @@ class AppEngine {
       const res = await fetch(`/api/atendimentos/${this.currentLead.id}/contrato`);
       const data = await res.json();
       document.getElementById('modal-contract-text').textContent = data.contract_text;
+      const input = document.getElementById('modal-signature-email');
+      if (input) input.value = this.currentLead?.lead_email || '';
     } catch (e) {
       document.getElementById('modal-contract-text').textContent = `
 CONTRATO DE PRESTAÇÃO DE SERVIÇOS ADVOCATÍCIOS PREVIDENCIÁRIOS
@@ -974,6 +1192,20 @@ OBJETO: Prestação de serviços advocatícios para o benefício de ${this.curre
 HONORÁRIOS: 30% sobre o proveito econômico obtido.
 `;
     }
+  }
+
+  async sendContractForSignature() {
+    if (!this.currentLead) return;
+    const email = document.getElementById('modal-signature-email')?.value.trim();
+    const feedback = document.getElementById('modal-signature-feedback');
+    if (!email) { if (feedback) feedback.textContent = 'Informe o e-mail do contratante.'; return; }
+    if (!window.confirm(`Enviar a solicitação de assinatura para ${email}?`)) return;
+    try {
+      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/assinatura`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({client_email:email})});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível enviar para assinatura.');
+      if (feedback) { feedback.style.color='var(--accent-emerald)'; feedback.textContent=data.message; }
+    } catch (error) { if (feedback) { feedback.style.color='var(--accent-rose)'; feedback.textContent=error.message; } }
   }
 
   filterKanban(term) {
@@ -1002,7 +1234,7 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn-option';
-        btn.innerHTML = `<strong>${f.name}</strong><span>${f.total_nodes} perguntas estruturadas</span>`;
+        btn.innerHTML = `<strong>${escapeHTML(f.name)}</strong><span>${Number(f.total_nodes) || 0} perguntas estruturadas</span>`;
         btn.addEventListener('click', () => this.selectTriageBenefit(f.id));
         container.appendChild(btn);
       });
@@ -1024,8 +1256,9 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     const retirementFilter = document.getElementById('triage-aposentadoria-filter');
     if (flowId === 'aposentadoria') {
       retirementFilter.style.display = 'block';
+      document.getElementById('triage-retirement-result').style.display = 'none';
+      document.getElementById('triage-retirement-error').textContent = '';
       this.triageState = { flowId, leadName, leadPhone, prequalification: null, currentNode: null, history: [], selectedResult: null };
-      document.getElementById('btn-start-retirement-triage').onclick = () => this.startRetirementTriage();
       retirementFilter.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
@@ -1033,20 +1266,140 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     this.startTriageFlow(flowId, leadName, leadPhone, null);
   }
 
-  startRetirementTriage() {
+  async startRetirementTriage() {
     const sex = document.getElementById('triage-retirement-sex').value;
     const age = Number(document.getElementById('triage-retirement-age').value);
     const contributionYears = Number(document.getElementById('triage-retirement-contribution').value);
     const hasCNIS = document.getElementById('triage-retirement-cnis').value;
+    const affiliation = document.getElementById('triage-retirement-affiliation').value;
     const error = document.getElementById('triage-retirement-error');
-    if (!sex || !hasCNIS || !Number.isFinite(age) || age < 14 || age > 100 || !Number.isFinite(contributionYears) || contributionYears < 0 || contributionYears > 70) {
-      error.textContent = 'Informe sexo, idade, tempo de contribuição e se possui CNIS antes de iniciar.';
+    const resultContainer = document.getElementById('triage-retirement-result');
+    if (!sex || !hasCNIS || !affiliation || !Number.isFinite(age) || age < 14 || age > 100 || !Number.isFinite(contributionYears) || contributionYears < 0 || contributionYears > 70) {
+      error.textContent = 'Informe sexo, idade, tempo de contribuição, CNIS e primeira filiação antes de avaliar.';
       return;
     }
     error.textContent = '';
-    const prequalification = { sex, age, contribution_years: contributionYears, has_cnis: hasCNIS };
+    resultContainer.style.display = 'none';
+    const button = document.getElementById('btn-start-retirement-triage');
+    if (button) { button.disabled = true; button.textContent = 'Avaliando pré-filtro...'; }
+    try {
+      const response = await fetch('/api/triagem/aposentadoria/pre-filtro', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sex, age, contribution_years: contributionYears, has_cnis: hasCNIS, affiliation, cnis_evidence: this.triageState?.cnisEvidence || null })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível avaliar o pré-filtro.');
+      this.triageState = {
+        ...this.triageState, flowId: 'aposentadoria', prequalification: data.prequalification,
+        prefilter: data, currentNode: null, history: [], selectedResult: null,
+      };
+      this.renderRetirementPrefilter(data);
+    } catch (err) {
+      error.textContent = err.message || 'Falha ao avaliar o pré-filtro.';
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Avaliar pré-filtro'; }
+    }
+  }
+
+  async uploadRetirementCNIS(file) {
+    const status = document.getElementById('triage-retirement-cnis-status');
+    const input = document.getElementById('triage-retirement-cnis-file');
+    if (!file) return;
+    if (!/\.pdf$|\.(png|jpe?g|tiff?|webp|bmp)$/i.test(file.name)) {
+      status.textContent = 'Use um PDF ou imagem do CNIS.';
+      status.className = 'triage-evidence-status error';
+      return;
+    }
+    status.textContent = `Lendo ${file.name} localmente…`;
+    status.className = 'triage-evidence-status loading';
+    try {
+      const body = new FormData();
+      body.append('file', file, file.name);
+      body.append('document_code', 'CNIS');
+      const response = await fetch('/api/documentos/analisar', { method: 'POST', body });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || data.technical_notes || 'Não foi possível extrair dados do CNIS.');
+      if (data.document_code !== 'CNIS') throw new Error(`O arquivo foi identificado como ${data.classification?.label || 'outro documento'}, não como CNIS.`);
+
+      const segurado = data.segurado || {};
+      const metricas = data.metricas || {};
+      const ageInput = document.getElementById('triage-retirement-age');
+      const contributionInput = document.getElementById('triage-retirement-contribution');
+      const hasCNISInput = document.getElementById('triage-retirement-cnis');
+      const days = Number(metricas.tempo_contribuicao_dias);
+      const birth = String(segurado.data_nascimento || '');
+      const birthParts = birth.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (birthParts) {
+        const today = new Date();
+        const year = Number(birthParts[3]); const month = Number(birthParts[2]) - 1; const day = Number(birthParts[1]);
+        const age = today.getFullYear() - year - ((today.getMonth() < month || (today.getMonth() === month && today.getDate() < day)) ? 1 : 0);
+        ageInput.value = String(age);
+      }
+      if (Number.isFinite(days) && days > 0) contributionInput.value = (days / 365).toFixed(1);
+      hasCNISInput.value = 'sim';
+      this.triageState = {
+        ...this.triageState,
+        cnisEvidence: {
+          document_code: data.document_code, file_name: data.file_name,
+          extraction_confidence: data.extraction_confidence, segurado, metricas,
+          indicator_matches: Array.isArray(data.indicator_matches) ? data.indicator_matches : []
+        }
+      };
+      const timeMessage = Number.isFinite(days) && days > 0 ? `tempo estimado preenchido (${(days / 365).toFixed(1)} anos)` : 'tempo não pôde ser estruturado; informe-o e revise o CNIS';
+      status.textContent = `CNIS lido: ${segurado.nome || 'segurado não identificado'}; ${timeMessage}; ${this.triageState.cnisEvidence.indicator_matches.length} indicador(es) encontrado(s).`;
+      status.className = 'triage-evidence-status success';
+    } catch (error) {
+      this.triageState = { ...this.triageState, cnisEvidence: null };
+      status.textContent = error.message || 'Falha ao ler o CNIS.';
+      status.className = 'triage-evidence-status error';
+    } finally {
+      if (input) input.value = '';
+    }
+  }
+
+  renderRetirementPrefilter(data) {
+    const container = document.getElementById('triage-retirement-result');
+    const requirements = data.requirements || {};
+    const evidence = data.evidence || {};
+    const ageText = requirements.idade_minima_referencia ? `Idade de referência: ${requirements.idade_minima_referencia} anos` : 'Idade de referência será confirmada no CNIS';
+    const contributionText = requirements.tempo_minimo_referencia ? `Tempo de referência: ${requirements.tempo_minimo_referencia} anos` : 'Tempo de referência depende da primeira filiação';
+    const gaps = [];
+    if (requirements.faltam_anos_idade) gaps.push(`faltam ${requirements.faltam_anos_idade} ano(s) de idade`);
+    if (requirements.faltam_anos_contribuicao) gaps.push(`faltam ${requirements.faltam_anos_contribuicao} ano(s) de contribuição`);
+    const routeLabel = data.route === 'triagem'
+      ? 'Iniciar triagem técnica de aposentadoria'
+      : data.route === 'documentos' ? 'Salvar e abrir dossiê para validar CNIS' : 'Salvar na Base de Relacionamento';
+    const action = data.route === 'triagem' ? 'confirm-retirement-prefilter' : 'save-retirement-prefilter';
+    const icon = data.route === 'triagem' ? 'fa-arrow-right' : data.route === 'documentos' ? 'fa-folder-open' : 'fa-heart-circle-plus';
+    container.innerHTML = `
+      <span class="triage-step-label">RESULTADO DO PRÉ-FILTRO</span>
+      <h3>${escapeHTML(data.title)}</h3>
+      <p>${escapeHTML(data.summary)}</p>
+      <div class="triage-prefilter-metrics"><span>${escapeHTML(ageText)}</span><span>${escapeHTML(contributionText)}</span>${evidence.used ? `<span class="evidence">Dados cruzados: ${escapeHTML(evidence.source || 'CNIS')}</span>` : '<span class="manual">Dados manuais — CNIS ainda não foi usado</span>' }${Number(evidence.alerts) ? `<span class="warning">${Number(evidence.alerts)} indicador(es) do CNIS exigem revisão</span>` : ''}${gaps.map(item => `<span class="warning">${escapeHTML(item)}</span>`).join('')}</div>
+      <p class="triage-prefilter-disclaimer">${escapeHTML(data.disclaimer)}</p>
+      <button class="btn-primary" type="button" data-action="${action}" data-route="${escapeHTML(data.route)}"><i class="fa-solid ${icon}"></i> ${routeLabel}</button>`;
+    container.style.display = 'block';
+    container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  confirmRetirementPrefilter() {
     const state = this.triageState;
-    this.startTriageFlow('aposentadoria', state.leadName, state.leadPhone, prequalification);
+    if (state?.prefilter?.route !== 'triagem') return;
+    this.startTriageFlow('aposentadoria', state.leadName, state.leadPhone, state.prequalification);
+  }
+
+  saveRetirementPrefilterLead(route) {
+    const prefilter = this.triageState?.prefilter;
+    if (!prefilter || !['documentos', 'planejamento'].includes(route)) return;
+    const isPlanning = route === 'planejamento';
+    this.renderTriageResult({
+      title: prefilter.title,
+      summary: prefilter.summary,
+      next_step: isPlanning
+        ? 'Acompanhar o cliente e revisar o CNIS antes de uma nova simulação.'
+        : 'Anexar e analisar o CNIS para iniciar a triagem técnica de aposentadoria.',
+      status: isPlanning ? 'desqualificado' : 'pendente_documental'
+    });
   }
 
   async startTriageFlow(flowId, leadName, leadPhone, prequalification = null) {
@@ -1055,8 +1408,6 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     document.getElementById('triage-selector').style.display = 'none';
     document.getElementById('triage-quiz').style.display = 'block';
     document.getElementById('triage-result').style.display = 'none';
-    document.getElementById('btn-triage-back').onclick = () => this.goBackTriage();
-
     this.sendTriageStep(null, null);
   }
 
@@ -1086,7 +1437,8 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     } catch (e) {
       const container = document.getElementById('triage-options-container');
       if (container) {
-        container.innerHTML = `<p class="triage-error">${e.message || 'Falha na triagem. Tente novamente.'}</p>`;
+        container.textContent = e.message || 'Falha na triagem. Tente novamente.';
+        container.className = 'triage-error';
       }
     }
   }
@@ -1102,7 +1454,7 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     node.options.forEach(opt => {
       const btn = document.createElement('button');
       btn.className = 'btn-option';
-      btn.innerHTML = `<strong>${opt.label}</strong><span>${opt.description}</span>`;
+      btn.innerHTML = `<strong>${escapeHTML(opt.label)}</strong><span>${escapeHTML(opt.description)}</span>`;
       btn.addEventListener('click', () => {
         audio.click();
         this.sendTriageStep(node.id, opt.label);
@@ -1134,13 +1486,16 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     const btnSave = document.getElementById('btn-salvar-triage-lead');
     btnSave.innerHTML = result.status === 'desqualificado'
       ? '<i class="fa-solid fa-heart-circle-plus"></i> Salvar na Base de Relacionamento'
-      : '<i class="fa-solid fa-user-plus"></i> Salvar Lead na Esteira Kanban';
-    btnSave.onclick = () => this.saveTriageLead();
+      : '<i class="fa-solid fa-folder-open"></i> Salvar e abrir dossiê documental';
   }
 
   async saveTriageLead() {
+    if (this.triageSaving || !this.triageState?.selectedResult) return;
+    this.triageSaving = true;
     audio.success();
     const result = this.triageState.selectedResult;
+    const saveButton = document.getElementById('btn-salvar-triage-lead');
+    if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Salvando dossiê...'; }
 
     const newLead = {
       lead_name: this.triageState.leadName,
@@ -1174,13 +1529,34 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
         body: JSON.stringify(newLead)
       });
       const data = await res.json();
+      if (!res.ok || !data.success || !data.id) throw new Error(data.error || 'Não foi possível criar o dossiê do cliente.');
       newLead.id = data.id;
-    } catch (e) {
-      newLead.id = Date.now();
+    } catch (error) {
+      alert(error.message || 'Não foi possível salvar a triagem.');
+      this.triageSaving = false;
+      if (saveButton) { saveButton.disabled = false; this.renderTriageResult(result); }
+      return;
     }
 
     this.atendimentos.unshift(newLead);
-    this.switchTab(result.status === 'desqualificado' ? 'relationship' : 'kanban');
+    if (result.status === 'desqualificado') {
+      this.switchTab('relationship');
+      this.triageSaving = false;
+      return;
+    }
+    try {
+      // Abre o dossiê primeiro: transições visuais do Kanban não podem impedir
+      // o acesso imediato aos documentos recém-criados.
+      await this.openLeadModal(newLead.id);
+      this.switchModalTab('docs');
+      this.switchTab('kanban');
+    } catch (error) {
+      this.switchTab('kanban');
+      alert('Lead salvo. Abra os detalhes no Kanban para acessar o dossiê documental.');
+    } finally {
+      this.triageSaving = false;
+      if (saveButton) { saveButton.disabled = false; this.renderTriageResult(result); }
+    }
   }
 
   async renderRelationshipBase() {
@@ -1204,8 +1580,8 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
           ? new Date(`${lead.relationship_next_review_at}T00:00:00`).toLocaleDateString('pt-BR')
           : 'Sem revisão agendada';
         card.innerHTML = `
-          <div><span class="relationship-badge">Acompanhamento</span><h3>${lead.lead_name}</h3><p>${lead.lead_phone || 'Telefone não informado'} · ${lead.flow_name || 'Triagem previdenciária'}</p></div>
-          <div class="relationship-reason"><strong>Motivo atual:</strong> ${lead.result_title || 'Sem elegibilidade atual'}<br><span>${lead.next_step || lead.summary || ''}</span></div>
+          <div><span class="relationship-badge">Acompanhamento</span><h3>${escapeHTML(lead.lead_name)}</h3><p>${escapeHTML(lead.lead_phone || 'Telefone não informado')} · ${escapeHTML(lead.flow_name || 'Triagem previdenciária')}</p></div>
+          <div class="relationship-reason"><strong>Motivo atual:</strong> ${escapeHTML(lead.result_title || 'Sem elegibilidade atual')}<br><span>${escapeHTML(lead.next_step || lead.summary || '')}</span></div>
           <div><strong>Revisar em:</strong> ${reviewDate}<br><span class="relationship-consent">${lead.remarketing_opt_in ? 'Contato autorizado' : 'Sem consentimento de remarketing'}</span></div>
           <div class="relationship-actions"><button class="btn-secondary relationship-detail" type="button">Detalhes</button><button class="btn-primary relationship-reactivate" type="button">Reabrir triagem</button></div>`;
         card.querySelector('.relationship-detail').addEventListener('click', () => this.openLeadModal(lead.id));
@@ -1213,7 +1589,8 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
         container.appendChild(card);
       });
     } catch (error) {
-      container.innerHTML = `<p class="triage-error">${error.message}</p>`;
+      container.textContent = error.message || 'Falha ao carregar a base de relacionamento.';
+      container.className = 'triage-error';
     }
   }
 
@@ -1235,6 +1612,7 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
     document.getElementById('triage-quiz').style.display = 'none';
     document.getElementById('triage-result').style.display = 'none';
     document.getElementById('triage-aposentadoria-filter').style.display = 'none';
+    document.getElementById('triage-retirement-result').style.display = 'none';
     document.getElementById('triage-lead-error').textContent = '';
     document.getElementById('triage-retirement-error').textContent = '';
     this.switchTab('triage');
@@ -1314,10 +1692,10 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
         tr.style.borderBottom = '1px solid var(--glass-border)';
         tr.innerHTML = `
           <td style="padding: 0.8rem; font-family: var(--font-code); color: var(--primary);">#${ev.id}</td>
-          <td style="padding: 0.8rem; font-weight: 600;">${ev.event_type}</td>
-          <td style="padding: 0.8rem;">${ev.source}</td>
-          <td style="padding: 0.8rem;"><span style="color: var(--accent-gold);">${ev.priority.toUpperCase()}</span></td>
-          <td style="padding: 0.8rem;"><span style="color: var(--accent-emerald);">${ev.status.toUpperCase()}</span></td>
+          <td style="padding: 0.8rem; font-weight: 600;">${escapeHTML(ev.event_type)}</td>
+          <td style="padding: 0.8rem;">${escapeHTML(ev.source)}</td>
+          <td style="padding: 0.8rem;"><span style="color: var(--accent-gold);">${escapeHTML(String(ev.priority || '').toUpperCase())}</span></td>
+          <td style="padding: 0.8rem;"><span style="color: var(--accent-emerald);">${escapeHTML(String(ev.status || '').toUpperCase())}</span></td>
         `;
         tbody.appendChild(tr);
       });
@@ -1350,14 +1728,15 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
       sourcesContainer.replaceChildren();
       (statusData.sources || []).forEach((source) => {
         const card = document.createElement('article');
-        card.className = 'relationship-card';
+        card.className = 'official-source-card';
         const title = document.createElement('strong');
+        title.className = 'official-source-title';
         title.textContent = source.title;
         const scope = document.createElement('p');
+        scope.className = 'official-source-scope';
         scope.textContent = source.scope;
         const detail = document.createElement('p');
-        detail.style.color = 'var(--text-muted)';
-        detail.style.fontSize = '.78rem';
+        detail.className = 'official-source-detail';
         detail.textContent = source.source_hash
           ? `Hash ${source.source_hash.slice(0, 12)}… · última captura ${new Date(source.captured_at).toLocaleString('pt-BR')}`
           : 'Fonte ainda não verificada.';
@@ -1366,7 +1745,7 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.textContent = 'Abrir fonte oficial';
-        link.style.color = 'var(--primary)';
+        link.className = 'official-source-link';
         card.append(title, scope, detail, link);
         sourcesContainer.appendChild(card);
       });
@@ -1397,6 +1776,20 @@ HONORÁRIOS: 30% sobre o proveito econômico obtido.
       });
     } catch (error) {
       this.setCatalogMessage(error.message || 'Falha ao carregar o catálogo oficial.', true);
+    }
+  }
+
+  async runSilentCatalogCheck() {
+    // Governança interna: a consulta não gera alerta visual e jamais ativa
+    // regras. Alterações continuam dependentes de revisão jurídica registrada.
+    const storageKey = 'previa_catalog_last_silent_check';
+    const previous = Number(sessionStorage.getItem(storageKey) || 0);
+    if (Date.now() - previous < 12 * 60 * 60 * 1000) return;
+    try {
+      const response = await fetch('/api/catalogo-cnis/monitorar', { method: 'POST' });
+      if (response.ok) sessionStorage.setItem(storageKey, String(Date.now()));
+    } catch (_) {
+      // Falhas de rede não interrompem a operação do CRM.
     }
   }
 

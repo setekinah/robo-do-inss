@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
 import time
@@ -19,6 +20,7 @@ from runtime_paths import DATA_DIR
 CREDENTIALS_PATH = DATA_DIR / "auth_credentials.json"
 PBKDF2_ITERATIONS = 600_000
 SESSION_TTL_SECONDS = 8 * 60 * 60
+MAX_ACTIVE_SESSIONS = 256
 _SESSIONS: dict[str, float] = {}
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
@@ -82,6 +84,11 @@ def save_credentials(email: str, password: str) -> None:
     temporary_path = Path(f"{CREDENTIALS_PATH}.tmp")
     temporary_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     temporary_path.replace(CREDENTIALS_PATH)
+    try:
+        os.chmod(CREDENTIALS_PATH, 0o600)
+    except OSError:
+        # On Windows, the effective ACL may be controlled by the user profile.
+        pass
 
 
 def verify_credentials(email: str, password: str) -> bool:
@@ -100,8 +107,15 @@ def verify_credentials(email: str, password: str) -> bool:
 
 def create_session() -> str:
     """Cria uma sessão opaca; somente o hash fica em memória no servidor."""
+    now = time.time()
+    for session_key, expiry in list(_SESSIONS.items()):
+        if expiry <= now:
+            _SESSIONS.pop(session_key, None)
+    if len(_SESSIONS) >= MAX_ACTIVE_SESSIONS:
+        oldest_key = min(_SESSIONS, key=_SESSIONS.get)
+        _SESSIONS.pop(oldest_key, None)
     token = secrets.token_urlsafe(32)
-    _SESSIONS[hashlib.sha256(token.encode("utf-8")).hexdigest()] = time.time() + SESSION_TTL_SECONDS
+    _SESSIONS[hashlib.sha256(token.encode("utf-8")).hexdigest()] = now + SESSION_TTL_SECONDS
     return token
 
 

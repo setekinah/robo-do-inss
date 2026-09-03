@@ -19,6 +19,9 @@ uploads/
 venv/
 .codex-test-temp/
 .test-runtime/
+tmp/
+tmp_*.html
+tmp_*.js
 .env
 .env.*
 !.env.example

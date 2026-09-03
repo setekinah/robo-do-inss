@@ -255,6 +255,24 @@ def init_database() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS atendimento_auditorias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                audit_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(attendance_id, audit_type),
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_atendimento_auditorias_attendance ON atendimento_auditorias(attendance_id, audit_type)"
+        )
         ensure_document_column(conn, "raw_text", "TEXT")
         ensure_document_column(conn, "extracted_data_json", "TEXT")
         ensure_document_column(conn, "source_type", "TEXT")
@@ -393,21 +411,57 @@ def list_official_sources() -> list[dict[str, Any]]:
 
 def create_cnis_catalog_version(*, source_name: str, source_url: str, source_hash: str, definitions: list[dict[str, Any]], review_notes: str = "") -> dict[str, Any]:
     with get_connection() as conn:
-        existing = conn.execute("SELECT * FROM cnis_catalog_versions WHERE source_hash=?", (source_hash,)).fetchone()
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(cnis_catalog_versions)").fetchall()}
+        hash_fields = [field for field in ("source_hash", "content_hash") if field in columns]
+        if not hash_fields:
+            raise RuntimeError("Tabela de versões não possui coluna de hash compatível.")
+        lookup = " OR ".join(f"{field}=?" for field in hash_fields)
+        existing = conn.execute(
+            f"SELECT * FROM cnis_catalog_versions WHERE {lookup}",
+            tuple(source_hash for _ in hash_fields),
+        ).fetchone()
         if existing:
             return {"version": dict(existing), "created": False}
-        cursor = conn.execute("""
-            INSERT INTO cnis_catalog_versions (source_hash, source_name, source_url, total_indicators, review_notes)
-            VALUES (?, ?, ?, ?, ?)
-        """, (source_hash, source_name, source_url, len(definitions), review_notes))
+        insert_fields = [*hash_fields, "source_name", "source_url", "total_indicators", "review_notes"]
+        if "source_file_name" in columns:
+            insert_fields.append("source_file_name")
+        if "unique_codes" in columns:
+            insert_fields.append("unique_codes")
+        placeholders = ", ".join("?" for _ in insert_fields)
+        insert_values: list[Any] = [
+            *[source_hash for _ in hash_fields], source_name, source_url, len(definitions), review_notes,
+        ]
+        if "source_file_name" in columns:
+            insert_values.append(source_name)
+        if "unique_codes" in columns:
+            insert_values.append(len({str(item.get("code") or "").upper() for item in definitions if item.get("code")}))
+        cursor = conn.execute(
+            f"INSERT INTO cnis_catalog_versions ({', '.join(insert_fields)}) VALUES ({placeholders})",
+            tuple(insert_values),
+        )
         version_id = cursor.lastrowid
-        conn.executemany("""
-            INSERT INTO cnis_indicator_definitions
-              (catalog_version_id, code, indicator_type, indicator_group, official_description,
-               official_clarification, general_guidance, source_url, source_page, canonical_key)
-            VALUES (:catalog_version_id, :code, :indicator_type, :indicator_group, :official_description,
-                    :official_clarification, :general_guidance, :source_url, :source_page, :canonical_key)
-        """, [dict(item, catalog_version_id=version_id) for item in definitions])
+        definition_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(cnis_indicator_definitions)").fetchall()
+        }
+        definition_fields = [
+            field for field in (
+                "catalog_version_id", "source_row_number", "code", "indicator_type", "indicator_group",
+                "official_description", "official_clarification", "general_guidance", "source_url",
+                "source_page", "official_source_url", "reference_url", "canonical_key",
+            ) if field in definition_columns
+        ]
+        records = []
+        for row_number, item in enumerate(definitions, start=1):
+            record = dict(item, catalog_version_id=version_id, source_row_number=row_number)
+            record.setdefault("official_source_url", source_url)
+            record.setdefault("reference_url", source_url)
+            records.append(record)
+        fields_sql = ", ".join(definition_fields)
+        values_sql = ", ".join(f":{field}" for field in definition_fields)
+        conn.executemany(
+            f"INSERT INTO cnis_indicator_definitions ({fields_sql}) VALUES ({values_sql})",
+            records,
+        )
         conn.execute("""
             INSERT INTO cnis_catalog_review_log (catalog_version_id, action, reviewer, note)
             VALUES (?, 'importada', 'sistema', ?)
@@ -868,6 +922,44 @@ def list_attendance_documents(attendance_id: int) -> list[sqlite3.Row]:
             (attendance_id,),
         ).fetchall()
     return rows
+
+
+def save_attendance_audit(*, attendance_id: int, audit_type: str, status: str, report: dict[str, Any]) -> None:
+    """Persist only a generated, reviewable report for the attendance."""
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO atendimento_auditorias (attendance_id, audit_type, status, report_json)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(attendance_id, audit_type) DO UPDATE SET
+                status=excluded.status,
+                report_json=excluded.report_json,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (attendance_id, audit_type, status, json.dumps(report, ensure_ascii=False)),
+        )
+
+
+def get_attendance_audit(attendance_id: int, audit_type: str) -> dict[str, Any] | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, attendance_id, audit_type, status, report_json, created_at, updated_at
+            FROM atendimento_auditorias
+            WHERE attendance_id = ? AND audit_type = ?
+            """,
+            (attendance_id, audit_type),
+        ).fetchone()
+    if not row:
+        return None
+    report = json.loads(row["report_json"] or "{}")
+    return {**dict(row), "report": report, "report_json": None}
+
+
+def invalidate_attendance_document_audits(attendance_id: int) -> None:
+    """A new upload changes the evidence base; stored audits must not look current."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM atendimento_auditorias WHERE attendance_id = ?", (attendance_id,))
 
 
 def update_attendance_document(
