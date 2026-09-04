@@ -23,7 +23,7 @@ class OperationalDesignRefinementTests(unittest.TestCase):
 
         self.assertIn("dashboard-filter-bar", source)
         self.assertIn("Filtros operacionais", css)
-        self.assertIn("#dashboard-stage-filter", css)
+        self.assertIn(".dashboard-filter-bar select", css)
 
 
 if __name__ == "__main__":
