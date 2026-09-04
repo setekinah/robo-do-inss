@@ -594,6 +594,17 @@ select option:hover {
 .smart-pending-panel { padding:1rem 1.1rem !important; }.smart-pending-header { align-items:center; display:flex; gap:1rem; justify-content:space-between; }.smart-pending-header .eyebrow { color:var(--accent-gold); font-size:.67rem; font-weight:800; letter-spacing:.09em; }.smart-pending-header h3 { font-family:var(--font-heading); font-size:1.1rem; margin:.18rem 0; }.smart-pending-header p { color:var(--text-muted); font-size:.8rem; margin:0; }
 @media (max-width:900px) { .dashboard-command-center { align-items:flex-start; flex-direction:column; }.dashboard-filter-bar { grid-template-columns:1fr 1fr; }.dashboard-filter-intro,#dashboard-filter-summary { display:none; } }
 @media (max-width:560px) { .dashboard-actions { width:100%; }.dashboard-action { flex:1 1 auto; }.dashboard-filter-bar { grid-template-columns:1fr; }.dashboard-filter-clear { justify-self:start; } }
+
+/* Cartões de ação: leitura imediata e sem rótulos quebrados. */
+.metric-card--action { min-height:154px; overflow:hidden; padding:1rem 1.1rem !important; position:relative; }
+.metric-card--action::before { bottom:0; content:""; left:0; position:absolute; top:0; width:5px; }
+.metric-card--documents { background:linear-gradient(135deg,rgba(127,29,59,.35),rgba(20,26,39,.9)) !important; border-color:rgba(251,113,133,.58) !important; }.metric-card--documents::before { background:#fb7185; }
+.metric-card--automation { background:linear-gradient(135deg,rgba(91,54,10,.30),rgba(20,26,39,.9)) !important; border-color:rgba(250,204,21,.56) !important; }.metric-card--automation::before { background:#facc15; }
+.metric-action-topline { align-items:center; display:flex; font-size:.67rem; font-weight:850; justify-content:space-between; letter-spacing:.07em; }.metric-card--documents .metric-action-topline { color:#fda4af; }.metric-card--automation .metric-action-topline { color:#fde68a; }
+.metric-action-marker { align-items:center; background:rgba(255,255,255,.08); border-radius:50%; display:inline-flex; font-size:.48rem; height:24px; justify-content:center; width:24px; }.metric-card--documents .metric-action-marker { color:#fb7185; }.metric-card--automation .metric-action-marker { color:#facc15; }
+.metric-card--action .metric-header { margin-top:.55rem; }.metric-card--action .metric-header > span { color:#c8d3e3; font-size:.79rem; font-weight:700; letter-spacing:0; text-transform:none; }
+.metric-action-value { align-items:baseline; display:flex; gap:.65rem; margin-top:.4rem; }.metric-action-value > span { font-family:var(--font-heading); font-size:2.1rem; font-weight:800; line-height:1; }.metric-card--documents .metric-action-value > span { color:#fda4af; }.metric-card--automation .metric-action-value > span { color:#fde68a; }.metric-action-value small { color:#d3dbe8; font-size:.75rem; }
+.metric-card--action .metric-footer { margin-top:.7rem; }.metric-card--action .metric-footer span { color:#aebbd0; font-size:.74rem; }
 .cnis-segurado-card {
   background: linear-gradient(135deg, rgba(14, 19, 31, 0.95) 0%, rgba(22, 33, 56, 0.9) 100%);
   border: 1px solid var(--glass-border-glow);

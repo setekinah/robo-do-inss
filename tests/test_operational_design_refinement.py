@@ -34,6 +34,15 @@ class OperationalDesignRefinementTests(unittest.TestCase):
         self.assertIn("dashboard-action--primary", markup)
         self.assertIn(".dashboard-command-center", css)
 
+    def test_dashboard_action_cards_have_distinct_operational_states(self):
+        markup = Path("index.html").read_text(encoding="utf-8")
+        css = Path("styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("metric-card--documents", markup)
+        self.assertIn("metric-card--automation", markup)
+        self.assertIn("EM ACOMPANHAMENTO", markup)
+        self.assertIn(".metric-card--action", css)
+
 
 if __name__ == "__main__":
     unittest.main()
