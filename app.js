@@ -1236,6 +1236,11 @@ class AppEngine {
     const summary = dossier.resumo || {};
     const decision = dossier.decisao_humana || {};
     const cnisAnalysis = dossier.analise_cnis || {};
+    const scenarioCatalog = dossier.cenarios_preparatorios || {};
+    const scenarios = (scenarioCatalog.cenarios || []).map((scenario) => {
+      const missing = (scenario.dados_ou_provas_pendentes || []).join(', ') || 'nenhuma pendência básica identificada';
+      return `<li><strong>${escapeHTML(scenario.titulo || '')}</strong> — ${escapeHTML(scenario.status || '')}<br><small>Pendente: ${escapeHTML(missing)}</small></li>`;
+    }).join('') || '<li>Gere o dossiê para preparar os cenários.</li>';
     const cnisFindings = (cnisAnalysis.findings || []).map((finding) => {
       const evidence = (finding.evidence || [])[0] || {};
       const page = evidence.page ? ` · página ${evidence.page}` : '';
@@ -1258,6 +1263,12 @@ class AppEngine {
         <p style="margin:.45rem 0;">${escapeHTML(cnisAnalysis.conclusion || 'Gere o dossiê após anexar o CNIS.')}</p>
         <ul style="margin:.35rem 0 .5rem; padding-left:1.1rem;">${cnisFindings}</ul>
         <small>Referência: ${escapeHTML(cnisAnalysis.source?.titulo || 'catálogo oficial')} · não calcula tempo, carência, RMI ou elegibilidade.</small>
+      </details>
+      <details class="retirement-scenarios-result" style="margin-top:.7rem;">
+        <summary><strong><i class="fa-solid fa-list-check"></i> Cenários para futura simulação</strong></summary>
+        <p style="margin:.45rem 0;">${escapeHTML(scenarioCatalog.conclusao || 'Ainda não há cenários preparados.')}</p>
+        <ul style="margin:.35rem 0 .5rem; padding-left:1.1rem;">${scenarios}</ul>
+        <small>Este quadro não calcula RMI, pontos, pedágios, tempo ou elegibilidade.</small>
       </details>
       <div style="margin-top:.7rem;">${hypotheses}</div>
       <button type="button" id="retirement-dossier-pdf" class="btn-secondary" style="margin-top:.8rem;"><i class="fa-solid fa-file-pdf"></i> Baixar rascunho PDF para revisão</button>

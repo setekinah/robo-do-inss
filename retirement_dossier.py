@@ -11,6 +11,7 @@ import re
 from typing import Any, Iterable, Mapping
 
 from modules.cnis_analyzer import analyze_cnis_documents
+from modules.rmi_engine import build_scenario_catalog
 
 
 AUDIT_TYPE_RETIREMENT_DOSSIER = "DOSSIE_PROBATORIO_APOSENTADORIA"
@@ -43,7 +44,7 @@ def _page_and_excerpt(raw_text: str) -> tuple[int | None, str]:
 
 def _evidence(document: Mapping[str, Any]) -> dict[str, Any]:
     page, excerpt = _page_and_excerpt(_text(document.get("raw_text")))
-    return {
+    report = {
         "documento_id": document.get("id"),
         "codigo": _code(document),
         "nome": _text(document.get("document_name")),
@@ -184,6 +185,8 @@ def build_retirement_dossier(
         "hipoteses": hypotheses,
         "decisao_humana": {"status": "em_revisao", "responsavel": "", "nota": ""},
     }
+    report["cenarios_preparatorios"] = build_scenario_catalog(dossier=report, triage_profile=triage_profile)
+    return report
 
 
 def apply_human_decision(report: dict[str, Any], *, status: str, responsible: str, note: str) -> dict[str, Any]:
