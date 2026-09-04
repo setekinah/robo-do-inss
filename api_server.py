@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -350,7 +351,11 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
         submission = data.get("submission") if isinstance(data.get("submission"), dict) else data
         reference = str(submission.get("id") or data.get("submission_id") or data.get("id") or "unknown")
-        event_key = f"docuseal:{event_type}:{reference}:{payload.get('timestamp', '')}"
+        # O identificador do fornecedor pode chegar novamente com um timestamp
+        # de entrega diferente. O hash do corpo autenticado torna o replay da
+        # mesma transição idempotente sem guardar o conteúdo sensível no banco.
+        payload_digest = hashlib.sha256(raw_body).hexdigest()
+        event_key = f"docuseal:{event_type}:{reference}:{payload_digest}"
         safe_payload = {"event_type": event_type, "submission_id": reference, "status": submission.get("status"), "timestamp": payload.get("timestamp")}
         event_id, created = database.enqueue_integration_event(
             event_key=event_key, event_type=event_type, source="docuseal", attendance_id=None,
