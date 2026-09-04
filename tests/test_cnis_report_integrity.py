@@ -39,6 +39,16 @@ class CNISReportIntegrityTests(unittest.TestCase):
         self.assertIn("Relatório de revisão documental - CNIS", script)
         self.assertIn("não conclui direito, carência, RMI ou elegibilidade", script)
 
+    def test_cnis_actions_have_a_real_lead_flow_and_product_button_styles(self) -> None:
+        markup = (ROOT / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app.js").read_text(encoding="utf-8")
+        styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("Criar lead com esta análise", markup)
+        self.assertIn("convertCNISToLead()", script)
+        self.assertIn("Criar lead a partir do CNIS", script)
+        self.assertIn(".ocr-action-button", styles)
+
 
 if __name__ == "__main__":
     unittest.main()

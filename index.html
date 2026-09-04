@@ -592,8 +592,8 @@
               </button>
             </div>
 
-            <button id="btn-ocr-reset" type="button" class="btn-secondary" style="display:none; margin-top: .75rem; width:100%; justify-content:center;" aria-label="Descartar a análise atual e escolher outro documento">
-              <i class="fa-solid fa-arrow-rotate-left"></i> Trocar documento
+            <button id="btn-ocr-reset" type="button" class="ocr-action-button ocr-action-button--quiet" style="display:none;" aria-label="Descartar a análise atual e escolher outro documento">
+              <span class="ocr-action-glyph" aria-hidden="true">↻</span> Trocar documento
             </button>
             <p id="ocr-reset-feedback" role="status" aria-live="polite" style="display:none; margin:.65rem 0 0; color:var(--text-muted); font-size:.78rem;"></p>
 
@@ -726,11 +726,11 @@
 
                 <!-- BARRA DE AÇÕES RÁPIDAS -->
                 <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border); display: flex; gap: 1rem; flex-wrap: wrap;">
-                  <button class="btn-primary" data-action="convert-cnis-lead">
-                    <i class="fa-solid fa-user-plus"></i> Vincular a um Lead na Esteira
+                  <button class="ocr-action-button ocr-action-button--primary" data-action="convert-cnis-lead">
+                    <span class="ocr-action-glyph" aria-hidden="true">＋</span> Criar lead com esta análise
                   </button>
-                  <button class="btn-secondary" data-action="print-cnis-report">
-                    <i class="fa-solid fa-print"></i> Gerar relatório para revisão
+                  <button class="ocr-action-button ocr-action-button--secondary" data-action="print-cnis-report">
+                    <span class="ocr-action-glyph" aria-hidden="true">↗</span> Relatório de revisão
                   </button>
                 </div>
                 <p id="cnis-catalog-notice" style="display:none; margin-top: .9rem; color: var(--text-muted); font-size: .78rem;"></p>

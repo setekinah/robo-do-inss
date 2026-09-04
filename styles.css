@@ -557,6 +557,26 @@ select option:hover {
 }
 
 /* --- NOVO PAINEL EXECUTIVO GRAFICO CNIS --- */
+.ocr-action-button {
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, .28);
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  font: 700 .84rem/1 var(--font-body, system-ui, sans-serif);
+  gap: .55rem;
+  justify-content: center;
+  min-height: 42px;
+  padding: .7rem 1rem;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.ocr-action-button:hover { transform: translateY(-1px); }
+.ocr-action-button:focus-visible { outline: 3px solid rgba(34, 211, 238, .35); outline-offset: 2px; }
+.ocr-action-button--primary { background: linear-gradient(135deg, #1479ed, #09c8db); border-color: transparent; color: #fff; box-shadow: 0 8px 22px rgba(9, 200, 219, .18); }
+.ocr-action-button--secondary { background: rgba(15, 23, 42, .72); color: #e6edf8; }
+.ocr-action-button--quiet { background: transparent; color: #b7c6da; margin-top: .75rem; width: 100%; }
+.ocr-action-button--secondary:hover, .ocr-action-button--quiet:hover { border-color: rgba(34, 211, 238, .62); color: #f8fbff; }
+.ocr-action-glyph { align-items: center; border: 1px solid currentColor; border-radius: 50%; display: inline-flex; font-size: .88rem; height: 18px; justify-content: center; line-height: 1; width: 18px; }
 .cnis-segurado-card {
   background: linear-gradient(135deg, rgba(14, 19, 31, 0.95) 0%, rgba(22, 33, 56, 0.9) 100%);
   border: 1px solid var(--glass-border-glow);

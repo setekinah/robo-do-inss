@@ -517,6 +517,26 @@ class AppEngine {
     input?.focus();
   }
 
+  convertCNISToLead() {
+    const report = this.currentOCRReport;
+    if (!report || report.classification?.code !== 'CNIS') {
+      alert('Analise um CNIS válido antes de criar o lead.');
+      return;
+    }
+    this.openNewLead('lead');
+    const segurado = report.segurado || {};
+    const name = document.getElementById('new-lead-name');
+    const flow = document.getElementById('new-lead-flow');
+    const note = document.getElementById('new-lead-note');
+    if (name) name.value = segurado.nome || '';
+    if (flow) flow.value = 'aposentadoria';
+    if (note) note.value = `CNIS analisado localmente: ${report.metricas?.alertas_contagem || 0} indicador(es) para revisão. Vincule e confira o documento original antes de qualquer conclusão.`;
+    document.getElementById('new-lead-modal-title').textContent = 'Criar lead a partir do CNIS';
+    document.getElementById('new-lead-modal-subtitle').textContent = 'Confirme o contato e inclua este caso na esteira para revisão documental.';
+    document.getElementById('new-lead-submit-label').textContent = 'Criar lead na esteira';
+    document.getElementById('new-lead-phone')?.focus();
+  }
+
   showOCRError(message) {
     const statusBox = document.getElementById('ocr-status-box');
     const statusText = document.getElementById('ocr-status-text');
