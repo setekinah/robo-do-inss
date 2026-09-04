@@ -157,6 +157,9 @@ class AppEngine {
     this.initOCRDropzone();
     this.checkAuthStatus();
     this.loadData();
+    this.renderOperationalStatus();
+    window.addEventListener('online', () => this.renderOperationalStatus());
+    window.addEventListener('offline', () => this.renderOperationalStatus());
     this.runSilentCatalogCheck();
   }
 
@@ -250,6 +253,16 @@ class AppEngine {
     }
     button.setAttribute('aria-expanded', String(!isOpen));
     audio.click();
+  }
+
+  renderOperationalStatus() {
+    const network = document.getElementById('status-network');
+    const dot = document.getElementById('status-network-dot');
+    if (!network || !dot) return;
+    const online = navigator.onLine;
+    network.textContent = online ? 'Conexão local disponível' : 'Sem conexão neste navegador';
+    dot.classList.toggle('status-dot--ok', online);
+    dot.classList.toggle('status-dot--alert', !online);
   }
 
   switchFinanceTab(tab) {

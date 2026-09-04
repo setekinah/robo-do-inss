@@ -285,6 +285,15 @@
           <span id="dashboard-filter-summary"></span>
         </div>
 
+        <section class="status-center" aria-labelledby="status-center-title">
+          <div class="status-center-heading"><span class="eyebrow">STATUS CENTER</span><h3 id="status-center-title">O que está funcionando agora</h3><p>Visibilidade da operação local. Integrações externas só aparecem quando estiverem configuradas.</p></div>
+          <div class="status-center-items">
+            <article class="status-item"><span class="status-dot status-dot--ok" id="status-network-dot"></span><div><strong id="status-network">Conexão local disponível</strong><small>Comunicação com o PrevIA neste navegador.</small></div></article>
+            <article class="status-item"><span class="status-dot status-dot--ok"></span><div><strong>Leitura documental local disponível</strong><small>PDFs e imagens são analisados no ambiente local.</small></div></article>
+            <article class="status-item"><span class="status-dot status-dot--idle"></span><div><strong>Integrações externas não configuradas</strong><small>Não há consulta automática ao Gov.br ou INSS nesta instalação.</small></div></article>
+          </div>
+        </section>
+
         <section class="glass-panel smart-pending-panel" style="margin-bottom:1.25rem;">
           <div class="smart-pending-header">
             <div><span class="eyebrow">PRIORIDADE OPERACIONAL</span><h3>Pendências inteligentes</h3><p id="smart-pending-notice"></p></div>
@@ -317,26 +326,22 @@
             </div>
           </div>
 
-          <div class="glass-panel metric-card">
+          <div class="glass-panel metric-card metric-card--action metric-card--documents">
+            <div class="metric-action-topline"><span>EXIGE AÇÃO</span><span class="metric-action-marker" aria-hidden="true">●</span></div>
             <div class="metric-header">
-              <span>DOCUMENTOS PENDENTES</span>
-              <div class="metric-icon" style="color: var(--accent-gold); background: rgba(245, 158, 11, 0.1);"><i class="fa-solid fa-folder-open"></i></div>
+              <span>Documentos pendentes</span>
             </div>
-            <div class="metric-value" style="color: var(--accent-gold);" id="stat-docs">0</div>
-            <div class="metric-footer">
-              <span>Checklists aguardando anexos</span>
-            </div>
+            <div class="metric-action-value"><span id="stat-docs">0</span><small>checklists aguardando anexos</small></div>
+            <div class="metric-footer"><span>Priorize a solicitação de documentos.</span></div>
           </div>
 
-          <div class="glass-panel metric-card">
+          <div class="glass-panel metric-card metric-card--action metric-card--automation">
+            <div class="metric-action-topline"><span>EM ACOMPANHAMENTO</span><span class="metric-action-marker" aria-hidden="true">●</span></div>
             <div class="metric-header">
-              <span>TAREFAS DE AUTOMAÇÃO</span>
-              <div class="metric-icon" style="color: var(--secondary); background: rgba(157, 78, 221, 0.1);"><i class="fa-solid fa-microchip"></i></div>
+              <span>Tarefas de automação</span>
             </div>
-            <div class="metric-value" style="color: var(--secondary);" id="stat-events">0</div>
-            <div class="metric-footer">
-              <span>Fila de execução em segundo plano</span>
-            </div>
+            <div class="metric-action-value"><span id="stat-events">0</span><small>na fila de execução</small></div>
+            <div class="metric-footer"><span>Confira falhas ou itens bloqueados.</span></div>
           </div>
         </div>
 
