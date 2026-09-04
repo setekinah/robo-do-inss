@@ -140,6 +140,7 @@ class AppEngine {
     this.currentTab = 'dashboard';
     this.atendimentos = [];
     this.currentLead = null;
+    this.currentRetirementDossier = null;
     this.stats = null;
     this.dashboardFilters = { stage: '', benefit: '' };
     this.filteredDashboardStats = null;
@@ -968,6 +969,7 @@ class AppEngine {
   async openLeadModal(leadId) {
     audio.click();
     this.currentDocumentAudit = null;
+    this.currentRetirementDossier = null;
     try {
       const res = await fetch(`/api/atendimentos/${leadId}`);
       if (!res.ok) throw new Error('Não foi possível carregar os detalhes do lead.');
@@ -1107,7 +1109,14 @@ class AppEngine {
 
     const auditButton = document.getElementById('modal-docs-audit-button');
     if (auditButton) auditButton.onclick = () => this.runDocumentAudit();
+    const dossierButton = document.getElementById('modal-retirement-dossier-button');
+    if (dossierButton) {
+      const isRetirement = this.currentLead?.flow_id === 'aposentadoria';
+      dossierButton.hidden = !isRetirement;
+      dossierButton.onclick = () => this.runRetirementDossier();
+    }
     this.renderDocumentAuditResult();
+    this.renderRetirementDossier();
 
     list.innerHTML = '';
     docs.forEach(doc => {
@@ -1164,6 +1173,75 @@ class AppEngine {
       <small>${Number(summary.confirmados || 0)} confirmado(s) · ${review} para revisão · não calcula elegibilidade.</small>`;
   }
 
+  renderRetirementDossier() {
+    const container = document.getElementById('modal-retirement-dossier-result');
+    if (!container) return;
+    const dossier = this.currentRetirementDossier;
+    if (!dossier) { container.hidden = true; container.innerHTML = ''; return; }
+
+    const summary = dossier.resumo || {};
+    const decision = dossier.decisao_humana || {};
+    const hypotheses = (dossier.hipoteses || []).map((hypothesis) => {
+      const pending = (hypothesis.pendencias || []).map(escapeHTML).join(' · ') || 'Nenhuma pendência documental crítica localizada.';
+      const evidence = (hypothesis.requisitos || []).filter((item) => item.status === 'evidenciado').length;
+      return `<details style="margin-top:.65rem;"><summary><strong>${escapeHTML(hypothesis.titulo)}</strong> — ${escapeHTML(hypothesis.status)}</summary><p style="margin:.45rem 0;">${escapeHTML(hypothesis.conclusao)}</p><small>${evidence} requisito(s) com evidência · Pendências: ${pending}</small></details>`;
+    }).join('');
+
+    container.hidden = false;
+    container.innerHTML = `
+      <strong><i class="fa-solid fa-scale-balanced"></i> Dossiê probatório de aposentadoria</strong>
+      <span>${escapeHTML(dossier.conclusao || '')}</span>
+      <small>${Number(summary.evidencias || 0)} evidência(s) mapeada(s) · ${Number(summary.pendencias || 0)} pendência(s) · revisão humana obrigatória.</small>
+      <div style="margin-top:.7rem;">${hypotheses}</div>
+      <div style="display:grid; gap:.45rem; margin-top:.85rem; border-top:1px solid var(--glass-border); padding-top:.75rem;">
+        <label style="font-size:.78rem;">Decisão do responsável <select id="retirement-dossier-decision"><option value="em_revisao">Em revisão</option><option value="prosseguir_analise">Prosseguir para análise técnica</option><option value="solicitar_provas">Solicitar provas complementares</option><option value="arquivar_hipotese">Arquivar hipótese</option></select></label>
+        <input id="retirement-dossier-responsible" placeholder="Responsável pela decisão" value="${escapeHTML(decision.responsavel || '')}">
+        <textarea id="retirement-dossier-note" rows="2" placeholder="Fundamente a decisão e a próxima providência">${escapeHTML(decision.nota || '')}</textarea>
+        <button type="button" id="retirement-dossier-save" class="btn-secondary" style="justify-self:start;">Registrar decisão humana</button>
+      </div>`;
+    const decisionSelect = document.getElementById('retirement-dossier-decision');
+    if (decisionSelect) decisionSelect.value = decision.status || 'em_revisao';
+    document.getElementById('retirement-dossier-save')?.addEventListener('click', () => this.saveRetirementDossierDecision());
+  }
+
+  async runRetirementDossier() {
+    if (!this.currentLead?.id) return;
+    const button = document.getElementById('modal-retirement-dossier-button');
+    if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Montando'; }
+    try {
+      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/dossie-probatorio`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'gerar' })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível montar o dossiê probatório.');
+      this.currentRetirementDossier = data.dossie;
+      this.renderRetirementDossier();
+    } catch (error) {
+      alert(error.message || 'Não foi possível montar o dossiê probatório.');
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-scale-balanced"></i> Dossiê probatório'; }
+    }
+  }
+
+  async saveRetirementDossierDecision() {
+    if (!this.currentLead?.id) return;
+    const status = document.getElementById('retirement-dossier-decision')?.value;
+    const responsavel = document.getElementById('retirement-dossier-responsible')?.value;
+    const nota = document.getElementById('retirement-dossier-note')?.value;
+    try {
+      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/dossie-probatorio`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'registrar_decisao', status, responsavel, nota })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível registrar a decisão.');
+      this.currentRetirementDossier = data.dossie;
+      this.renderRetirementDossier();
+    } catch (error) {
+      alert(error.message || 'Não foi possível registrar a decisão.');
+    }
+  }
+
   async runDocumentAudit() {
     if (!this.currentLead?.id) return;
     const button = document.getElementById('modal-docs-audit-button');
@@ -1204,7 +1282,8 @@ class AppEngine {
       doc.extraction_status = data.extraction_status;
       doc.extraction_confidence = data.extraction_confidence;
       doc.technical_notes = data.technical_notes;
-      if (['CNIS', 'CTPS'].includes(data.document_code)) this.currentDocumentAudit = null;
+      this.currentDocumentAudit = null;
+      this.currentRetirementDossier = null;
       this.renderModalDocs();
       this.renderCNISDashboard(data);
       this.switchTab('ocr');

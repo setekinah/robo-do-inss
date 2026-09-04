@@ -108,6 +108,22 @@ FLOW_DOCUMENT_RULES: dict[str, dict[str, Any]] = {
                 "analysis_focus": "Ajudar em averbacoes, tempo rural, servico publico ou tempo especial.",
                 "critical_fields": ["periodo", "orgao_origem", "natureza_tempo"],
             },
+            {
+                "code": "provas_atividade_rural",
+                "name": "Provas de atividade rural ou segurado especial",
+                "category": "beneficio",
+                "required": False,
+                "analysis_focus": "Organizar início de prova material, períodos rurais e coerência com o CNIS.",
+                "critical_fields": ["periodo", "atividade", "localidade", "titular_documento"],
+            },
+            {
+                "code": "laudos_pcd",
+                "name": "Laudos e provas para aposentadoria da pessoa com deficiência",
+                "category": "beneficio",
+                "required": False,
+                "analysis_focus": "Reunir impedimento, funcionalidade e marco temporal para revisão técnica e perícia.",
+                "critical_fields": ["cid", "data_inicio", "restricoes", "profissional_responsavel"],
+            },
         ],
     },
     "bpcLoas": {
