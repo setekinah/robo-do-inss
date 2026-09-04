@@ -30,6 +30,15 @@ class CNISReportIntegrityTests(unittest.TestCase):
         self.assertIn("resetOCRAnalysis()", script)
         self.assertIn("this.ocrUploadSequence += 1", script)
 
+    def test_cnis_print_action_generates_a_review_report_not_the_full_screen(self) -> None:
+        markup = (ROOT / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('data-action="print-cnis-report"', markup)
+        self.assertIn("printCNISReviewReport()", script)
+        self.assertIn("Relatório de revisão documental - CNIS", script)
+        self.assertIn("não conclui direito, carência, RMI ou elegibilidade", script)
+
 
 if __name__ == "__main__":
     unittest.main()

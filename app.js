@@ -149,6 +149,7 @@ class AppEngine {
     this.activeKanbanStage = 'all';
     this.triageState = { flowId: null, currentNode: null, history: [], selectedResult: null };
     this.ocrUploadSequence = 0;
+    this.currentOCRReport = null;
     this.newLeadDestination = 'lead';
 
     this.initEvents();
@@ -284,6 +285,7 @@ class AppEngine {
     else if (action === 'modal-tab') this.switchModalTab(modaltab);
     else if (action === 'add-activity') this.addActivity();
     else if (action === 'print') window.print();
+    else if (action === 'print-cnis-report') this.printCNISReviewReport();
     else if (action === 'send-signature') this.sendContractForSignature();
     else if (action === 'new-lead') this.openNewLead(destination || 'lead');
     else if (action === 'kanban-filter') this.filterKanbanStage(stagefilter);
@@ -536,6 +538,7 @@ class AppEngine {
     const classification = data.classification || { code: 'CNIS', label: 'CNIS - Extrato Previdenciario' };
     const documentFields = Array.isArray(data.document_fields) ? data.document_fields : [];
     const isCNIS = classification.code === 'CNIS';
+    this.currentOCRReport = data;
     const catalogNotice = document.getElementById('cnis-catalog-notice');
     const activeCatalog = data.cnis_catalog?.active;
     if (catalogNotice) {
@@ -608,6 +611,38 @@ class AppEngine {
       item.textContent = `${vinculo.empregador || 'Vínculo não identificado'} · ${vinculo.data_inicio || '—'} a ${vinculo.data_fim || '—'}`;
       timeline.appendChild(item);
     });
+  }
+
+  printCNISReviewReport() {
+    const data = this.currentOCRReport;
+    if (!data || (data.classification?.code && data.classification.code !== 'CNIS')) {
+      alert('Analise um extrato CNIS antes de gerar o relatório de revisão.');
+      return;
+    }
+    const safe = (value) => escapeHTML(String(value || 'Não apurado'));
+    const segurado = data.segurado || {};
+    const metricas = data.metricas || {};
+    const indicadores = metricas.alertas_nota || 'Nenhum indicador estruturado foi identificado.';
+    const vinculos = Array.isArray(data.vinculos) ? data.vinculos : [];
+    const rows = vinculos.length
+      ? vinculos.map((item) => `<tr><td>${safe(item.empregador)}</td><td>${safe(item.tipo_filiacao)}</td><td>${safe(item.data_inicio)} a ${safe(item.data_fim)}</td><td>${safe((item.indicadores || []).join(', ') || 'Sem indicador no bloco')}</td></tr>`).join('')
+      : '<tr><td colspan="4">Nenhum vínculo foi estruturado automaticamente. Confira o extrato original.</td></tr>';
+    const generatedAt = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date());
+    const reportWindow = window.open('', '_blank');
+    if (!reportWindow) {
+      alert('O navegador bloqueou a nova janela. Libere pop-ups para gerar o relatório.');
+      return;
+    }
+    reportWindow.opener = null;
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de revisão CNIS</title><style>
+      @page { size: A4; margin: 15mm; } * { box-sizing:border-box; } body { color:#172033; font:11pt/1.45 Arial,sans-serif; margin:0; } h1,h2 { margin:0; } .brand { border-bottom:3px solid #0bbad1; padding-bottom:12px; display:flex; justify-content:space-between; gap:18px; } .brand h1 { font-size:21pt; } .brand p,.muted { color:#5d6a7c; margin:4px 0 0; } .label { color:#087d90; font-size:8pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; } .notice { background:#fff7df; border-left:4px solid #d89400; margin:16px 0; padding:11px 13px; } .identity,.metrics { display:grid; gap:10px; } .identity { grid-template-columns:repeat(3,1fr); margin:14px 0; } .metrics { grid-template-columns:repeat(2,1fr); } .card { border:1px solid #dce3ea; border-radius:7px; padding:10px; } .card strong { display:block; font-size:13pt; margin-top:3px; } section { margin-top:18px; } h2 { font-size:14pt; border-bottom:1px solid #dce3ea; padding-bottom:5px; margin-bottom:9px; } table { width:100%; border-collapse:collapse; font-size:9.5pt; } th { background:#eef7f8; text-align:left; } th,td { border:1px solid #dce3ea; padding:7px; vertical-align:top; } ul { margin:7px 0; padding-left:20px; } footer { border-top:1px solid #dce3ea; color:#5d6a7c; font-size:8.5pt; margin-top:20px; padding-top:8px; } @media print { .no-print { display:none; } }
+      </style></head><body><header class="brand"><div><div class="label">PrevIA · uso interno do escritório</div><h1>Relatório de revisão documental - CNIS</h1><p>Leitura estruturada para conferência profissional; não conclui direito, carência, RMI ou elegibilidade.</p></div><div class="muted">Emitido em<br><strong>${safe(generatedAt)}</strong></div></header>
+      <div class="notice"><strong>Decisão necessária:</strong> há ${safe(metricas.alertas_contagem || 0)} indicador(es) documental(is) para revisão. Antes de qualquer protocolo, confronte este resumo com o CNIS original e as provas complementares.</div>
+      <section><h2>Identificação extraída</h2><div class="identity"><div class="card"><span class="label">Segurado</span><strong>${safe(segurado.nome)}</strong></div><div class="card"><span class="label">CPF</span><strong>${safe(segurado.cpf)}</strong></div><div class="card"><span class="label">NIT/PIS · nascimento</span><strong>${safe(segurado.nit_pis)} · ${safe(segurado.data_nascimento)}</strong></div></div></section>
+      <section><h2>Resumo da leitura</h2><div class="metrics"><div class="card"><span class="label">Tempo identificado</span><strong>${safe(metricas.tempo_contribuicao_total)}</strong><span class="muted">${safe(metricas.tempo_nota)}</span></div><div class="card"><span class="label">Competências localizadas</span><strong>${safe(metricas.carencia_cumprida)}</strong><span class="muted">${safe(metricas.carencia_nota)}</span></div><div class="card"><span class="label">RMI</span><strong>${safe(metricas.rmi_estimada)}</strong><span class="muted">${safe(metricas.rmi_nota)}</span></div><div class="card"><span class="label">Indicadores para revisão</span><strong>${safe(metricas.alertas_contagem || 0)}</strong><span class="muted">${safe(indicadores)}</span></div></div></section>
+      <section><h2>Vínculos contributivos extraídos (${vinculos.length})</h2><table><thead><tr><th>Fonte / empregador</th><th>Filiação</th><th>Período</th><th>Indicadores no bloco</th></tr></thead><tbody>${rows}</tbody></table></section>
+      <section><h2>Próximas providências recomendadas</h2><ul><li>Conferir os indicadores no documento original e no catálogo normativo oficialmente revisado.</li><li>Confrontar períodos e remunerações com CTPS, GPS, PPP e demais provas disponíveis.</li><li>Registrar a conclusão e o responsável técnico no dossiê antes de qualquer requerimento.</li></ul></section><footer>Relatório gerado a partir de extração local. Os dados devem ser revisados por profissional habilitado; este documento não é requerimento ao INSS nem parecer conclusivo.</footer><script>window.onload=()=>window.print();</script></body></html>`);
+    reportWindow.document.close();
   }
 
   toggleOCRViewMode(mode) {
