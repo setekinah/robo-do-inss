@@ -307,6 +307,9 @@ class AppEngine {
       document.getElementById('ocr-file-input')?.click();
     } else if (action === 'ocr-mode') this.toggleOCRViewMode(mode);
     else if (action === 'convert-cnis-lead') this.convertCNISToLead();
+    else if (action === 'quickstart-case') this.startNewAttendance();
+    else if (action === 'quickstart-document') { this.switchTab('ocr'); window.setTimeout(() => document.getElementById('ocr-file-input')?.click(), 0); }
+    else if (action === 'quickstart-review') { this.switchTab('ocr'); window.setTimeout(() => document.getElementById('ocr-results-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); }
     else if (action === 'confirm-retirement-prefilter') this.confirmRetirementPrefilter();
     else if (action === 'save-retirement-prefilter') this.saveRetirementPrefilterLead(control.dataset.route);
     else if (action === 'logout') this.logout();
