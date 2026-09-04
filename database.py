@@ -1385,6 +1385,109 @@ def get_crm_summary() -> dict[str, int]:
     }
 
 
+def list_intelligent_pending_items(*, limit: int = 50) -> dict[str, Any]:
+    """Prioritize operational work without inferring legal deadlines or rights."""
+    active_stages = ("concluido", "encerrado", "perdido")
+    cases: dict[int, dict[str, Any]] = {}
+
+    def add_reason(row: sqlite3.Row, *, code: str, label: str, detail: str, priority: str, due_at: str | None = None) -> None:
+        attendance_id = int(row["attendance_id"] if "attendance_id" in row.keys() else row["id"])
+        item = cases.setdefault(
+            attendance_id,
+            {
+                "attendance_id": attendance_id,
+                "lead_name": str(row["lead_name"]),
+                "flow_name": str(row["flow_name"]),
+                "assigned_to": str(row["assigned_to"] or "Não atribuído"),
+                "priority": "baixa",
+                "due_at": due_at,
+                "reasons": [],
+            },
+        )
+        priority_rank = {"baixa": 0, "media": 1, "alta": 2, "critica": 3}
+        if priority_rank[priority] > priority_rank[item["priority"]]:
+            item["priority"] = priority
+        if due_at and (not item["due_at"] or due_at < item["due_at"]):
+            item["due_at"] = due_at
+        if not any(reason["code"] == code and reason["detail"] == detail for reason in item["reasons"]):
+            item["reasons"].append({"code": code, "label": label, "detail": detail})
+
+    with get_connection() as conn:
+        task_rows = conn.execute(
+            """
+            SELECT t.attendance_id, t.title, t.due_at, t.requires_review, t.review_status,
+                   a.lead_name, a.flow_name, a.assigned_to
+            FROM crm_tarefas t
+            JOIN atendimentos a ON a.id = t.attendance_id
+            WHERE t.status = 'aberta'
+              AND a.crm_stage NOT IN ('concluido', 'encerrado', 'perdido')
+            ORDER BY CASE WHEN t.due_at IS NULL THEN 1 ELSE 0 END, t.due_at ASC
+            """
+        ).fetchall()
+        for row in task_rows:
+            due_at = str(row["due_at"] or "") or None
+            if int(row["requires_review"] or 0) and str(row["review_status"]) == "pendente":
+                add_reason(row, code="tarefa_revisao", label="Tarefa crítica aguarda revisão", detail=str(row["title"]), priority="critica", due_at=due_at)
+            elif due_at and due_at[:10] < conn.execute("SELECT DATE('now', 'localtime')").fetchone()[0]:
+                add_reason(row, code="tarefa_atrasada", label="Tarefa operacional atrasada", detail=str(row["title"]), priority="critica", due_at=due_at)
+            elif due_at and due_at[:10] == conn.execute("SELECT DATE('now', 'localtime')").fetchone()[0]:
+                add_reason(row, code="tarefa_hoje", label="Tarefa operacional para hoje", detail=str(row["title"]), priority="alta", due_at=due_at)
+
+        case_rows = conn.execute(
+            """
+            SELECT id, lead_name, flow_name, flow_id, assigned_to, conflict_status,
+                   next_action, next_action_at
+            FROM atendimentos
+            WHERE crm_stage NOT IN ('concluido', 'encerrado', 'perdido')
+            """
+        ).fetchall()
+        for row in case_rows:
+            case_row = {**dict(row), "attendance_id": row["id"]}
+            case_proxy = _DictRow(case_row)
+            if str(row["conflict_status"] or "pendente") == "pendente":
+                add_reason(case_proxy, code="conflito", label="Conflito de interesse pendente", detail="A liberação do conflito exige conferência humana.", priority="alta")
+            if not str(row["next_action"] or "").strip() or not str(row["next_action_at"] or "").strip():
+                add_reason(case_proxy, code="proxima_acao", label="Caso sem próxima ação completa", detail="Defina ação e data operacional para manter o caso na esteira.", priority="media")
+
+            if str(row["flow_id"]) != "aposentadoria":
+                continue
+            dossier = conn.execute(
+                "SELECT report_json FROM atendimento_auditorias WHERE attendance_id = ? AND audit_type = ?",
+                (row["id"], "DOSSIE_PROBATORIO_APOSENTADORIA"),
+            ).fetchone()
+            if not dossier:
+                add_reason(case_proxy, code="dossie_ausente", label="Dossiê probatório ainda não gerado", detail="Mapeie evidências e lacunas antes de avançar na análise previdenciária.", priority="alta")
+                continue
+            try:
+                decision = json.loads(dossier["report_json"] or "{}").get("decisao_humana", {})
+            except json.JSONDecodeError:
+                decision = {}
+            if str(decision.get("status") or "em_revisao") == "em_revisao":
+                add_reason(case_proxy, code="dossie_revisao", label="Dossiê aguarda decisão humana", detail="Registre a conclusão ou a próxima providência fundamentada.", priority="alta")
+            elif str(decision.get("status")) == "solicitar_provas":
+                add_reason(case_proxy, code="dossie_provas", label="Dossiê requer provas complementares", detail=str(decision.get("nota") or "Revisar as provas pendentes."), priority="alta")
+
+    priority_rank = {"critica": 0, "alta": 1, "media": 2, "baixa": 3}
+    items = sorted(cases.values(), key=lambda item: (priority_rank[item["priority"]], item["due_at"] or "9999-12-31", item["attendance_id"]))[:limit]
+    return {
+        "items": items,
+        "summary": {
+            "total": len(items),
+            "criticas": sum(item["priority"] == "critica" for item in items),
+            "alta_prioridade": sum(item["priority"] == "alta" for item in items),
+            "em_revisao": sum(any(reason["code"] in {"tarefa_revisao", "dossie_revisao"} for reason in item["reasons"]) for item in items),
+        },
+        "notice": "Datas exibidas são operacionais e exigem confirmação humana quando representarem prazo jurídico ou administrativo.",
+    }
+
+
+class _DictRow(dict[str, Any]):
+    """Small sqlite.Row adapter used by the central pending-item aggregator."""
+
+    def keys(self):  # type: ignore[override]
+        return super().keys()
+
+
 def get_crm_performance() -> dict[str, Any]:
     with get_connection() as conn:
         by_source = conn.execute(
