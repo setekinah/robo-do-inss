@@ -25,6 +25,15 @@ class OperationalDesignRefinementTests(unittest.TestCase):
         self.assertIn("Filtros operacionais", css)
         self.assertIn(".dashboard-filter-bar select", css)
 
+    def test_dashboard_groups_actions_and_queue_as_operational_controls(self):
+        markup = Path("index.html").read_text(encoding="utf-8")
+        css = Path("styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("dashboard-command-center", markup)
+        self.assertIn("smart-pending-panel", markup)
+        self.assertIn("dashboard-action--primary", markup)
+        self.assertIn(".dashboard-command-center", css)
+
 
 if __name__ == "__main__":
     unittest.main()

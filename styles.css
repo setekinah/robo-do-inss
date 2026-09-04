@@ -577,6 +577,23 @@ select option:hover {
 .ocr-action-button--quiet { background: transparent; color: #b7c6da; margin-top: .75rem; width: 100%; }
 .ocr-action-button--secondary:hover, .ocr-action-button--quiet:hover { border-color: rgba(34, 211, 238, .62); color: #f8fbff; }
 .ocr-action-glyph { align-items: center; border: 1px solid currentColor; border-radius: 50%; display: inline-flex; font-size: .88rem; height: 18px; justify-content: center; line-height: 1; width: 18px; }
+
+/* Dashboard: menos ornamento, mais decisão. */
+.dashboard-command-center { align-items:center; display:flex; justify-content:space-between; margin-bottom:1rem; }
+.dashboard-heading p { color:var(--text-muted); margin:.3rem 0 0; }
+.dashboard-actions { align-items:center; display:flex; flex-wrap:wrap; gap:.5rem; }
+.dashboard-action { border:1px solid rgba(148,163,184,.28); border-radius:9px; cursor:pointer; font:700 .82rem/1 var(--font-body,system-ui,sans-serif); min-height:38px; padding:.6rem .85rem; transition:.18s ease; }
+.dashboard-action--primary { background:linear-gradient(135deg,#1678ef,#10c7d6); border-color:transparent; color:#fff; box-shadow:0 7px 18px rgba(16,199,214,.16); }
+.dashboard-action--quiet { background:rgba(15,23,42,.45); color:#cbd5e1; }
+.dashboard-action:hover { border-color:rgba(34,211,238,.65); transform:translateY(-1px); }
+.dashboard-filter-bar { align-items:end; display:grid; gap:.75rem; grid-template-columns:170px minmax(190px,1fr) minmax(190px,1fr) auto minmax(120px,.65fr); padding:.85rem 1rem !important; }
+.dashboard-filter-intro { align-self:center; display:grid; gap:.1rem; }.dashboard-filter-intro span { color:#e7eef9; font-weight:750; }.dashboard-filter-intro small { color:var(--text-muted); font-size:.72rem; }
+.dashboard-filter-bar .form-group { min-width:0 !important; }.dashboard-filter-bar label { color:#aebcd0; font-size:.72rem; font-weight:700; margin-bottom:.3rem; }.dashboard-filter-bar select { min-height:40px; }
+.dashboard-filter-clear { align-self:end; background:transparent; border:0; color:#92a3ba; cursor:pointer; font-weight:700; min-height:40px; padding:.4rem; }.dashboard-filter-clear:hover { color:#f2f7ff; }
+#dashboard-filter-summary { align-self:end; color:var(--text-muted); font-size:.78rem; min-height:40px; padding:.7rem 0; }
+.smart-pending-panel { padding:1rem 1.1rem !important; }.smart-pending-header { align-items:center; display:flex; gap:1rem; justify-content:space-between; }.smart-pending-header .eyebrow { color:var(--accent-gold); font-size:.67rem; font-weight:800; letter-spacing:.09em; }.smart-pending-header h3 { font-family:var(--font-heading); font-size:1.1rem; margin:.18rem 0; }.smart-pending-header p { color:var(--text-muted); font-size:.8rem; margin:0; }
+@media (max-width:900px) { .dashboard-command-center { align-items:flex-start; flex-direction:column; }.dashboard-filter-bar { grid-template-columns:1fr 1fr; }.dashboard-filter-intro,#dashboard-filter-summary { display:none; } }
+@media (max-width:560px) { .dashboard-actions { width:100%; }.dashboard-action { flex:1 1 auto; }.dashboard-filter-bar { grid-template-columns:1fr; }.dashboard-filter-clear { justify-self:start; } }
 .cnis-segurado-card {
   background: linear-gradient(135deg, rgba(14, 19, 31, 0.95) 0%, rgba(22, 33, 56, 0.9) 100%);
   border: 1px solid var(--glass-border-glow);
