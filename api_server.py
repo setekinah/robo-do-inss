@@ -194,6 +194,8 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_get_office()
         elif path == "/api/stats":
             self.handle_get_stats()
+        elif path == "/api/pendencias-inteligentes":
+            self.handle_get_intelligent_pending_items()
         elif path == "/api/atendimentos":
             self.handle_get_atendimentos(query)
         elif path == "/api/relacionamento":
@@ -491,6 +493,10 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             "docs_pending": docs_pending,
             "stages": stages
         })
+
+    def handle_get_intelligent_pending_items(self) -> None:
+        """Return an explainable operational queue; never infer legal deadlines."""
+        self._send_json(database.list_intelligent_pending_items())
 
     def handle_get_atendimentos(self, query: dict) -> None:
         search = query.get("q", [""])[0].lower()

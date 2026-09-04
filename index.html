@@ -288,6 +288,15 @@
           <span id="dashboard-filter-summary" style="color:var(--text-muted); font-size:.85rem; padding-bottom:.4rem;"></span>
         </div>
 
+        <section class="glass-panel" style="padding:1.25rem; margin-bottom:1.25rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
+            <div><h3 style="font-family:var(--font-heading); font-size:1.1rem;"><i class="fa-solid fa-list-check" style="color:var(--accent-gold);"></i> Pendências inteligentes</h3><p id="smart-pending-notice" style="color:var(--text-muted); font-size:.8rem; margin-top:.25rem;"></p></div>
+            <button class="btn-secondary" id="btn-refresh-smart-pending" type="button"><i class="fa-solid fa-rotate"></i> Atualizar fila</button>
+          </div>
+          <div id="smart-pending-summary" style="display:flex; gap:.65rem; flex-wrap:wrap; margin:.9rem 0;"></div>
+          <div id="smart-pending-list" style="display:grid; gap:.65rem;"></div>
+        </section>
+
         <div class="metrics-grid">
           <div class="glass-panel metric-card">
             <div class="metric-header">

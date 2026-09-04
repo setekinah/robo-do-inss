@@ -141,6 +141,7 @@ class AppEngine {
     this.atendimentos = [];
     this.currentLead = null;
     this.currentRetirementDossier = null;
+    this.smartPending = { items: [], summary: {} };
     this.stats = null;
     this.dashboardFilters = { stage: '', benefit: '' };
     this.filteredDashboardStats = null;
@@ -229,6 +230,7 @@ class AppEngine {
       document.getElementById('dashboard-benefit-filter').value = '';
       this.applyDashboardFilters();
     });
+    document.getElementById('btn-refresh-smart-pending')?.addEventListener('click', () => this.loadSmartPending());
   }
 
   toggleNotifications() {
@@ -739,6 +741,7 @@ class AppEngine {
       this.populateDashboardBenefitFilter();
       this.applyDashboardFilters();
       this.renderKanban();
+      await this.loadSmartPending();
     } catch (e) {
       this.renderMockData();
     }
@@ -761,6 +764,57 @@ class AppEngine {
       }
     };
     this.renderDashboardStats();
+  }
+
+  async loadSmartPending() {
+    const button = document.getElementById('btn-refresh-smart-pending');
+    if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Atualizando'; }
+    try {
+      const response = await fetch('/api/pendencias-inteligentes');
+      if (!response.ok) throw new Error('A fila não pôde ser carregada.');
+      this.smartPending = await response.json();
+      this.renderSmartPending();
+    } catch (error) {
+      const list = document.getElementById('smart-pending-list');
+      if (list) list.innerHTML = '<p style="color:var(--text-muted);">Não foi possível carregar a fila de pendências agora.</p>';
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-rotate"></i> Atualizar fila'; }
+    }
+  }
+
+  renderSmartPending() {
+    const list = document.getElementById('smart-pending-list');
+    const summary = document.getElementById('smart-pending-summary');
+    const notice = document.getElementById('smart-pending-notice');
+    if (!list || !summary || !notice) return;
+    const data = this.smartPending || { items: [], summary: {} };
+    const totals = data.summary || {};
+    notice.textContent = data.notice || 'A fila prioriza atividade operacional e não confirma prazo jurídico automaticamente.';
+    summary.innerHTML = [
+      ['Total', totals.total || 0, 'var(--primary)'],
+      ['Críticas', totals.criticas || 0, 'var(--accent-rose)'],
+      ['Alta prioridade', totals.alta_prioridade || 0, 'var(--accent-gold)'],
+      ['Aguardam revisão', totals.em_revisao || 0, 'var(--accent-cyan)'],
+    ].map(([label, value, color]) => `<span style="border:1px solid var(--glass-border); border-radius:999px; padding:.28rem .6rem; font-size:.78rem;"><strong style="color:${color};">${value}</strong> ${label}</span>`).join('');
+
+    if (!(data.items || []).length) {
+      list.innerHTML = '<p style="color:var(--accent-emerald); margin:0;"><i class="fa-solid fa-circle-check"></i> Nenhuma pendência operacional priorizada no momento.</p>';
+      return;
+    }
+    list.innerHTML = '';
+    data.items.forEach((item) => {
+      const card = document.createElement('article');
+      card.style.cssText = 'border:1px solid var(--glass-border); border-left:3px solid var(--accent-gold); border-radius:var(--radius-sm); padding:.85rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;';
+      const reasons = (item.reasons || []).map((reason) => `<li>${escapeHTML(reason.label)}: ${escapeHTML(reason.detail)}</li>`).join('');
+      const due = item.due_at ? ` · ação operacional: ${escapeHTML(String(item.due_at))}` : '';
+      card.innerHTML = `<div><strong>${escapeHTML(item.lead_name)}</strong> <span style="color:var(--text-muted); font-size:.8rem;">${escapeHTML(item.flow_name)} · ${escapeHTML(item.assigned_to)}${due}</span><ul style="margin:.45rem 0 0; padding-left:1.1rem; font-size:.82rem; color:var(--text-muted);">${reasons}</ul></div><button type="button" class="btn-secondary">Abrir caso</button>`;
+      card.querySelector('button').addEventListener('click', async () => {
+        await this.openLeadModal(Number(item.attendance_id));
+        const documentRelated = (item.reasons || []).some((reason) => reason.code.includes('dossie') || reason.code === 'proxima_acao');
+        if (documentRelated) this.switchModalTab('docs');
+      });
+      list.appendChild(card);
+    });
   }
 
   populateDashboardBenefitFilter() {
