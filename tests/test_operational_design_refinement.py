@@ -43,6 +43,14 @@ class OperationalDesignRefinementTests(unittest.TestCase):
         self.assertIn("EM ACOMPANHAMENTO", markup)
         self.assertIn(".metric-card--action", css)
 
+    def test_dashboard_exposes_honest_local_status_center(self):
+        markup = Path("index.html").read_text(encoding="utf-8")
+        source = Path("app.js").read_text(encoding="utf-8")
+
+        self.assertIn("STATUS CENTER", markup)
+        self.assertIn("Integrações externas não configuradas", markup)
+        self.assertIn("renderOperationalStatus()", source)
+
 
 if __name__ == "__main__":
     unittest.main()
