@@ -1235,6 +1235,13 @@ class AppEngine {
 
     const summary = dossier.resumo || {};
     const decision = dossier.decisao_humana || {};
+    const cnisAnalysis = dossier.analise_cnis || {};
+    const cnisFindings = (cnisAnalysis.findings || []).map((finding) => {
+      const evidence = (finding.evidence || [])[0] || {};
+      const page = evidence.page ? ` · página ${evidence.page}` : '';
+      const excerpt = evidence.excerpt ? `<small>${escapeHTML(evidence.excerpt)}</small>` : '';
+      return `<li><strong>${escapeHTML(finding.code || 'Sinal CNIS')}</strong> — ${escapeHTML(finding.message || '')}${page}<br><small>${escapeHTML(finding.guidance || '')}</small>${excerpt}</li>`;
+    }).join('') || '<li>Nenhum sinal automático localizado. Confira o CNIS original antes de concluir.</li>';
     const hypotheses = (dossier.hipoteses || []).map((hypothesis) => {
       const pending = (hypothesis.pendencias || []).map(escapeHTML).join(' · ') || 'Nenhuma pendência documental crítica localizada.';
       const evidence = (hypothesis.requisitos || []).filter((item) => item.status === 'evidenciado').length;
@@ -1246,6 +1253,12 @@ class AppEngine {
       <strong><i class="fa-solid fa-scale-balanced"></i> Dossiê probatório de aposentadoria</strong>
       <span>${escapeHTML(dossier.conclusao || '')}</span>
       <small>${Number(summary.evidencias || 0)} evidência(s) mapeada(s) · ${Number(summary.pendencias || 0)} pendência(s) · revisão humana obrigatória.</small>
+      <details class="cnis-analysis-result" style="margin-top:.7rem;" open>
+        <summary><strong><i class="fa-solid fa-magnifying-glass-chart"></i> Leitura técnica preliminar do CNIS</strong> — ${escapeHTML(cnisAnalysis.status || 'não analisado')}</summary>
+        <p style="margin:.45rem 0;">${escapeHTML(cnisAnalysis.conclusion || 'Gere o dossiê após anexar o CNIS.')}</p>
+        <ul style="margin:.35rem 0 .5rem; padding-left:1.1rem;">${cnisFindings}</ul>
+        <small>Referência: ${escapeHTML(cnisAnalysis.source?.titulo || 'catálogo oficial')} · não calcula tempo, carência, RMI ou elegibilidade.</small>
+      </details>
       <div style="margin-top:.7rem;">${hypotheses}</div>
       <div style="display:grid; gap:.45rem; margin-top:.85rem; border-top:1px solid var(--glass-border); padding-top:.75rem;">
         <label style="font-size:.78rem;">Decisão do responsável <select id="retirement-dossier-decision"><option value="em_revisao">Em revisão</option><option value="prosseguir_analise">Prosseguir para análise técnica</option><option value="solicitar_provas">Solicitar provas complementares</option><option value="arquivar_hipotese">Arquivar hipótese</option></select></label>

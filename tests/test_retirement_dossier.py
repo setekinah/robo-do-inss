@@ -27,6 +27,8 @@ class RetirementDossierTests(unittest.TestCase):
         )
 
         self.assertEqual(report["status"], "revisao_humana_obrigatoria")
+        self.assertIn("analise_cnis", report)
+        self.assertEqual(report["analise_cnis"]["status"], "sem_sinais_automaticos")
         self.assertEqual(len(report["hipoteses"]), 5)
         self.assertEqual(report["hipoteses"][0]["status"], "revisao_humana_obrigatoria")
         self.assertNotIn("aprovada", {item["status"] for item in report["hipoteses"]})
