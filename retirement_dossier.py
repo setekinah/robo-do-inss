@@ -10,6 +10,8 @@ import json
 import re
 from typing import Any, Iterable, Mapping
 
+from modules.cnis_analyzer import analyze_cnis_documents
+
 
 AUDIT_TYPE_RETIREMENT_DOSSIER = "DOSSIE_PROBATORIO_APOSENTADORIA"
 HUMAN_DECISIONS = {"em_revisao", "prosseguir_analise", "solicitar_provas", "arquivar_hipotese"}
@@ -112,6 +114,7 @@ def build_retirement_dossier(
 ) -> dict[str, Any]:
     """Build a reviewable evidence map for retirement, never an entitlement decision."""
     docs = list(documents)
+    cnis_analysis = analyze_cnis_documents(docs)
     profile = (triage_profile or {}).get("prequalification", {})
     if not isinstance(profile, Mapping):
         profile = {}
@@ -177,6 +180,7 @@ def build_retirement_dossier(
         "status": "revisao_humana_obrigatoria",
         "resumo": {"hipoteses": len(hypotheses), "evidencias": evidence_count, "pendencias": pending},
         "conclusao": "O dossiê organiza provas e lacunas. Não reconhece direito, não calcula RMI e não substitui decisão profissional.",
+        "analise_cnis": cnis_analysis,
         "hipoteses": hypotheses,
         "decisao_humana": {"status": "em_revisao", "responsavel": "", "nota": ""},
     }
