@@ -184,6 +184,15 @@ class DocumentIntelligenceTests(unittest.TestCase):
         self.assertEqual(vinculos[0]["data_inicio"], "01/08/1979")
         self.assertEqual(vinculos[1]["data_fim"], "29/06/1985")
 
+    def test_pypdf_is_preferred_when_it_preserves_more_cnis_rows(self) -> None:
+        pymupdf_text = "Nome: PESSOA EXEMPLO\nCPF: 529.982.247-25\ntexto em colunas sem linha de vínculo"
+        pypdf_text = (
+            "Nome: PESSOA EXEMPLO\nCPF: 529.982.247-25\n"
+            "1 50.604.552/0001-87 EMPRESA EXEMPLO S.A. Empregado\n01/08/1979 21/10/1980"
+        )
+
+        self.assertTrue(intelligence.prefer_pypdf_native_text(pymupdf_text, pypdf_text))
+
     def test_cnis_multisection_layout_keeps_contributions_and_indicators(self) -> None:
         # Caso anonimizado que reproduz o layout nativo de extrato CNIS:
         # tabela de empregadores, recolhimentos próprios e indicadores fora

@@ -249,7 +249,7 @@ def extract_text_from_pdf(file_path: Path) -> dict[str, Any]:
         if native_pages == len(document) and not ocr_pages:
             pypdf_extraction = extract_text_from_pdf_with_pypdf(file_path)
             pypdf_text = str(pypdf_extraction.get("text") or "")
-            if pypdf_text and native_pdf_semantic_score(pypdf_text) > native_pdf_semantic_score(text):
+            if pypdf_text and prefer_pypdf_native_text(text, pypdf_text):
                 pypdf_extraction["technical_note"] = (
                     f"{file_path.name}: pypdf selecionado por preservar melhor a estrutura "
                     "semântica do PDF nativo (campos cadastrais/tabelas)."
@@ -1480,6 +1480,17 @@ def native_pdf_semantic_score(text: str) -> float:
     if re.search(r"\b\d{2}[.]\d{3}[.]\d{3}/\d{4}-\d{2}\b", normalized):
         signals += 2
     return signals * 10 + min(9, text_quality(normalized) * 10)
+
+
+def prefer_pypdf_native_text(pymupdf_text: str, pypdf_text: str) -> bool:
+    """Choose the native reader that preserves CNIS rows, not merely labels."""
+    if native_pdf_semantic_score(pypdf_text) > native_pdf_semantic_score(pymupdf_text):
+        return True
+    # Alguns extratos CNIS são desenhados em colunas. PyMuPDF pode devolver
+    # palavras na ordem geométrica e destruir a linha do vínculo, mesmo quando
+    # CPF e NIT ainda parecem legíveis. A contagem de linhas estruturáveis é o
+    # sinal determinante para não exibir um relatório com zero vínculos.
+    return len(extract_cnis_vinculos(pypdf_text)) > len(extract_cnis_vinculos(pymupdf_text))
 
 
 def extract_competency_list(text: str) -> list[str]:
