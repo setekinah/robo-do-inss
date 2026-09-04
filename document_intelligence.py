@@ -804,7 +804,9 @@ def build_cnis_report(raw_text: str, extracted_data: dict[str, str]) -> dict[str
     """Build a CNIS report only from text evidence; it never decides entitlement."""
     vinculos = extract_cnis_vinculos(raw_text)
     competencias = extract_competency_list(raw_text)
-    indicadores = [indicator for vinculo in vinculos for indicator in vinculo["indicadores"]]
+    # Os indicadores podem ficar na seção de remunerações, fora do bloco do
+    # vínculo. Por isso a fonte é o documento inteiro, e não só cada linha.
+    indicadores = extract_cnis_indicators(raw_text)
     intervals = [
         (vinculo["inicio_data"], vinculo["fim_data"])
         for vinculo in vinculos
@@ -823,8 +825,8 @@ def build_cnis_report(raw_text: str, extracted_data: dict[str, str]) -> dict[str
         total_time = "Nao apurado automaticamente"
         time_note = "Nao ha periodos completos e confiaveis suficientes no texto extraido."
     if competencias:
-        carencia = f"{len(competencias)} competencia(s) identificada(s)"
-        carencia_note = "Contagem documental preliminar; nao equivale a carencia homologada pelo INSS."
+        carencia = f"{len(competencias)} competencia(s) localizadas"
+        carencia_note = "Contagem documental preliminar; não representa carência cumprida ou homologada pelo INSS."
     else:
         carencia = "Nao apurada automaticamente"
         carencia_note = "Nenhuma competencia valida foi estruturada para calculo."
@@ -1289,13 +1291,33 @@ def extract_benefit_number(text: str) -> str:
     return ""
 
 
+CNIS_INDICATOR_PATTERN = re.compile(
+    r"\b(?:"
+    r"PEXT(?:-[A-Z0-9]+)?|PREM(?:-[A-Z0-9]+)?|"
+    r"IREM(?:-(?:INDPEND|SEM-DIAS-INTERM))?|"
+    r"IREC(?:-(?:INDPEND|MEI|LC123))?|"
+    r"PADM(?:-[A-Z0-9]+)?|AEXT(?:-[A-Z0-9]+)?|ACNIS(?:-[A-Z0-9]+)?|"
+    r"IDINV(?:-[A-Z0-9]+)?|PEND(?:-[A-Z0-9]+)?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def extract_cnis_indicators(raw_text: str) -> list[str]:
+    """Return the indicator codes evidenced in a CNIS, preserving no guesswork."""
+    # Em tabelas nativas, uma coluna numérica pode encostar no fim de
+    # IREC-LC123. Preservamos o código conhecido, sem transformar o número
+    # vizinho em um indicador fictício.
+    normalized = re.sub(r"\b(IREC-LC123)\d{1,2}\b", r"\1", raw_text, flags=re.IGNORECASE)
+    return list(dict.fromkeys(match.upper() for match in CNIS_INDICATOR_PATTERN.findall(normalized)))
+
+
 def extract_cnis_vinculos(raw_text: str) -> list[dict[str, Any]]:
     """Extract employer blocks only when the OCR supplied labelled evidence."""
     labels = re.compile(
         r"(?im)^(?:empregador|empresa|raz[aã]o\s+social|nome\s+do\s+empregador)\s*[:\-]\s*(?P<name>[^\n\r]+)"
     )
     matches = list(labels.finditer(raw_text))
-    indicator_pattern = re.compile(r"\b(?:PEXT|PREM|IREC|PADM|AEXT|ACNIS|IDINV|PEND)\b", re.IGNORECASE)
     result: list[dict[str, Any]] = []
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else min(len(raw_text), match.end() + 1400)
@@ -1304,7 +1326,7 @@ def extract_cnis_vinculos(raw_text: str) -> list[dict[str, Any]]:
         start = search_labeled_date(block, ["admissão", "admissao", "início", "inicio", "data início", "data inicio"])
         finish = search_labeled_date(block, ["rescisão", "rescisao", "término", "termino", "fim", "data fim", "data saída", "data saida"])
         cnpj = first_valid_identifier(block, "cnpj")
-        indicators = list(dict.fromkeys(item.upper() for item in indicator_pattern.findall(block)))
+        indicators = extract_cnis_indicators(block)
         if not employer or not (start or finish or cnpj or indicators):
             continue
         result.append({
@@ -1358,7 +1380,7 @@ def extract_cnis_vinculos(raw_text: str) -> list[dict[str, Any]]:
         employer = normalize_whitespace(match.group("employer")).strip(" .;|")[:180]
         if not employer or not first_valid_identifier(cnpj, "cnpj"):
             continue
-        indicators = list(dict.fromkeys(item.upper() for item in indicator_pattern.findall(block)))
+        indicators = extract_cnis_indicators(block)
         result.append({
             "seq": len(result) + 1,
             "empregador": employer,
@@ -1372,6 +1394,39 @@ def extract_cnis_vinculos(raw_text: str) -> list[dict[str, Any]]:
             "indicadores": indicators,
         })
         existing_keys.add(key)
+
+    # O CNIS também lista períodos sem CNPJ, por exemplo "Contribuinte
+    # Individual". Eles são vínculos contributivos e não podem desaparecer do
+    # relatório só porque não há empregador. A sequência e as duas datas são a
+    # evidência mínima; remunerações, competências e páginas não casam com este
+    # formato e continuam fora da extração.
+    individual_pattern = re.compile(
+        r"(?im)^\s*(?P<seq>\d+)\s+"
+        r"(?P<category>Contribuinte\s+Individual|Segurado\s+Especial|Empregado\s+Dom[eé]stico)\s+"
+        r"(?P<start>\d{2}/\d{2}/\d{4})\s+(?P<finish>\d{2}/\d{2}/\d{4})"
+    )
+    for match in individual_pattern.finditer(raw_text):
+        start, finish = match.group("start"), match.group("finish")
+        key = ("Nao identificado", start, finish)
+        if key in existing_keys:
+            continue
+        block = raw_text[match.start():match.start() + 1200]
+        result.append({
+            "seq": len(result) + 1,
+            "empregador": "Sem empregador — recolhimento próprio",
+            "cnpj": "Nao identificado",
+            "tipo_filiacao": normalize_whitespace(match.group("category")),
+            "data_inicio": start,
+            "data_fim": finish,
+            "inicio_data": parse_brazilian_date(start),
+            "fim_data": parse_brazilian_date(finish),
+            "status": "atencao",
+            "indicadores": extract_cnis_indicators(block),
+        })
+        existing_keys.add(key)
+    result.sort(key=lambda item: item.get("inicio_data") or datetime.max)
+    for sequence, item in enumerate(result, start=1):
+        item["seq"] = sequence
     return result
 
 

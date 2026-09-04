@@ -1217,7 +1217,13 @@ ___________________________________________________
             )
             cnis_report["indicator_matches"] = catalog_matches
             cnis_report["action_plan"] = cnis_knowledge.action_plan(catalog_matches)
-            cnis_report["metricas"]["alertas_contagem"] = len(catalog_matches)
+            # Sem catálogo oficial ativo, os códigos extraídos continuam sendo
+            # pendências visíveis. Catálogo só refina a análise; não apaga o
+            # sinal documental que exige conferência humana.
+            cnis_report["metricas"]["alertas_contagem"] = max(
+                int(cnis_report["metricas"].get("alertas_contagem") or 0),
+                len(catalog_matches),
+            )
             cnis_report["metricas"]["alertas_nota"] = (
                 "Indicadores localizados no catálogo ativo; revisão jurídica obrigatória."
                 if catalog_matches else cnis_report["metricas"]["alertas_nota"]

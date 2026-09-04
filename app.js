@@ -526,7 +526,8 @@ class AppEngine {
     setText('cnis-rmi-val', metricas.rmi_estimada);
     const rmiNota = document.getElementById('cnis-rmi-val')?.nextElementSibling;
     if (rmiNota) rmiNota.textContent = metricas.rmi_nota || 'Calculo tecnico pendente';
-    setText('cnis-alertas-val', `${metricas.alertas_contagem || 0} alertas`);
+    const alertCount = Number(metricas.alertas_contagem || 0);
+    setText('cnis-alertas-val', `${alertCount} ${alertCount === 1 ? 'indicador para revisão' : 'indicadores para revisão'}`);
     const alertasNota = document.getElementById('cnis-alertas-val')?.nextElementSibling;
     if (alertasNota) {
       alertasNota.textContent = metricas.alertas_nota || 'Revisao humana necessaria';
@@ -553,7 +554,7 @@ class AppEngine {
       }
       return;
     }
-    if (timelineTitle) timelineTitle.textContent = 'Vinculos Empregaticios Identificados';
+    if (timelineTitle) timelineTitle.textContent = 'Vínculos contributivos identificados';
     if (!vinculos.length) {
       timeline.textContent = 'Nenhum vínculo estruturado foi extraído automaticamente. Consulte o Código JSON e revise o documento original.';
       return;
