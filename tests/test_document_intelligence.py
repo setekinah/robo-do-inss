@@ -184,6 +184,30 @@ class DocumentIntelligenceTests(unittest.TestCase):
         self.assertEqual(vinculos[0]["data_inicio"], "01/08/1979")
         self.assertEqual(vinculos[1]["data_fim"], "29/06/1985")
 
+    def test_cnis_multisection_layout_keeps_contributions_and_indicators(self) -> None:
+        # Caso anonimizado que reproduz o layout nativo de extrato CNIS:
+        # tabela de empregadores, recolhimentos próprios e indicadores fora
+        # da linha principal do vínculo. Nenhum dado pessoal é usado no teste.
+        text = (
+            "NIT: 123.45678.90-0 CPF: 529.982.247-25 Nome: PESSOA EXEMPLO SILVA\n"
+            "Data de nascimento: 18/03/1988\n"
+            "1 50.604.552/0001-87 EMPRESA EXEMPLO S.A. Empregado\n"
+            "04/10/2004 09/02/2006\n"
+            "2 Contribuinte Individual 01/11/2016 30/09/2017\n"
+            "RECOLHIMENTO IREC-INDPEND IREC-MEI\n"
+            "Competência 01/2017 02/2017 Indicador IREM-SEM-DIAS-INTERM PREM-FVIN"
+        )
+        fields = intelligence.extract_structured_fields(text, ["nome", "cpf", "nit", "data_nascimento"])
+        report = intelligence.build_cnis_report(text, fields)
+
+        self.assertEqual(fields["nome"], "PESSOA EXEMPLO SILVA")
+        self.assertEqual(fields["data_nascimento"], "18/03/1988")
+        self.assertEqual(len(report["vinculos"]), 2)
+        self.assertEqual(report["vinculos"][1]["tipo_filiacao"], "Contribuinte Individual")
+        self.assertEqual(report["metricas"]["alertas_contagem"], 4)
+        self.assertIn("IREC-INDPEND", report["metricas"]["alertas_nota"])
+        self.assertIn("localizadas", report["metricas"]["carencia_cumprida"])
+
     def test_name_extraction_accepts_cnis_label_and_next_line_value(self) -> None:
         fields = intelligence.extract_structured_fields(
             "NOME DO FILIADO\nMARIA APARECIDA DOS SANTOS\nCPF: 529.982.247-25",
