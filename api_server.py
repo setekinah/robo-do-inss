@@ -31,6 +31,7 @@ import official_catalog
 import office_settings
 import retirement_prefilter
 import retirement_dossier
+from modules.pdf_generator import build_review_draft_pdf
 from flows_data import FLOW_DEFINITIONS
 from triage_engine import answer_current_question, create_state, get_current_node, get_result
 
@@ -73,6 +74,14 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _send_pdf(self, payload: bytes, filename: str) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
@@ -206,6 +215,9 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         elif path.startswith("/api/atendimentos/") and path.endswith("/dossie-probatorio"):
             attendance_id = path.split("/")[3]
             self.handle_get_retirement_dossier(int(attendance_id))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/kit-requerimento.pdf"):
+            attendance_id = path.split("/")[3]
+            self.handle_get_review_draft_pdf(int(attendance_id))
         elif path.startswith("/api/atendimentos/") and path.endswith("/documentos"):
             attendance_id = path.split("/")[3]
             self.handle_get_documentos(int(attendance_id))
@@ -697,6 +709,23 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
                 "message": "Dossiê probatório atualizado. A decisão previdenciária continua sujeita à revisão humana.",
             }
         )
+
+    def handle_get_review_draft_pdf(self, attendance_id: int) -> None:
+        """Return an in-memory review draft only when a current dossier exists."""
+        attendance = database.get_attendance_details(attendance_id)
+        if not attendance:
+            self._send_json({"success": False, "error": "Atendimento não encontrado."}, 404)
+            return
+        audit = database.get_attendance_audit(attendance_id, retirement_dossier.AUDIT_TYPE_RETIREMENT_DOSSIER)
+        if not audit:
+            self._send_json({"success": False, "error": "Gere o dossiê antes de baixar o rascunho."}, 409)
+            return
+        try:
+            payload = build_review_draft_pdf(attendance=dict(attendance), dossier=dict(audit["report"]))
+        except (ImportError, OSError, ValueError) as exc:
+            self._send_json({"success": False, "error": f"Não foi possível gerar o PDF: {exc}"}, 500)
+            return
+        self._send_pdf(payload, f"kit-previdenciario-revisao-{attendance_id}.pdf")
 
     def handle_put_documento_status(self, doc_id: int) -> None:
         body = self._read_json_body()

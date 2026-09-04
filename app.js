@@ -1260,6 +1260,7 @@ class AppEngine {
         <small>Referência: ${escapeHTML(cnisAnalysis.source?.titulo || 'catálogo oficial')} · não calcula tempo, carência, RMI ou elegibilidade.</small>
       </details>
       <div style="margin-top:.7rem;">${hypotheses}</div>
+      <button type="button" id="retirement-dossier-pdf" class="btn-secondary" style="margin-top:.8rem;"><i class="fa-solid fa-file-pdf"></i> Baixar rascunho PDF para revisão</button>
       <div style="display:grid; gap:.45rem; margin-top:.85rem; border-top:1px solid var(--glass-border); padding-top:.75rem;">
         <label style="font-size:.78rem;">Decisão do responsável <select id="retirement-dossier-decision"><option value="em_revisao">Em revisão</option><option value="prosseguir_analise">Prosseguir para análise técnica</option><option value="solicitar_provas">Solicitar provas complementares</option><option value="arquivar_hipotese">Arquivar hipótese</option></select></label>
         <input id="retirement-dossier-responsible" placeholder="Responsável pela decisão" value="${escapeHTML(decision.responsavel || '')}">
@@ -1269,6 +1270,9 @@ class AppEngine {
     const decisionSelect = document.getElementById('retirement-dossier-decision');
     if (decisionSelect) decisionSelect.value = decision.status || 'em_revisao';
     document.getElementById('retirement-dossier-save')?.addEventListener('click', () => this.saveRetirementDossierDecision());
+    document.getElementById('retirement-dossier-pdf')?.addEventListener('click', () => {
+      if (this.currentLead?.id) window.open(`/api/atendimentos/${this.currentLead.id}/kit-requerimento.pdf`, '_blank', 'noopener');
+    });
   }
 
   async runRetirementDossier() {
