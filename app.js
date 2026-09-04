@@ -2087,3 +2087,12 @@ window.addEventListener('DOMContentLoaded', () => {
   new NeuralCanvas('bg-canvas');
   app = new AppEngine();
 });
+
+window.addEventListener('DOMContentLoaded', () => {
+  // Destaca no painel o que pede decisão operacional, sem alterar os dados.
+  document.querySelectorAll('.metric-card').forEach((card) => {
+    const label = (card.textContent || '').toLowerCase();
+    if (label.includes('documentos pendentes')) card.classList.add('metric-action-required');
+    if (label.includes('tarefas de automação')) card.classList.add('metric-priority');
+  });
+});
