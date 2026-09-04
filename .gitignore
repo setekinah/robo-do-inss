@@ -20,6 +20,7 @@ venv/
 .codex-test-temp/
 .codex-test-temp-multiuser/
 .test-runtime/
+.test-temp/
 tmp/
 tmp_*.html
 tmp_*.js

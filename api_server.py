@@ -30,6 +30,7 @@ import document_storage
 import official_catalog
 import office_settings
 import retirement_prefilter
+import retirement_dossier
 from flows_data import FLOW_DEFINITIONS
 from triage_engine import answer_current_question, create_state, get_current_node, get_result
 
@@ -200,6 +201,9 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         elif path.startswith("/api/atendimentos/") and path.endswith("/auditoria-documental"):
             attendance_id = path.split("/")[3]
             self.handle_get_document_audit(int(attendance_id))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/dossie-probatorio"):
+            attendance_id = path.split("/")[3]
+            self.handle_get_retirement_dossier(int(attendance_id))
         elif path.startswith("/api/atendimentos/") and path.endswith("/documentos"):
             attendance_id = path.split("/")[3]
             self.handle_get_documentos(int(attendance_id))
@@ -270,6 +274,8 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_post_assinatura(int(path.split("/")[3]))
         elif path.startswith("/api/atendimentos/") and path.endswith("/auditoria-documental"):
             self.handle_post_document_audit(int(path.split("/")[3]))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/dossie-probatorio"):
+            self.handle_post_retirement_dossier(int(path.split("/")[3]))
         elif path == "/api/triagem/executar":
             self.handle_post_triagem_executar()
         elif path == "/api/triagem/aposentadoria/pre-filtro":
@@ -618,6 +624,71 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
                 "attendance_id": attendance_id,
                 "audit": report,
                 "message": "Auditoria documental gerada. Ela não substitui revisão técnica ou decisão previdenciária.",
+            }
+        )
+
+    def handle_get_retirement_dossier(self, attendance_id: int) -> None:
+        audit = database.get_attendance_audit(
+            attendance_id, retirement_dossier.AUDIT_TYPE_RETIREMENT_DOSSIER
+        )
+        if not audit:
+            self._send_json(
+                {
+                    "success": False,
+                    "error": "Ainda não há dossiê probatório para este caso.",
+                    "requires_generation": True,
+                },
+                404,
+            )
+            return
+        self._send_json({"success": True, **audit})
+
+    def handle_post_retirement_dossier(self, attendance_id: int) -> None:
+        attendance = database.get_attendance_details(attendance_id)
+        if not attendance:
+            self._send_json({"success": False, "error": "Atendimento não encontrado."}, 404)
+            return
+        if str(attendance["flow_id"]) != "aposentadoria":
+            self._send_json(
+                {"success": False, "error": "O dossiê probatório atual é exclusivo para aposentadoria."},
+                422,
+            )
+            return
+        body = self._read_json_body()
+        existing = database.get_attendance_audit(
+            attendance_id, retirement_dossier.AUDIT_TYPE_RETIREMENT_DOSSIER
+        )
+        if body.get("action") == "registrar_decisao":
+            if not existing:
+                self._send_json({"success": False, "error": "Gere o dossiê antes de registrar uma decisão."}, 409)
+                return
+            report = retirement_dossier.apply_human_decision(
+                dict(existing["report"]),
+                status=str(body.get("status") or ""),
+                responsible=str(body.get("responsavel") or ""),
+                note=str(body.get("nota") or ""),
+            )
+        else:
+            try:
+                profile = json.loads(attendance["triage_profile_json"] or "{}")
+            except json.JSONDecodeError:
+                profile = {}
+            report = retirement_dossier.build_retirement_dossier(
+                documents=[dict(item) for item in database.list_attendance_documents(attendance_id)],
+                triage_profile=profile,
+            )
+        database.save_attendance_audit(
+            attendance_id=attendance_id,
+            audit_type=retirement_dossier.AUDIT_TYPE_RETIREMENT_DOSSIER,
+            status=str(report["status"]),
+            report=report,
+        )
+        self._send_json(
+            {
+                "success": True,
+                "attendance_id": attendance_id,
+                "dossie": report,
+                "message": "Dossiê probatório atualizado. A decisão previdenciária continua sujeita à revisão humana.",
             }
         )
 
@@ -1174,8 +1245,9 @@ ___________________________________________________
                 extraction_confidence=float(assessment["confidence"]),
                 technical_notes=str(analysis["technical_notes"]),
             )
-            if classification["code"] in {"CNIS", "CTPS"}:
-                database.invalidate_attendance_document_audits(attendance_id)
+            # Qualquer novo documento altera a base de prova do caso. Relatórios
+            # anteriores não podem parecer atuais depois de um novo upload.
+            database.invalidate_attendance_document_audits(attendance_id)
             dossier_document = {
                 "attendance_id": attendance_id,
                 "document_id": document_id,

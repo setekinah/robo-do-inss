@@ -167,10 +167,12 @@
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
           <h4 style="font-family: var(--font-heading);"><i class="fa-solid fa-folder-tree" style="color: var(--accent-emerald);"></i> Checklist do Benefício</h4>
           <div style="display: flex; align-items: center; gap: 0.65rem;">
+            <button type="button" id="modal-retirement-dossier-button" class="btn-primary" style="padding: 0.5rem 0.7rem; font-size: 0.76rem;"><i class="fa-solid fa-scale-balanced"></i> Dossiê probatório</button>
             <button type="button" id="modal-docs-audit-button" class="btn-secondary" style="padding: 0.5rem 0.7rem; font-size: 0.76rem;"><i class="fa-solid fa-code-compare"></i> Auditar CNIS × CTPS</button>
             <span style="font-size: 0.85rem; color: var(--text-muted);" id="modal-docs-progress">0 de 0 Concluídos</span>
           </div>
         </div>
+        <div id="modal-retirement-dossier-result" class="doc-audit-result" hidden></div>
         <div id="modal-docs-audit-result" class="doc-audit-result" hidden></div>
         <div id="modal-docs-list" style="display: flex; flex-direction: column; gap: 0.8rem; max-height: 320px; overflow-y: auto;"></div>
       </div>
