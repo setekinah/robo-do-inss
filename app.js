@@ -2089,6 +2089,12 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+  const stageFilter = document.getElementById('dashboard-stage-filter');
+  const filterBar = stageFilter?.closest('.glass-panel');
+  if (filterBar) filterBar.classList.add('dashboard-filter-bar');
+});
+
+window.addEventListener('DOMContentLoaded', () => {
   // Destaca no painel o que pede decisão operacional, sem alterar os dados.
   document.querySelectorAll('.metric-card').forEach((card) => {
     const label = (card.textContent || '').toLowerCase();
