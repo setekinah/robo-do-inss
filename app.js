@@ -148,6 +148,7 @@ class AppEngine {
     this.onboardingStep = 2;
     this.activeKanbanStage = 'all';
     this.triageState = { flowId: null, currentNode: null, history: [], selectedResult: null };
+    this.ocrUploadSequence = 0;
     this.newLeadDestination = 'lead';
 
     this.initEvents();
@@ -231,6 +232,7 @@ class AppEngine {
       this.applyDashboardFilters();
     });
     document.getElementById('btn-refresh-smart-pending')?.addEventListener('click', () => this.loadSmartPending());
+    document.getElementById('btn-ocr-reset')?.addEventListener('click', () => this.resetOCRAnalysis());
   }
 
   toggleNotifications() {
@@ -438,12 +440,15 @@ class AppEngine {
       return;
     }
 
+    const requestVersion = ++this.ocrUploadSequence;
     const statusBox = document.getElementById('ocr-status-box');
     const statusText = document.getElementById('ocr-status-text');
     const tree = document.getElementById('ocr-extracted-tree');
     const title = document.getElementById('ocr-dropzone-title');
     const sub = document.getElementById('ocr-dropzone-sub');
     const fileSizeKB = (file.size / 1024).toFixed(1);
+    const resetButton = document.getElementById('btn-ocr-reset');
+    const resetFeedback = document.getElementById('ocr-reset-feedback');
     title.textContent = `Arquivo selecionado: ${file.name}`;
     sub.textContent = `Tamanho: ${fileSizeKB} KB | Processamento local em andamento`;
     statusBox.style.display = 'block';
@@ -451,6 +456,8 @@ class AppEngine {
     statusText.style.color = 'var(--primary)';
     statusText.textContent = `Lendo ${file.name} com OCR local...`;
     tree.textContent = 'Processando documento localmente...';
+    if (resetButton) resetButton.style.display = 'inline-flex';
+    if (resetFeedback) resetFeedback.style.display = 'none';
     audio.scan();
 
     try {
@@ -459,6 +466,7 @@ class AppEngine {
       formData.append('document_code', 'AUTO');
       const response = await fetch('/api/documentos/analisar', { method: 'POST', body: formData });
       const data = await response.json();
+      if (requestVersion !== this.ocrUploadSequence) return;
       if (!response.ok || !data.success) {
         throw new Error(data.error || data.technical_notes || 'O documento não pôde ser lido.');
       }
@@ -467,9 +475,44 @@ class AppEngine {
       this.renderCNISDashboard(data);
       audio.success();
     } catch (error) {
+      if (requestVersion !== this.ocrUploadSequence) return;
       statusBox.style.display = 'none';
       this.showOCRError(error.message || 'Falha ao analisar o documento.');
     }
+  }
+
+  resetOCRAnalysis() {
+    // Invalida uma requisição ainda em curso para que ela não restaure, depois
+    // do descarte, os dados de um arquivo que o usuário decidiu trocar.
+    this.ocrUploadSequence += 1;
+    const input = document.getElementById('ocr-file-input');
+    const title = document.getElementById('ocr-dropzone-title');
+    const sub = document.getElementById('ocr-dropzone-sub');
+    const statusBox = document.getElementById('ocr-status-box');
+    const resetButton = document.getElementById('btn-ocr-reset');
+    const resetFeedback = document.getElementById('ocr-reset-feedback');
+    const results = document.getElementById('ocr-results-content');
+    const empty = document.getElementById('ocr-empty-state');
+    const reportTitle = document.getElementById('ocr-report-title');
+    const tree = document.getElementById('ocr-extracted-tree');
+    const meta = document.getElementById('ocr-doc-meta');
+
+    if (input) input.value = '';
+    if (title) title.textContent = 'Arraste o documento aqui ou clique para selecionar';
+    if (sub) sub.textContent = 'Suporta PDF nativo, PNG ou JPG (Processamento 100% Local)';
+    if (statusBox) statusBox.style.display = 'none';
+    if (results) results.style.display = 'none';
+    if (empty) empty.style.display = 'block';
+    if (reportTitle) reportTitle.textContent = 'Central de Inteligência Documental';
+    if (tree) tree.textContent = '// A análise estruturada do próximo documento aparecerá aqui.';
+    if (meta) meta.style.display = 'none';
+    if (resetButton) resetButton.style.display = 'none';
+    if (resetFeedback) {
+      resetFeedback.textContent = 'Análise descartada. Selecione o documento correto para iniciar uma nova leitura local.';
+      resetFeedback.style.display = 'block';
+    }
+    this.toggleOCRViewMode('visual');
+    input?.focus();
   }
 
   showOCRError(message) {

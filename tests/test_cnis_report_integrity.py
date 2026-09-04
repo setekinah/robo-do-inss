@@ -22,6 +22,14 @@ class CNISReportIntegrityTests(unittest.TestCase):
         self.assertNotIn("CARÊNCIA CUMPRIDA", markup)
         self.assertIn("indicadores para revisão", script)
 
+    def test_ocr_screen_allows_discarding_the_current_document(self) -> None:
+        markup = (ROOT / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="btn-ocr-reset"', markup)
+        self.assertIn("resetOCRAnalysis()", script)
+        self.assertIn("this.ocrUploadSequence += 1", script)
+
 
 if __name__ == "__main__":
     unittest.main()

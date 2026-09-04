@@ -592,6 +592,11 @@
               </button>
             </div>
 
+            <button id="btn-ocr-reset" type="button" class="btn-secondary" style="display:none; margin-top: .75rem; width:100%; justify-content:center;" aria-label="Descartar a análise atual e escolher outro documento">
+              <i class="fa-solid fa-arrow-rotate-left"></i> Trocar documento
+            </button>
+            <p id="ocr-reset-feedback" role="status" aria-live="polite" style="display:none; margin:.65rem 0 0; color:var(--text-muted); font-size:.78rem;"></p>
+
             <div id="ocr-status-box" style="margin-top: 1.2rem; display: none; padding: 0.8rem; background: rgba(0,242,254,0.05); border-radius: var(--radius-sm); border: 1px solid var(--glass-border-glow);">
               <span style="font-size: 0.82rem; color: var(--primary); font-weight: 600;" id="ocr-status-text">
                 <i class="fa-solid fa-gear fa-spin"></i> Lendo documento previdenciário...
