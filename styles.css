@@ -1565,3 +1565,77 @@ canvas#metrics-chart {
 .finance-legend { display:flex; justify-content:center; flex-wrap:wrap; gap:1.6rem; color:#dce5f7; font-size:.76rem; margin:.8rem 0 -.2rem; }.finance-legend b::before,.finance-composition li i{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:.45rem}.teal-dot::before,.finance-composition .teal-dot{background:#1ccfc4}.violet-dot::before,.finance-composition .violet-dot{background:#8d61e8}.line-dot::before{background:#55f1f0;border:2px solid #0f1d35}.blue-dot{background:#4b9cf6}.gold-dot{background:#f8c847}
 .finance-chart { width:100%; height:260px; }.finance-grid path{stroke:rgba(149,169,208,.15);stroke-dasharray:4 5}.finance-bars path{stroke-width:27;stroke-linecap:round}.teal-bars path{stroke:#1abdb8}.violet-bars path{stroke:#7450bd}.finance-line{fill:none;stroke:#51e7e9;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.finance-axis text{fill:#8292b0;font-size:20px}.finance-bottom { display:grid;grid-template-columns:1.1fr .9fr;gap:1rem;margin-top:1rem}.finance-mini-chart{width:100%;height:185px;margin-top:1rem}.finance-area{fill:rgba(29,203,197,.18)}.finance-composition{display:grid;grid-template-columns:180px 1fr;column-gap:1rem}.finance-composition .finance-panel-title{grid-column:1/-1}.finance-donut{width:154px;height:154px;align-self:center;justify-self:center;border-radius:50%;background:conic-gradient(#1ccfc4 0 46.8%,#8d61e8 46.8% 72.9%,#4b9cf6 72.9% 88.1%,#f8c847 88.1% 100%);position:relative}.finance-donut::after{content:'R$ 2,82 mi\A12 meses';white-space:pre;position:absolute;inset:28px;border-radius:50%;display:grid;place-content:center;text-align:center;background:#111d34;color:#edf3ff;font-weight:800;font-size:.9rem;line-height:1.55}.finance-composition ul{padding:0;margin:auto 0;list-style:none}.finance-composition li{display:flex;align-items:center;gap:.25rem;border-bottom:1px solid rgba(145,164,201,.14);padding:.5rem 0;color:#b9c5da;font-size:.8rem}.finance-composition li b{margin-left:auto;color:#f0f5ff}
 @media (max-width: 900px){.finance-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-bottom{grid-template-columns:1fr}.finance-header{align-items:flex-start;flex-direction:column}.finance-composition{grid-template-columns:150px 1fr}}@media (max-width:560px){.finance-kpis{grid-template-columns:1fr}.finance-composition{grid-template-columns:1fr}.finance-composition ul{margin-top:1rem}.finance-mark{width:40px;height:40px}.finance-heading h1{font-size:1.25rem}}
+/* Refinamento operacional: autenticação, orientação e priorização de decisão. */
+#login-overlay {
+    isolation: isolate;
+    background: radial-gradient(circle at 50% 12%, rgba(37, 99, 235, .18), transparent 38%), #080b14;
+    padding: clamp(1.5rem, 5vw, 4rem);
+}
+
+#login-overlay:not([style*="display: none"]) ~ .app-container,
+#login-overlay:not([style*="display: none"]) ~ #notifications-popover {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+#login-overlay .login-card {
+    width: min(100%, 31rem);
+    border-color: rgba(34, 211, 238, .34);
+    box-shadow: 0 1.75rem 5rem rgba(0, 0, 0, .48), 0 0 2.5rem rgba(37, 99, 235, .12);
+}
+
+#login-overlay .login-toggle-link a,
+#login-overlay .login-toggle-link button {
+    color: #67e8f9;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: .2rem;
+}
+
+.sidebar .nav-item button {
+    min-height: 2.8rem;
+    text-align: left;
+}
+
+.sidebar .nav-item button span {
+    letter-spacing: .005em;
+}
+
+.sidebar .nav-item.active button {
+    box-shadow: inset .2rem 0 0 #22d3ee, 0 .45rem 1.25rem rgba(15, 23, 42, .2);
+}
+
+.metric-card.metric-priority {
+    border-color: rgba(251, 191, 36, .58);
+    background: linear-gradient(145deg, rgba(120, 53, 15, .28), rgba(15, 23, 42, .88));
+}
+
+.metric-card.metric-action-required {
+    border-color: rgba(251, 113, 133, .62);
+    background: linear-gradient(145deg, rgba(136, 19, 55, .3), rgba(15, 23, 42, .9));
+}
+
+.metric-card.metric-priority::before,
+.metric-card.metric-action-required::before {
+    content: "EXIGE AÇÃO";
+    display: inline-flex;
+    margin-bottom: .55rem;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    font-size: .63rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    color: #fef3c7;
+    background: rgba(120, 53, 15, .65);
+}
+
+.metric-card.metric-action-required::before {
+    color: #ffe4e6;
+    background: rgba(136, 19, 55, .72);
+}
+
+@media (max-width: 780px) {
+    #login-overlay { padding: 1.25rem; }
+    #login-overlay .login-card { width: 100%; }
+    .sidebar .nav-item button span { font-size: .75rem; }
+}
