@@ -17,6 +17,14 @@ class OperationalDesignRefinementTests(unittest.TestCase):
         self.assertIn('metric-priority', source)
         self.assertIn('EXIGE AÇÃO', css)
 
+    def test_dashboard_filters_use_operational_toolbar_treatment(self):
+        source = Path("app.js").read_text(encoding="utf-8")
+        css = Path("styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("dashboard-filter-bar", source)
+        self.assertIn("Filtros operacionais", css)
+        self.assertIn(".dashboard-filter-bar select", css)
+
 
 if __name__ == "__main__":
     unittest.main()
