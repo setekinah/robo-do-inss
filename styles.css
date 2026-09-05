@@ -1777,3 +1777,37 @@ canvas#metrics-chart {
 .first-value-guide .eyebrow { color:var(--primary); font-size:.67rem; font-weight:800; letter-spacing:.09em; }.first-value-guide h3 { font-family:var(--font-heading); font-size:1.05rem; margin:.14rem 0; }.first-value-guide p { color:var(--text-muted); font-size:.76rem; margin:0; }
 .first-value-steps { display:grid; gap:.55rem; grid-template-columns:repeat(3,1fr); list-style:none; margin:0; padding:0; }.first-value-steps li { align-items:center; border-left:1px solid rgba(148,163,184,.2); display:grid; gap:.45rem; grid-template-columns:22px 1fr auto; padding-left:.65rem; }.first-value-steps li>span { align-items:center; background:rgba(34,211,238,.13); border-radius:50%; color:#67e8f9; display:flex; font-size:.7rem; font-weight:800; height:22px; justify-content:center; width:22px; }.first-value-steps strong,.first-value-steps small { display:block; }.first-value-steps strong { color:#e8f0fb; font-size:.78rem; }.first-value-steps small { color:var(--text-muted); font-size:.68rem; }.first-value-steps button { background:transparent; border:0; color:#67e8f9; cursor:pointer; font-size:.72rem; font-weight:800; padding:.35rem; }.first-value-steps button:hover { color:#fff; }
 @media (max-width:900px) { .first-value-guide,.first-value-steps { grid-template-columns:1fr; }.first-value-steps li { border-left:0; border-top:1px solid rgba(148,163,184,.16); padding:.55rem 0 0; } }
+/* Refinamento visual: superfícies sóbrias, foco evidente e ações legíveis. */
+:focus-visible {
+    outline: 3px solid #67e8f9 !important;
+    outline-offset: 3px;
+}
+
+.smart-pending-card {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 16px;
+    background: linear-gradient(145deg, rgba(20, 29, 46, 0.94), rgba(12, 19, 32, 0.88));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.smart-pending-card:hover {
+    border-color: rgba(34, 211, 238, 0.42);
+    transform: translateY(-1px);
+}
+
+.smart-pending-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    color: #9facbf;
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.smart-pending-card .dashboard-action {
+    justify-self: start;
+}
