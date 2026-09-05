@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from modules.notification_dispatcher import build_minimal_payload, dispatch
+from modules.notification_dispatcher import _is_allowed_destination, build_minimal_payload, dispatch
 
 
 class NotificationDispatcherTests(unittest.TestCase):
@@ -32,6 +32,14 @@ class NotificationDispatcherTests(unittest.TestCase):
             result = dispatch(event_type="pendencia_inteligente", attendance_id=7, event_id="evt-7")
 
         self.assertEqual(result["reason"], "destino_nao_autorizado")
+
+    def test_destination_rejects_credentials_and_non_standard_ports(self):
+        hosts = {"notify.example.test"}
+
+        self.assertTrue(_is_allowed_destination("https://notify.example.test/hook", hosts))
+        self.assertFalse(_is_allowed_destination("https://token@notify.example.test/hook", hosts))
+        self.assertFalse(_is_allowed_destination("https://notify.example.test:8443/hook", hosts))
+        self.assertFalse(_is_allowed_destination("https://notify.example.test.evil.test/hook", hosts))
 
 
 if __name__ == "__main__":
