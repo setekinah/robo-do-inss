@@ -919,10 +919,10 @@ class AppEngine {
     list.innerHTML = '';
     data.items.forEach((item) => {
       const card = document.createElement('article');
-      card.style.cssText = 'border:1px solid var(--glass-border); border-left:3px solid var(--accent-gold); border-radius:var(--radius-sm); padding:.85rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;';
-      const reasons = (item.reasons || []).map((reason) => `<li>${escapeHTML(reason.label)}: ${escapeHTML(reason.detail)}</li>`).join('');
+      card.className = 'smart-pending-card';
+      const reasons = (item.reasons || []).map((reason) => `<li>${this.describePendingReason(reason)}</li>`).join('');
       const due = item.due_at ? ` · ação operacional: ${escapeHTML(String(item.due_at))}` : '';
-      card.innerHTML = `<div><strong>${escapeHTML(item.lead_name)}</strong> <span style="color:var(--text-muted); font-size:.8rem;">${escapeHTML(item.flow_name)} · ${escapeHTML(item.assigned_to)}${due}</span><ul style="margin:.45rem 0 0; padding-left:1.1rem; font-size:.82rem; color:var(--text-muted);">${reasons}</ul></div><button type="button" class="btn-secondary">Abrir caso</button>`;
+      card.innerHTML = `<div><strong>${escapeHTML(item.lead_name)}</strong> <span class="smart-pending-meta">${escapeHTML(item.flow_name)} · ${escapeHTML(item.assigned_to)}${due}</span><ul>${reasons}</ul></div><button type="button" class="dashboard-action dashboard-action--quiet" aria-label="Abrir caso de ${escapeHTML(item.lead_name)}">Abrir caso</button>`;
       card.querySelector('button').addEventListener('click', async () => {
         await this.openLeadModal(Number(item.attendance_id));
         const documentRelated = (item.reasons || []).some((reason) => reason.code.includes('dossie') || reason.code === 'proxima_acao');
@@ -930,6 +930,15 @@ class AppEngine {
       });
       list.appendChild(card);
     });
+  }
+
+  describePendingReason(reason) {
+    const code = String(reason?.code || '').toLowerCase();
+    const label = escapeHTML(reason?.label || 'Atenção necessária');
+    const detail = escapeHTML(reason?.detail || 'Revise o caso e defina a próxima providência.');
+    if (code.includes('dossie') || code.includes('document')) return `<strong>${label}.</strong> Solicite ou confira os documentos necessários antes de avançar. <span>${detail}</span>`;
+    if (code.includes('proxima_acao') || code.includes('revis')) return `<strong>${label}.</strong> O caso precisa de uma decisão do responsável. <span>${detail}</span>`;
+    return `<strong>${label}.</strong> <span>${detail}</span>`;
   }
 
   populateDashboardBenefitFilter() {
