@@ -30,6 +30,31 @@ def _configuration() -> tuple[str, str, set[str]]:
     return url, secret, _allowed_hosts()
 
 
+def _is_allowed_destination(url: str, hosts: set[str]) -> bool:
+    """Reject ambiguous URLs before the network layer can resolve them.
+
+    The allowlist is intentionally host-only. Credentials in URLs, alternate
+    ports and redirects would otherwise turn a configured webhook into an SSRF
+    pivot or leak a signed operational event to another destination.
+    """
+    parsed = urllib.parse.urlparse(url)
+    return bool(
+        parsed.scheme == "https"
+        and parsed.hostname
+        and parsed.hostname.lower() in hosts
+        and parsed.port in (None, 443)
+        and not parsed.username
+        and not parsed.password
+    )
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward signed notification requests to a redirect target."""
+
+    def redirect_request(self, request, fp, code, msg, headers, newurl):  # type: ignore[override]
+        return None
+
+
 def build_minimal_payload(*, event_type: str, attendance_id: int, event_id: str) -> dict[str, str | int]:
     """Create a payload containing only the operational identifiers needed by a queue."""
     if event_type not in ALLOWED_EVENT_TYPES:
@@ -53,8 +78,7 @@ def dispatch(*, event_type: str, attendance_id: int, event_id: str, timeout_seco
     url, secret, hosts = _configuration()
     if os.environ.get("ROBO_INSS_NOTIFICATION_ENABLED") != "1":
         return {"sent": False, "reason": "notificacoes_desativadas", "event_id": payload["event_id"]}
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.hostname.lower() not in hosts:
+    if not _is_allowed_destination(url, hosts):
         return {"sent": False, "reason": "destino_nao_autorizado", "event_id": payload["event_id"]}
     if not secret:
         return {"sent": False, "reason": "segredo_ausente", "event_id": payload["event_id"]}
@@ -74,7 +98,8 @@ def dispatch(*, event_type: str, attendance_id: int, event_id: str, timeout_seco
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=max(1, min(timeout_seconds, 15))) as response:
+        opener = urllib.request.build_opener(_NoRedirect())
+        with opener.open(request, timeout=max(1, min(timeout_seconds, 15))) as response:
             delivered = 200 <= response.status < 300
             return {"sent": delivered, "reason": "entregue" if delivered else "resposta_nao_sucesso", "event_id": payload["event_id"]}
     except (OSError, urllib.error.URLError):
