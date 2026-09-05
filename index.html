@@ -18,9 +18,26 @@
 
   <!-- OVERLAY DE LOGIN / ONBOARDING PREVIA (Matching TELA DE LOGIN.png) -->
   <div id="login-overlay" class="login-overlay">
-    <div class="login-card">
-      <div class="login-logo">Prev<span>IA</span></div>
-      <p class="login-subtitle" id="login-subtitle">Acesse sua conta no PrevIA</p>
+    <div class="login-experience">
+      <section class="login-intro" aria-label="Apresentação da plataforma">
+        <a class="login-brand" href="#" aria-label="PrevIA, início">Prev<span>IA</span><small>PREVIDENCIÁRIO</small></a>
+        <div class="login-intro-copy">
+          <p class="login-eyebrow">PLATAFORMA PARA ADVOCACIA PREVIDENCIÁRIA</p>
+          <h1>Decisões mais seguras.<br><em>Casos mais claros.</em></h1>
+          <p>Centralize a análise do CNIS, o dossiê probatório e as próximas providências em um só lugar.</p>
+        </div>
+        <ul class="login-trust-list" aria-label="Recursos do PrevIA">
+          <li><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Dados protegidos e controle de acesso</li>
+          <li><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i> Dossiês e pendências em contexto</li>
+          <li><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> Próxima ação clara para cada caso</li>
+        </ul>
+        <p class="login-footnote">Feito para a rotina do escritório previdenciário.</p>
+      </section>
+      <div class="login-card">
+        <div class="login-card-heading">
+          <div class="login-logo">Prev<span>IA</span></div>
+          <p class="login-subtitle" id="login-subtitle">Acesse sua conta no PrevIA</p>
+        </div>
 
       <div class="step-indicator" id="step-indicator" style="display: none;">
         <div class="step-node completed" id="node-1"><i class="fa-solid fa-check"></i></div>
@@ -90,6 +107,8 @@
 
       <div class="login-toggle-link" id="login-toggle-container">
         Já tem conta? <a href="#" data-action="show-login">Fazer login</a>
+      </div>
+      <p class="login-privacy-note"><i class="fa-solid fa-lock" aria-hidden="true"></i> Ambiente seguro para dados profissionais.</p>
       </div>
     </div>
   </div>
