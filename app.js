@@ -157,12 +157,10 @@ class AppEngine {
     this.initEvents();
     this.initCatalogControls();
     this.initOCRDropzone();
-    this.checkAuthStatus();
-    this.loadData();
+    this.bootstrap();
     this.renderOperationalStatus();
     window.addEventListener('online', () => this.renderOperationalStatus());
     window.addEventListener('offline', () => this.renderOperationalStatus());
-    this.runSilentCatalogCheck();
   }
 
   initEvents() {
@@ -704,20 +702,138 @@ class AppEngine {
     document.getElementById('btn-ocr-mode-json').classList.toggle('active', mode === 'json');
   }
 
+  /**
+   * Consulta /api/auth/status e devolve um objeto normalizado.
+   * Nunca assume sessão autenticada quando a checagem falha (rede fora do
+   * ar, resposta inválida etc.) — o padrão seguro é sempre "não autenticado".
+   * Esta função é apenas leitura de estado: não mexe no DOM.
+   */
   async checkAuthStatus() {
     try {
       const res = await fetch('/api/auth/status');
+      if (!res.ok) throw new Error(`auth-status-http-${res.status}`);
       const data = await res.json();
-      if (data.configured) {
-        this.showLoginMode();
-      }
-      if (data.office_name) {
-        document.getElementById('sidebar-office-name').textContent = data.office_name;
-        document.getElementById('user-display-name').textContent = data.office_name;
-        document.getElementById('user-display-oab').textContent = `OAB: ${data.oab || '524387'}`;
-        document.getElementById('user-avatar-initials').textContent = data.office_name.substring(0, 4).toUpperCase();
-      }
-    } catch (e) {}
+      return {
+        available: true,
+        configured: Boolean(data.configured),
+        authenticated: Boolean(data.authenticated),
+        officeName: data.office_name || null,
+        oab: data.oab || null,
+      };
+    } catch (e) {
+      return {
+        available: false,
+        configured: null,
+        authenticated: false,
+        officeName: null,
+        oab: null,
+      };
+    }
+  }
+
+  /**
+   * Ponto único de entrada da aplicação. Decide entre mostrar a tela de
+   * login/cadastro ou carregar dados reais — nunca os dois ao mesmo tempo.
+   * loadData() só é chamado depois de confirmar sessão autenticada, então
+   * nenhuma API protegida é acionada antes de sabermos se o usuário está
+   * logado.
+   */
+  async bootstrap() {
+    const status = await this.checkAuthStatus();
+
+    if (!status.available) {
+      this.showAuthUnavailable();
+      return;
+    }
+
+    if (!status.configured) {
+      this.nextOnboardingStep(2);
+      return;
+    }
+
+    if (!status.authenticated) {
+      this.showLoginMode(status);
+      return;
+    }
+
+    this.applyAuthenticatedProfile(status);
+    await this.loadData();
+    this.runSilentCatalogCheck();
+  }
+
+  showAuthUnavailable() {
+    this.stats = null;
+    this.atendimentos = [];
+
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) {
+      overlay.style.display = 'flex';
+      overlay.style.opacity = '1';
+    }
+
+    const step1 = document.getElementById('step-content-1');
+    const step2 = document.getElementById('step-content-2');
+    const login = document.getElementById('step-content-login');
+    const indicator = document.getElementById('step-indicator');
+    const subtitle = document.getElementById('login-subtitle');
+    const toggle = document.getElementById('login-toggle-container');
+
+    if (step1) step1.style.display = 'none';
+    if (step2) step2.style.display = 'none';
+    if (login) login.style.display = 'none';
+    if (indicator) indicator.style.display = 'none';
+
+    if (subtitle) {
+      subtitle.textContent = 'Não foi possível conectar ao PreviA';
+    }
+
+    if (toggle) {
+      toggle.replaceChildren();
+
+      const message = document.createElement('span');
+      message.textContent = 'Verifique se o servidor local está em execução. ';
+
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn-secondary';
+      retry.textContent = 'Tentar novamente';
+      retry.addEventListener('click', () => this.bootstrap());
+
+      toggle.append(message, retry);
+    }
+  }
+  /** Aplica no header/sidebar os dados mínimos do escritório e fecha o overlay de login. */
+  applyAuthenticatedProfile(status) {
+    if (status.officeName) {
+      document.getElementById('sidebar-office-name').textContent = status.officeName;
+      document.getElementById('user-display-name').textContent = status.officeName;
+      document.getElementById('user-display-oab').textContent = `OAB: ${status.oab || '524387'}`;
+      document.getElementById('user-avatar-initials').textContent = status.officeName.substring(0, 4).toUpperCase();
+    }
+    this.hideLoginOverlay();
+  }
+
+  hideLoginOverlay() {
+    const overlay = document.getElementById('login-overlay');
+    if (!overlay) return;
+    overlay.style.opacity = '0';
+    setTimeout(() => { overlay.style.display = 'none'; }, 300);
+  }
+
+  /**
+   * Sessão ausente/expirada detectada durante o uso (ex.: resposta 401 em
+   * loadData()). Nunca preenche a tela com dados fictícios — apenas limpa o
+   * estado local e volta para a tela de login real.
+   */
+  handleUnauthenticated() {
+    this.stats = null;
+    this.atendimentos = [];
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) {
+      overlay.style.display = 'flex';
+      overlay.style.opacity = '1';
+    }
+    this.showLoginMode();
   }
 
   nextOnboardingStep(step) {
@@ -801,14 +917,10 @@ class AppEngine {
       return;
     }
 
-    document.getElementById('sidebar-office-name').textContent = officeName;
-    document.getElementById('user-display-name').textContent = officeName;
-    document.getElementById('user-display-oab').textContent = `OAB: ${officeOab}`;
-    document.getElementById('user-avatar-initials').textContent = officeName.substring(0, 4).toUpperCase();
-
-    const overlay = document.getElementById('login-overlay');
-    overlay.style.opacity = '0';
-    setTimeout(() => overlay.style.display = 'none', 300);
+    // O cookie de sessão já foi definido pelo backend na resposta acima.
+    // Confirmamos o status real (em vez de confiar só nos valores digitados
+    // no formulário) e então carregamos os dados reais da aplicação.
+    await this.bootstrap();
   }
 
   async submitLogin() {
@@ -826,9 +938,7 @@ class AppEngine {
       return;
     }
     audio.success();
-    const overlay = document.getElementById('login-overlay');
-    overlay.style.opacity = '0';
-    setTimeout(() => overlay.style.display = 'none', 300);
+    await this.bootstrap();
   }
 
   switchTab(tabId) {
@@ -861,40 +971,34 @@ class AppEngine {
     }
   }
 
+  /**
+   * Carrega dados reais da aplicação. Só deve ser chamado depois de
+   * confirmar sessão autenticada (ver bootstrap()). Uma resposta 401 aqui
+   * significa sessão expirada em uso — nunca gera dados fictícios, sempre
+   * volta para a tela de login real.
+   */
   async loadData() {
     try {
       const resStats = await fetch('/api/stats');
+      if (resStats.status === 401) { this.handleUnauthenticated(); return; }
+      if (!resStats.ok) throw new Error(`stats-http-${resStats.status}`);
       this.stats = await resStats.json();
       this.renderDashboardStats();
 
       const resAtt = await fetch('/api/atendimentos');
+      if (resAtt.status === 401) { this.handleUnauthenticated(); return; }
+      if (!resAtt.ok) throw new Error(`atendimentos-http-${resAtt.status}`);
       this.atendimentos = await resAtt.json();
       this.populateDashboardBenefitFilter();
       this.applyDashboardFilters();
       this.renderKanban();
       await this.loadSmartPending();
     } catch (e) {
-      this.renderMockData();
+      // Falha real de rede/parse (não é 401): mantemos o estado atual em vez
+      // de inventar números. O dashboard permanece vazio/desatualizado até a
+      // próxima tentativa, o que é preferível a exibir dados fictícios.
+      console.error('Não foi possível carregar os dados da aplicação.', e);
     }
-  }
-
-  renderMockData() {
-    this.stats = {
-      total_atendimentos: 12,
-      total_estimated_value: 148500.0,
-      events_pending: 3,
-      docs_pending: 4,
-      stages: {
-        triagem: { count: 3, value: 36000 },
-        qualificacao: { count: 2, value: 24000 },
-        conflito: { count: 2, value: 18500 },
-        proposta: { count: 2, value: 32000 },
-        documentos: { count: 2, value: 28000 },
-        concluido: { count: 1, value: 10000 },
-        perdido: { count: 0, value: 0 }
-      }
-    };
-    this.renderDashboardStats();
   }
 
   async loadSmartPending() {

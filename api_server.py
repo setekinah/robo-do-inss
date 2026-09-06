@@ -16,6 +16,7 @@ from email.policy import default as email_policy
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 
 # Adiciona o diretorio do projeto ao path de importacao
 BASE_DIR = Path(__file__).resolve().parent
@@ -416,8 +417,17 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
     # --- Handlers de Autenticacao & Escritorio ---
 
     def handle_get_auth_status(self) -> None:
+        """Informa se ja existe conta configurada e se a sessao atual (cookie)
+        e valida. Nunca inclui o token de sessao na resposta: o cookie
+        httpOnly e a unica forma de transporte da credencial."""
         configured = auth_security.credentials_configured()
-        self._send_json({"configured": configured})
+        authenticated = auth_security.verify_session(self._session_token())
+        payload: dict[str, Any] = {"configured": configured, "authenticated": authenticated}
+        if authenticated:
+            settings = office_settings.load_office_settings()
+            payload["office_name"] = settings.get("office_name") or None
+            payload["oab"] = settings.get("oab") or None
+        self._send_json(payload)
 
     def handle_get_office(self) -> None:
         settings = office_settings.load_office_settings()
