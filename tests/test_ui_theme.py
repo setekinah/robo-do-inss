@@ -19,6 +19,14 @@ class UiThemeTests(unittest.TestCase):
         self.assertEqual(theme["secondaryBackgroundColor"].lower(), "#ffffff")
         self.assertEqual(theme["textColor"].lower(), "#17243b")
 
+    def test_document_uploader_is_presented_in_portuguese(self) -> None:
+        app_source = (PROJECT_ROOT / "app.py").read_text(encoding="utf-8")
+
+        self.assertIn("Arraste e solte os arquivos aqui", app_source)
+        self.assertIn("Selecionar arquivos", app_source)
+        self.assertIn("Limite de 200 MB por arquivo", app_source)
+        self.assertIn('data-testid="stFileUploaderDropzone"', app_source)
+
 
 if __name__ == "__main__":
     unittest.main()
