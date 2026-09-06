@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 from filone_storage import (
     FilOneConfig, FilOneStorageService, StorageConfigurationError, build_storage_key,
@@ -93,8 +94,9 @@ class FilOneStorageTests(unittest.TestCase):
         try:
             for name in ("FILONE_ENDPOINT", "FILONE_REGION", "FILONE_ACCESS_KEY", "FILONE_SECRET_KEY", "FILONE_BUCKET"):
                 os.environ.pop(name, None)
-            with self.assertRaises(StorageConfigurationError):
-                FilOneConfig.from_environment()
+            with patch("filone_storage.load_local_filone_environment"):
+                with self.assertRaises(StorageConfigurationError):
+                    FilOneConfig.from_environment()
         finally:
             os.environ.clear()
             os.environ.update(original)
