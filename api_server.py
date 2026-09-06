@@ -609,7 +609,11 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             docs = conn.execute(
                 "SELECT * FROM atendimento_documentos WHERE attendance_id = ?", (attendance_id,)
             ).fetchall()
-            item["documents"] = [dict(d) for d in docs]
+            evidence = database.document_evidence_summary(attendance_id)
+            item["documents"] = [
+                {**dict(d), **evidence.get(int(d["id"]), {"version_count": 0, "latest_version_id": None})}
+                for d in docs
+            ]
 
         self._send_json(item)
 
@@ -625,7 +629,11 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             docs = conn.execute(
                 "SELECT * FROM atendimento_documentos WHERE attendance_id = ?", (attendance_id,)
             ).fetchall()
-        self._send_json([dict(d) for d in docs])
+        evidence = database.document_evidence_summary(attendance_id)
+        self._send_json([
+            {**dict(d), **evidence.get(int(d["id"]), {"version_count": 0, "latest_version_id": None})}
+            for d in docs
+        ])
 
     def handle_get_document_audit(self, attendance_id: int) -> None:
         audit = database.get_attendance_audit(
@@ -1307,13 +1315,34 @@ ___________________________________________________
             if not document_row:
                 self._send_json({"success": False, "error": "Item documental não encontrado no dossiê."}, 404)
                 return
-            stored_path = document_storage.save_document_bytes(
-                attendance_id=attendance_id,
-                document_code=str(document_row["document_code"]),
-                original_name=file_name,
-                content=file_content,
-            )
             document_status = "recebido" if success else "ilegivel"
+            content_hash = hashlib.sha256(file_content).hexdigest()
+            existing_version = database.get_document_version_by_hash(document_id, content_hash)
+            if existing_version:
+                stored_path = str(existing_version["stored_path"])
+                version_id = int(existing_version["id"])
+                duplicate_upload = True
+            else:
+                stored_path = document_storage.save_document_bytes(
+                    attendance_id=attendance_id,
+                    document_code=str(document_row["document_code"]),
+                    original_name=file_name,
+                    content=file_content,
+                )
+                version_id = database.record_document_version(
+                    attendance_id=attendance_id,
+                    document_id=document_id,
+                    content_hash=content_hash,
+                    original_name=file_name,
+                    stored_path=stored_path,
+                    raw_text=str(analysis["raw_text"]),
+                    extracted_data=extracted,
+                    source_type=str(analysis["source_type"]),
+                    extraction_status=status,
+                    extraction_confidence=float(assessment["confidence"]),
+                    technical_notes=str(analysis["technical_notes"]),
+                )
+                duplicate_upload = False
             database.update_attendance_document(
                 document_id=document_id,
                 status=document_status,
@@ -1326,12 +1355,15 @@ ___________________________________________________
                 extraction_confidence=float(assessment["confidence"]),
                 technical_notes=str(analysis["technical_notes"]),
             )
-            # Qualquer novo documento altera a base de prova do caso. Relatórios
-            # anteriores não podem parecer atuais depois de um novo upload.
-            database.invalidate_attendance_document_audits(attendance_id)
+            # Uma nova evidência altera a base de prova. Reenvio idêntico é
+            # idempotente e não deve invalidar um relatório já revisado.
+            if not duplicate_upload:
+                database.invalidate_attendance_document_audits(attendance_id)
             dossier_document = {
                 "attendance_id": attendance_id,
                 "document_id": document_id,
+                "version_id": version_id,
+                "duplicate_upload": duplicate_upload,
                 "status": document_status,
                 "stored": True,
             }

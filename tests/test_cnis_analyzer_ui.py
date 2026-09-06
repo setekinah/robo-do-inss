@@ -9,6 +9,7 @@ class CNISAnalyzerUiTests(unittest.TestCase):
         self.assertIn("Leitura técnica preliminar do CNIS", source)
         self.assertIn("cnisAnalysis.findings", source)
         self.assertIn("não calcula tempo, carência, RMI ou elegibilidade", source)
+        self.assertIn("latestCNISReport", source)
 
 
 if __name__ == "__main__":

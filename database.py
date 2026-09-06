@@ -278,6 +278,31 @@ def init_database() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS atendimento_documento_versoes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                document_id INTEGER NOT NULL,
+                content_hash TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                stored_path TEXT NOT NULL,
+                raw_text TEXT,
+                extracted_data_json TEXT NOT NULL DEFAULT '{}',
+                source_type TEXT,
+                extraction_status TEXT,
+                extraction_confidence REAL,
+                technical_notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(document_id, content_hash),
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id),
+                FOREIGN KEY(document_id) REFERENCES atendimento_documentos(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documento_versoes_document ON atendimento_documento_versoes(document_id, id DESC)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS client_portal_access (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 attendance_id INTEGER NOT NULL,
@@ -1066,6 +1091,70 @@ def update_attendance_document(
             ),
         )
         conn.commit()
+
+
+def get_document_version_by_hash(document_id: int, content_hash: str) -> sqlite3.Row | None:
+    """Use the file digest as an idempotency key for repeated uploads."""
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT id, stored_path, original_name, extraction_status, extraction_confidence
+            FROM atendimento_documento_versoes
+            WHERE document_id = ? AND content_hash = ?
+            """,
+            (document_id, content_hash),
+        ).fetchone()
+
+
+def record_document_version(
+    *,
+    attendance_id: int,
+    document_id: int,
+    content_hash: str,
+    original_name: str,
+    stored_path: str,
+    raw_text: str,
+    extracted_data: dict[str, Any],
+    source_type: str,
+    extraction_status: str,
+    extraction_confidence: float,
+    technical_notes: str,
+) -> int:
+    """Persist an immutable extraction snapshot before updating the live checklist."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO atendimento_documento_versoes (
+                attendance_id, document_id, content_hash, original_name, stored_path,
+                raw_text, extracted_data_json, source_type, extraction_status,
+                extraction_confidence, technical_notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                attendance_id, document_id, content_hash, original_name, stored_path,
+                raw_text, json.dumps(extracted_data, ensure_ascii=False), source_type,
+                extraction_status, extraction_confidence, technical_notes,
+            ),
+        )
+        return int(cursor.lastrowid)
+
+
+def document_evidence_summary(attendance_id: int) -> dict[int, dict[str, Any]]:
+    """Return count and current version metadata without returning sensitive extraction text."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT document_id, COUNT(*) AS version_count, MAX(id) AS latest_version_id
+            FROM atendimento_documento_versoes
+            WHERE attendance_id = ?
+            GROUP BY document_id
+            """,
+            (attendance_id,),
+        ).fetchall()
+    return {
+        int(row["document_id"]): {"version_count": int(row["version_count"]), "latest_version_id": int(row["latest_version_id"])}
+        for row in rows
+    }
 
 
 def get_document_pipeline_summary() -> dict[str, Any]:

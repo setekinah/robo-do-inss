@@ -150,6 +150,7 @@ class AppEngine {
     this.triageState = { flowId: null, currentNode: null, history: [], selectedResult: null };
     this.ocrUploadSequence = 0;
     this.currentOCRReport = null;
+    this.latestCNISReport = null;
     this.newLeadDestination = 'lead';
 
     this.initEvents();
@@ -534,7 +535,7 @@ class AppEngine {
   }
 
   convertCNISToLead() {
-    const report = this.currentOCRReport;
+    const report = this.latestCNISReport || this.currentOCRReport;
     if (!report || report.classification?.code !== 'CNIS') {
       alert('Analise um CNIS válido antes de criar o lead.');
       return;
@@ -575,6 +576,7 @@ class AppEngine {
     const documentFields = Array.isArray(data.document_fields) ? data.document_fields : [];
     const isCNIS = classification.code === 'CNIS';
     this.currentOCRReport = data;
+    if (isCNIS) this.latestCNISReport = data;
     const catalogNotice = document.getElementById('cnis-catalog-notice');
     const activeCatalog = data.cnis_catalog?.active;
     if (catalogNotice) {
@@ -650,7 +652,7 @@ class AppEngine {
   }
 
   printCNISReviewReport() {
-    const data = this.currentOCRReport;
+    const data = this.latestCNISReport || this.currentOCRReport;
     if (!data || (data.classification?.code && data.classification.code !== 'CNIS')) {
       alert('Analise um extrato CNIS antes de gerar o relatório de revisão.');
       return;
@@ -1308,11 +1310,14 @@ class AppEngine {
       const auditNote = doc.extraction_status
         ? `Leitura: ${doc.extraction_status}${doc.extraction_confidence != null ? ` · confiança ${Math.round(Number(doc.extraction_confidence) * 100)}%` : ''}`
         : 'Ainda não enviado para leitura.';
+      const evidenceNote = Number(doc.version_count || 0) > 0
+        ? `${doc.version_count} versão(ões) de evidência preservada(s)`
+        : 'Nenhuma evidência analisada ainda.';
 
       card.innerHTML = `
         <div>
           <strong style="font-size: 0.9rem;">${escapeHTML(doc.document_name)}</strong>
-          <small class="doc-audit-note">${escapeHTML(auditNote)}</small>
+          <small class="doc-audit-note">${escapeHTML(auditNote)} · ${escapeHTML(evidenceNote)}</small>
         </div>
         <div style="display: flex; align-items: center; gap: 0.8rem;">
           <span class="doc-status-badge doc-status-${safeStatus}">${escapeHTML(safeStatus)}</span>
