@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
+from pathlib import Path
+
+import api_server
 
 from filone_storage import (
     FilOneConfig, FilOneStorageService, StorageConfigurationError, build_storage_key,
-    configured_max_document_bytes, validate_upload_metadata,
+    configured_max_document_bytes, load_local_filone_environment, validate_upload_metadata,
 )
 
 
@@ -34,7 +38,10 @@ class FakeS3:
         self.objects.pop(Key, None)
 
     def list_objects_v2(self, Bucket, Prefix, MaxKeys):
-        return {"Contents": [{"Key": key} for key in self.objects if key.startswith(Prefix)][:MaxKeys]}
+        return {"Contents": [
+            {"Key": key, "Size": item["ContentLength"], "ETag": item["ETag"]}
+            for key, item in self.objects.items() if key.startswith(Prefix)
+        ][:MaxKeys]}
 
 
 class AccessDeniedHeadS3(FakeS3):
@@ -89,6 +96,25 @@ class FilOneStorageTests(unittest.TestCase):
             else:
                 os.environ["FILONE_MAX_DOCUMENT_MB"] = original
 
+    def test_first_validation_loads_local_environment(self) -> None:
+        with patch("filone_storage.load_local_filone_environment") as loader:
+            configured_max_document_bytes()
+        loader.assert_called_once()
+
+    def test_local_environment_accepts_utf8_bom(self) -> None:
+        original = os.environ.get("FILONE_MAX_DOCUMENT_MB")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            (root / ".env").write_bytes(b"\xef\xbb\xbfFILONE_MAX_DOCUMENT_MB=12\n")
+            os.environ.pop("FILONE_MAX_DOCUMENT_MB", None)
+            with patch("filone_storage.Path", return_value=root / "filone_storage.py"):
+                load_local_filone_environment()
+            self.assertEqual(os.environ["FILONE_MAX_DOCUMENT_MB"], "12")
+        if original is None:
+            os.environ.pop("FILONE_MAX_DOCUMENT_MB", None)
+        else:
+            os.environ["FILONE_MAX_DOCUMENT_MB"] = original
+
     def test_missing_configuration_fails_clearly(self) -> None:
         original = dict(os.environ)
         try:
@@ -109,10 +135,28 @@ class FilOneStorageTests(unittest.TestCase):
         self.assertTrue(service.exists(key=key))
         self.assertFalse(service.exists(key="private/absent.pdf"))
 
+    def test_access_denied_metadata_uses_same_exact_list_fallback(self) -> None:
+        key = "private/document.pdf"
+        client = AccessDeniedHeadS3()
+        client.objects[key] = {"ContentLength": 7, "ContentType": "application/pdf", "ETag": '"etag"', "Metadata": {}}
+        metadata = FilOneStorageService(self.service._config, client).get_metadata(key=key)
+        self.assertEqual(metadata["source"], "list")
+        self.assertEqual(metadata["size_bytes"], 7)
+        self.assertEqual(metadata["mime_type"], "")
+
     def test_access_denied_list_is_not_masked_as_absence(self) -> None:
         service = FilOneStorageService(self.service._config, AccessDeniedEverywhereS3())
         with self.assertRaises(Exception):
             service.exists(key="private/absent.pdf")
+
+    def test_invalid_max_size_becomes_controlled_upload_intent_error(self) -> None:
+        handler = object.__new__(api_server.SofiPreviRequestHandler)
+        responses = []
+        handler._read_json_body = lambda: {"document_id": 1, "filename": "arquivo.pdf", "mime_type": "application/pdf", "size_bytes": 1}
+        handler._send_json = lambda payload, status=200: responses.append((payload, status))
+        with patch("api_server.validate_upload_metadata", side_effect=StorageConfigurationError("limite inválido")):
+            handler.handle_post_document_upload_intent(1)
+        self.assertEqual(responses, [({"success": False, "error": "limite inválido"}, 503)])
 
 
 if __name__ == "__main__":

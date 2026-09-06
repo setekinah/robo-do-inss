@@ -33,13 +33,14 @@ def load_local_filone_environment() -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, value = line.split("=", 1)
-        name = name.strip()
+        name = name.strip().lstrip("\ufeff")
         if name in FILONE_LOCAL_ENV_NAMES and not os.environ.get(name):
             os.environ[name] = value.strip().strip('"').strip("'")
 
 
 def configured_max_document_bytes() -> int:
     """Return a deliberately conservative local policy (1-50 MB), configurable only downward."""
+    load_local_filone_environment()
     raw_value = os.environ.get("FILONE_MAX_DOCUMENT_MB", str(DEFAULT_MAX_DOCUMENT_MB)).strip()
     try:
         megabytes = int(raw_value)
@@ -131,25 +132,35 @@ class FilOneStorageService:
     def create_presigned_download_url(self, *, key: str, expires_in: int) -> str:
         return self._client.generate_presigned_url("get_object", Params={"Bucket": self._config.bucket, "Key": key}, ExpiresIn=expires_in, HttpMethod="GET")
 
-    def exists(self, *, key: str) -> bool:
+    def _head_or_exact_list(self, *, key: str) -> tuple[str, dict[str, Any]] | None:
         try:
-            self._client.head_object(Bucket=self._config.bucket, Key=key)
-            return True
+            return "head", self._client.head_object(Bucket=self._config.bucket, Key=key)
         except Exception as exc:
             code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", ""))
             if code in {"404", "NoSuchKey", "NotFound"}:
-                return False
+                return None
             # Fil One eu-west-1 can return AccessDenied for a key that is not
             # visible. List permission is intentionally required on the dev key;
             # an exact-prefix list differentiates absence from bad credentials.
             if code in {"403", "AccessDenied"}:
                 listing = self._client.list_objects_v2(Bucket=self._config.bucket, Prefix=key, MaxKeys=1)
-                return any(item.get("Key") == key for item in listing.get("Contents", []))
+                item = next((item for item in listing.get("Contents", []) if item.get("Key") == key), None)
+                return ("list", item) if item else None
             raise
+
+    def exists(self, *, key: str) -> bool:
+        return self._head_or_exact_list(key=key) is not None
 
     def delete(self, *, key: str) -> None:
         self._client.delete_object(Bucket=self._config.bucket, Key=key)
 
     def get_metadata(self, *, key: str) -> dict[str, Any]:
-        response = self._client.head_object(Bucket=self._config.bucket, Key=key)
-        return {"key": key, "size_bytes": int(response.get("ContentLength", 0)), "mime_type": response.get("ContentType", ""), "etag": str(response.get("ETag", "")).strip('"'), "metadata": response.get("Metadata", {})}
+        resolved = self._head_or_exact_list(key=key)
+        if resolved is None:
+            raise FileNotFoundError("Objeto não encontrado no storage privado.")
+        source, response = resolved
+        if source == "list":
+            # ListObjectsV2 confirms a visible object but cannot return its
+            # Content-Type/user metadata. Do not invent those values.
+            return {"key": key, "size_bytes": int(response.get("Size", 0)), "mime_type": "", "etag": str(response.get("ETag", "")).strip('"'), "metadata": {}, "source": "list"}
+        return {"key": key, "size_bytes": int(response.get("ContentLength", 0)), "mime_type": response.get("ContentType", ""), "etag": str(response.get("ETag", "")).strip('"'), "metadata": response.get("Metadata", {}), "source": "head"}
