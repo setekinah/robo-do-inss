@@ -271,7 +271,7 @@ class AppEngine {
       receita: ['RECEITA', 'De onde vem o dinheiro', 'Faturamento realizado, meios de pagamento e origem dos contratos.', ['R$ 301.942', 'R$ 184.468', 'R$ 852.209', '1.753']],
       inadimplencia: ['INADIMPLÊNCIA', 'Recebimentos sob atenção', 'Acompanhe parcelas em aberto e priorize ações de recuperação.', ['68 clientes', 'R$ 324.270', '12,3%', 'R$ 74.527']],
       carteira: ['CARTEIRA', 'Contratos e clientes', 'Contratos ativos, valor contratado e ticket médio por unidade.', ['473 contratos', 'R$ 4.122.000', 'R$ 8.250', 'R$ 1.800.000']],
-      custos: ['ÁREAS E CUSTOS', 'Onde o escritório ganha dinheiro', 'Resultado e participação por área de atuação.', ['Previdenciário', 'R$ 381.248', '17,2%', '6 áreas']],
+      custos: ['BENEFÍCIOS E CUSTOS', 'Onde o escritório gera resultado', 'Resultado e participação por tipo de benefício previdenciário.', ['Aposentadoria', 'R$ 381.248', '17,2%', '4 benefícios']],
       equipe: ['EQUIPE', 'Produção por responsável', 'Carteira e receita por responsável, com leitura de risco.', ['4 sócios', 'R$ 637.602', 'R$ 561.521', 'R$ 491.760']],
     };
     const view = views[tab] || views.geral;
