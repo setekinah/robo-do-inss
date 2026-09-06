@@ -28,12 +28,13 @@ def load_local_filone_environment() -> None:
     env_file = Path(__file__).with_name(".env")
     if not env_file.is_file():
         return
-    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+    # utf-8-sig absorve nativamente o BOM criado pelo Windows PowerShell.
+    for raw_line in env_file.read_text(encoding="utf-8-sig").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, value = line.split("=", 1)
-        name = name.strip().lstrip("\ufeff")
+        name = name.strip()
         if name in FILONE_LOCAL_ENV_NAMES and not os.environ.get(name):
             os.environ[name] = value.strip().strip('"').strip("'")
 
