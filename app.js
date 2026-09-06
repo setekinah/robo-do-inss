@@ -168,8 +168,6 @@ class AppEngine {
   initEvents() {
     const sidebarTagline = document.querySelector('.brand-text .tagline');
     if (sidebarTagline) sidebarTagline.textContent = 'SOF.IA';
-    const relationshipNav = document.querySelector('.nav-item[data-tab="relationship"] span');
-    if (relationshipNav) relationshipNav.textContent = 'Novos Clientes à Base';
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => this.switchTab(item.dataset.tab));
     });
@@ -197,14 +195,20 @@ class AppEngine {
     document.getElementById('btn-logout')?.addEventListener('click', () => this.logout());
     document.getElementById('btn-notifications')?.addEventListener('click', () => this.toggleNotifications());
 
-    const btnNovo = document.getElementById('btn-novo-atendimento');
-    if (btnNovo) {
-      btnNovo.addEventListener('click', () => this.startNewAttendance());
-    }
-
-    const btnNovoLead = document.getElementById('btn-novo-lead');
-    if (btnNovoLead) {
-      btnNovoLead.addEventListener('click', () => this.openNewLead('lead'));
+    const globalCreate = document.getElementById('btn-global-create');
+    const globalOptions = document.getElementById('global-create-options');
+    if (globalCreate && globalOptions) {
+      globalCreate.addEventListener('click', () => {
+        const isOpen = !globalOptions.hidden;
+        globalOptions.hidden = isOpen;
+        globalCreate.setAttribute('aria-expanded', String(!isOpen));
+      });
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.global-create-menu')) {
+          globalOptions.hidden = true;
+          globalCreate.setAttribute('aria-expanded', 'false');
+        }
+      });
     }
 
     document.getElementById('auth-form')?.addEventListener('submit', (event) => event.preventDefault());
@@ -291,6 +295,14 @@ class AppEngine {
     const control = event.target.closest('[data-action]');
     if (!control) return;
     const { action, step, dialog, modaltab, stagefilter, destination, mode } = control.dataset;
+    if (action === 'new-lead' || action === 'go-tab') {
+      const globalOptions = document.getElementById('global-create-options');
+      const globalCreate = document.getElementById('btn-global-create');
+      if (globalOptions && globalCreate) {
+        globalOptions.hidden = true;
+        globalCreate.setAttribute('aria-expanded', 'false');
+      }
+    }
     event.preventDefault();
     if (action === 'show-login') this.showLoginMode();
     else if (action === 'onboarding-step') this.nextOnboardingStep(Number(step));
@@ -303,13 +315,14 @@ class AppEngine {
     else if (action === 'print-cnis-report') this.printCNISReviewReport();
     else if (action === 'send-signature') this.sendContractForSignature();
     else if (action === 'new-lead') this.openNewLead(destination || 'lead');
+    else if (action === 'go-tab') this.switchTab(control.dataset.tabtarget);
     else if (action === 'kanban-filter') this.filterKanbanStage(stagefilter);
     else if (action === 'choose-ocr-file') {
       event.stopPropagation();
       document.getElementById('ocr-file-input')?.click();
     } else if (action === 'ocr-mode') this.toggleOCRViewMode(mode);
     else if (action === 'convert-cnis-lead') this.convertCNISToLead();
-    else if (action === 'quickstart-case') this.startNewAttendance();
+    else if (action === 'quickstart-case') this.switchTab('triage');
     else if (action === 'quickstart-document') { this.switchTab('ocr'); window.setTimeout(() => document.getElementById('ocr-file-input')?.click(), 0); }
     else if (action === 'quickstart-review') { this.switchTab('ocr'); window.setTimeout(() => document.getElementById('ocr-results-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); }
     else if (action === 'confirm-retirement-prefilter') this.confirmRetirementPrefilter();

@@ -218,6 +218,13 @@
           <i class="fa-solid fa-magnifying-glass"></i>
           <input type="text" id="global-search" placeholder="Buscar por cliente, CPF, telefone ou benefício...">
         </div>
+        <div class="global-create-menu">
+          <button id="btn-global-create" class="topbar-create" type="button" aria-expanded="false">＋ Criar novo</button>
+          <div id="global-create-options" class="global-create-options" hidden>
+            <button type="button" data-action="new-lead"><strong>Novo lead</strong><small>Registrar o primeiro contato.</small></button>
+            <button type="button" data-action="go-tab" data-tabtarget="triage"><strong>Iniciar qualificação</strong><small>Conduzir a triagem de um caso.</small></button>
+          </div>
+        </div>
       </div>
 
       <div class="topbar-right">
@@ -253,22 +260,22 @@
 
       <ul class="nav-menu">
         <li class="nav-item active" data-tab="dashboard">
-          <button><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></button>
+          <button><i class="fa-solid fa-chart-pie"></i><span>Painel de decisões</span></button>
+        </li>
+        <li class="nav-item" data-tab="kanban">
+          <button><i class="fa-solid fa-kanban"></i><span>Casos em andamento</span></button>
+        </li>
+        <li class="nav-item" data-tab="triage">
+          <button><i class="fa-solid fa-diagram-project"></i><span>Entrada de leads</span></button>
+        </li>
+        <li class="nav-item" data-tab="ocr">
+          <button><i class="fa-solid fa-file-contract"></i><span>Documentos e provas</span></button>
+        </li>
+        <li class="nav-item" data-tab="relationship">
+          <button><i class="fa-solid fa-heart-circle-check"></i><span>Relacionamento</span></button>
         </li>
         <li class="nav-item" data-tab="financeiro">
           <button><i class="fa-solid fa-chart-line"></i><span>Financeiro</span></button>
-        </li>
-        <li class="nav-item" data-tab="kanban">
-          <button><i class="fa-solid fa-kanban"></i><span>Esteira Kanban Prev</span></button>
-        </li>
-        <li class="nav-item" data-tab="relationship">
-          <button><i class="fa-solid fa-heart-circle-check"></i><span>Base de Relacionamento</span></button>
-        </li>
-        <li class="nav-item" data-tab="triage">
-          <button><i class="fa-solid fa-diagram-project"></i><span>Triagem Guiada INSS</span></button>
-        </li>
-        <li class="nav-item" data-tab="ocr">
-          <button><i class="fa-solid fa-file-contract"></i><span>Documentos & OCR</span></button>
         </li>
         <li class="nav-item" data-tab="orchestrator">
           <button><i class="fa-solid fa-robot"></i><span>Robô & Automação</span></button>
@@ -291,15 +298,11 @@
             <h1 class="section-title">Painel Executivo <span>PrevIA</span></h1>
             <p>Priorize os casos que pedem decisão, documento ou próximo contato.</p>
           </div>
-          <div class="dashboard-actions" aria-label="Ações rápidas">
-            <button class="dashboard-action dashboard-action--quiet" id="btn-novo-lead" type="button">Novo lead</button>
-            <button class="dashboard-action dashboard-action--primary" id="btn-novo-atendimento" type="button">+ Novo atendimento</button>
-            <button class="dashboard-action dashboard-action--quiet" type="button" data-action="new-lead" data-destination="relationship">Adicionar à base</button>
-          </div>
+          <button class="dashboard-action dashboard-action--quiet" type="button" data-action="go-tab" data-tabtarget="kanban">Ver casos em andamento</button>
         </div>
 
         <div class="glass-panel dashboard-filter-bar" style="margin-bottom:1.25rem;">
-          <div class="dashboard-filter-intro"><span>Filtros</span><small>Refine a esteira sem sair do painel.</small></div>
+          <div class="dashboard-filter-intro"><span>Filtros da fila</span><small>Refine as decisões que exigem atenção.</small></div>
           <div class="form-group" style="margin:0; min-width:190px;"><label for="dashboard-stage-filter">Etapa do caso</label><select id="dashboard-stage-filter"><option value="">Todas as etapas</option><option value="triagem">Triagem</option><option value="qualificacao">Qualificação</option><option value="conflito">Conflito / LGPD</option><option value="proposta">Proposta</option><option value="documentos">Documentos</option><option value="concluido">Concluído</option></select></div>
           <div class="form-group" style="margin:0; min-width:190px;"><label for="dashboard-benefit-filter">Benefício</label><select id="dashboard-benefit-filter"><option value="">Todos os benefícios</option></select></div>
           <button class="dashboard-filter-clear" id="btn-dashboard-clear" type="button">Limpar</button>
@@ -316,7 +319,7 @@
         </section>
         <section class="first-value-guide" id="first-value-guide" aria-labelledby="first-value-title">
           <div><span class="eyebrow">COMECE POR AQUI</span><h3 id="first-value-title">Veja valor no primeiro caso</h3><p>Três passos curtos, sem acesso ao Gov.br e sem configurar integrações.</p></div>
-          <ol class="first-value-steps"><li><span>1</span><div><strong>Crie um caso</strong><small>Identifique o cliente e o benefício.</small></div><button type="button" data-action="quickstart-case">Começar</button></li><li><span>2</span><div><strong>Envie um CNIS</strong><small>A leitura ocorre localmente.</small></div><button type="button" data-action="quickstart-document">Analisar</button></li><li><span>3</span><div><strong>Revise os sinais</strong><small>Confirme vínculos e pendências.</small></div><button type="button" data-action="quickstart-review">Ver relatório</button></li></ol>
+          <ol class="first-value-steps"><li><span>1</span><div><strong>Qualifique um caso</strong><small>Registre o cliente e o benefício de interesse.</small></div><button type="button" data-action="quickstart-case">Começar</button></li><li><span>2</span><div><strong>Envie um CNIS</strong><small>A leitura ocorre localmente.</small></div><button type="button" data-action="quickstart-document">Analisar</button></li><li><span>3</span><div><strong>Revise os sinais</strong><small>Confirme vínculos e pendências.</small></div><button type="button" data-action="quickstart-review">Ver relatório</button></li></ol>
         </section>
 
         <section class="glass-panel smart-pending-panel" style="margin-bottom:1.25rem;">
@@ -419,12 +422,12 @@
         </div>
       </section>
 
-      <!-- TAB 2: ESTEIRA KANBAN PREV -->
+      <!-- CASOS EM ANDAMENTO -->
       <section id="view-kanban" class="tab-view" style="display: none;">
         <div class="section-header">
           <div>
-            <h1 class="section-title">Esteira Kanban <span>Previdenciária</span></h1>
-            <p style="color: var(--text-muted);">Gerenciamento fluído e inteligente de fases, triagem, conflito e liberação de contratos.</p>
+            <h1 class="section-title">Casos em <span>andamento</span></h1>
+            <p style="color: var(--text-muted);">Acompanhe casos já qualificados, suas etapas, documentos e decisões necessárias.</p>
           </div>
         </div>
 
@@ -507,9 +510,9 @@
         <div class="section-header">
           <div>
             <h1 class="section-title">Base de <span>Relacionamento</span></h1>
-            <p style="color: var(--text-muted);">Leads sem elegibilidade atual, preservados para revisão futura e relacionamento autorizado.</p>
+            <p style="color: var(--text-muted);">Casos sem elegibilidade atual, preservados para reavaliação futura e contato autorizado.</p>
           </div>
-          <div class="relationship-header-actions"><div class="relationship-total"><span id="relationship-count">0</span> em acompanhamento</div><button class="btn-primary" type="button" data-action="new-lead" data-destination="relationship"><i class="fa-solid fa-user-plus"></i> Adicionar contato</button></div>
+          <div class="relationship-header-actions"><div class="relationship-total"><span id="relationship-count">0</span> em acompanhamento</div></div>
         </div>
         <div class="relationship-notice"><i class="fa-solid fa-shield-halved"></i> Use contatos de remarketing apenas quando houver consentimento específico registrado. Esta base não é destinada à comercialização de dados.</div>
         <div id="relationship-list" class="relationship-list"></div>
@@ -518,8 +521,8 @@
       <section id="view-triage" class="tab-view" style="display: none;">
         <div class="section-header">
           <div>
-            <h1 class="section-title">Triagem Guiada <span>INSS</span></h1>
-            <p style="color: var(--text-muted);">Árvore de decisão inteligente para os 10 benefícios previdenciários do escritório.</p>
+            <h1 class="section-title">Entrada e qualificação de <span>leads</span></h1>
+            <p style="color: var(--text-muted);">Registre o primeiro contato e conduza a triagem para definir se ele se torna um caso.</p>
           </div>
         </div>
 
@@ -586,7 +589,7 @@
               </div>
 
               <button class="btn-primary" id="btn-salvar-triage-lead">
-                <i class="fa-solid fa-user-plus"></i> Salvar Lead na Esteira Kanban
+                <i class="fa-solid fa-user-plus"></i> Criar caso qualificado
               </button>
             </div>
           </div>

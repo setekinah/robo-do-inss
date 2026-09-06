@@ -25,13 +25,17 @@ class OperationalDesignRefinementTests(unittest.TestCase):
         self.assertIn("Filtros operacionais", css)
         self.assertIn(".dashboard-filter-bar select", css)
 
-    def test_dashboard_groups_actions_and_queue_as_operational_controls(self):
+    def test_dashboard_keeps_decisions_separate_from_creation(self):
         markup = Path("index.html").read_text(encoding="utf-8")
         css = Path("styles.css").read_text(encoding="utf-8")
 
         self.assertIn("dashboard-command-center", markup)
         self.assertIn("smart-pending-panel", markup)
-        self.assertIn("dashboard-action--primary", markup)
+        self.assertIn("global-create-menu", markup)
+        self.assertIn("Painel de decisões", markup)
+        self.assertIn("Casos em andamento", markup)
+        self.assertIn("Entrada de leads", markup)
+        self.assertNotIn('id="btn-novo-atendimento"', markup)
         self.assertIn(".dashboard-command-center", css)
 
     def test_dashboard_action_cards_have_distinct_operational_states(self):
