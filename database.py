@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
+import secrets
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -272,6 +275,23 @@ def init_database() -> None:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_atendimento_auditorias_attendance ON atendimento_auditorias(attendance_id, audit_type)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_portal_access (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attendance_id INTEGER NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TEXT NOT NULL,
+                revoked_at TEXT,
+                last_accessed_at TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_client_portal_access_token ON client_portal_access(token_hash)"
         )
         ensure_document_column(conn, "raw_text", "TEXT")
         ensure_document_column(conn, "extracted_data_json", "TEXT")
@@ -1686,6 +1706,95 @@ def retry_integration_event(event_id: int) -> None:
         if cursor.rowcount == 0:
             raise ValueError("Somente eventos com falha podem ser reenfileirados.")
         conn.commit()
+
+
+def create_client_portal_access(attendance_id: int, *, ttl_days: int = 7) -> dict[str, Any]:
+    """Issue one revocable, opaque client link and persist only its digest."""
+    if attendance_id <= 0 or not 1 <= ttl_days <= 30:
+        raise ValueError("Parâmetros de acesso ao portal inválidos.")
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    with get_connection() as conn:
+        attendance = conn.execute("SELECT id FROM atendimentos WHERE id = ?", (attendance_id,)).fetchone()
+        if not attendance:
+            raise ValueError("Atendimento não encontrado.")
+        # Um novo convite revoga o anterior: o escritório sempre consegue
+        # encerrar o acesso sem precisar conhecer ou persistir o token original.
+        conn.execute(
+            "UPDATE client_portal_access SET revoked_at = CURRENT_TIMESTAMP WHERE attendance_id = ? AND revoked_at IS NULL",
+            (attendance_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO client_portal_access (attendance_id, token_hash, expires_at)
+            VALUES (?, ?, datetime('now', ?))
+            """,
+            (attendance_id, token_hash, f"+{ttl_days} days"),
+        )
+        expires_at = conn.execute(
+            "SELECT expires_at FROM client_portal_access WHERE token_hash = ?", (token_hash,)
+        ).fetchone()["expires_at"]
+        conn.execute(
+            "INSERT INTO crm_atividades (attendance_id, activity_type, body) VALUES (?, ?, ?)",
+            (attendance_id, "portal_cliente", "Acesso temporário ao portal do cliente gerado."),
+        )
+    return {"access_token": raw_token, "expires_at": expires_at}
+
+
+def get_client_portal_view(raw_token: str) -> dict[str, Any] | None:
+    """Return a deliberately minimal view; never return document contents or PII."""
+    token = str(raw_token or "").strip()
+    if len(token) < 32 or len(token) > 256:
+        return None
+    candidate_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    with get_connection() as conn:
+        access = conn.execute(
+            """
+            SELECT p.id, p.attendance_id, p.token_hash, a.lead_name, a.flow_name, a.crm_stage, a.next_step
+            FROM client_portal_access p
+            JOIN atendimentos a ON a.id = p.attendance_id
+            WHERE p.token_hash = ? AND p.revoked_at IS NULL AND p.expires_at > CURRENT_TIMESTAMP
+            """,
+            (candidate_hash,),
+        ).fetchone()
+        if not access or not hmac.compare_digest(str(access["token_hash"]), candidate_hash):
+            return None
+        documents = conn.execute(
+            """
+            SELECT document_name, required, status
+            FROM atendimento_documentos
+            WHERE attendance_id = ?
+            ORDER BY required DESC, document_name COLLATE NOCASE
+            """,
+            (access["attendance_id"],),
+        ).fetchall()
+        conn.execute("UPDATE client_portal_access SET last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?", (access["id"],))
+
+    first_name = str(access["lead_name"] or "Cliente").strip().split(" ")[0][:40] or "Cliente"
+    stage = str(access["crm_stage"] or "triagem")
+    stage_labels = {
+        "triagem": "Análise inicial em andamento",
+        "qualificacao": "Caso em qualificação",
+        "conflito": "Conferência interna em andamento",
+        "proposta": "Proposta em preparação",
+        "documentos": "Documentos em conferência",
+        "concluido": "Etapa concluída",
+    }
+    safe_documents = [
+        {
+            "nome": str(row["document_name"]),
+            "obrigatorio": bool(row["required"]),
+            "situacao": "recebido" if str(row["status"]).lower() in {"recebido", "aprovado", "validado"} else "pendente",
+        }
+        for row in documents
+    ]
+    return {
+        "cliente": first_name,
+        "beneficio": str(access["flow_name"] or "Benefício previdenciário"),
+        "andamento": stage_labels.get(stage, "Caso em acompanhamento"),
+        "proxima_etapa": "O escritório entrará em contato caso seja necessária alguma providência adicional.",
+        "documentos": safe_documents,
+    }
 
 
 def add_integration_audit(*, event_id: int, action: str, details: dict[str, Any]) -> None:

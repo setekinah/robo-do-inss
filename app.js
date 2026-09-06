@@ -1287,6 +1287,8 @@ class AppEngine {
 
     const auditButton = document.getElementById('modal-docs-audit-button');
     if (auditButton) auditButton.onclick = () => this.runDocumentAudit();
+    const portalButton = document.getElementById('modal-client-portal-button');
+    if (portalButton) portalButton.onclick = () => this.generateClientPortalLink(portalButton);
     const dossierButton = document.getElementById('modal-retirement-dossier-button');
     if (dossierButton) {
       const isRetirement = this.currentLead?.flow_id === 'aposentadoria';
@@ -1335,6 +1337,29 @@ class AppEngine {
       card.appendChild(fileInput);
       list.appendChild(card);
     });
+  }
+
+  async generateClientPortalLink(button) {
+    if (!this.currentLead?.id) return;
+    const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.textContent = 'Gerando acesso…';
+    try {
+      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/portal-acesso`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ttl_days: 7})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.access_token) throw new Error(data.error || 'Não foi possível gerar o acesso.');
+      const link = `${window.location.origin}/portal.html#${data.access_token}`;
+      await navigator.clipboard.writeText(link);
+      button.textContent = 'Link copiado · válido por 7 dias';
+      this.showToast?.('Link seguro do cliente copiado. Ele não inclui dados do caso.', 'success');
+    } catch (error) {
+      button.textContent = 'Não foi possível copiar';
+      this.showToast?.(error.message || 'Não foi possível gerar o link do cliente.', 'error');
+    } finally {
+      window.setTimeout(() => { button.disabled = false; button.innerHTML = originalLabel; }, 3500);
+    }
   }
 
   renderDocumentAuditResult() {
