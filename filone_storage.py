@@ -15,10 +15,26 @@ ALLOWED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".
 ALLOWED_MIME_TYPES = {
     "application/pdf", "image/png", "image/jpeg", "image/tiff", "image/webp", "image/bmp",
 }
+FILONE_ENV_NAMES = ("FILONE_ENDPOINT", "FILONE_REGION", "FILONE_ACCESS_KEY", "FILONE_SECRET_KEY", "FILONE_BUCKET")
 
 
 class StorageConfigurationError(RuntimeError):
     """Raised only when a storage action needs missing Fil One configuration."""
+
+
+def load_local_filone_environment() -> None:
+    """Load only Fil One keys from the ignored local .env file, without logging values."""
+    env_file = Path(__file__).with_name(".env")
+    if not env_file.is_file():
+        return
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        if name in FILONE_ENV_NAMES and not os.environ.get(name):
+            os.environ[name] = value.strip().strip('"').strip("'")
 
 
 @dataclass(frozen=True)
@@ -31,8 +47,8 @@ class FilOneConfig:
 
     @classmethod
     def from_environment(cls) -> "FilOneConfig":
-        names = ("FILONE_ENDPOINT", "FILONE_REGION", "FILONE_ACCESS_KEY", "FILONE_SECRET_KEY", "FILONE_BUCKET")
-        values = {name: os.environ.get(name, "").strip() for name in names}
+        load_local_filone_environment()
+        values = {name: os.environ.get(name, "").strip() for name in FILONE_ENV_NAMES}
         missing = [name for name, value in values.items() if not value]
         if missing:
             raise StorageConfigurationError("Configuração Fil One ausente: " + ", ".join(missing))
