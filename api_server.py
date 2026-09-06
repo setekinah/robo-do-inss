@@ -1236,6 +1236,9 @@ ___________________________________________________
                 filename=str(body.get("filename", "")), mime_type=str(body.get("mime_type", "")),
                 size_bytes=body.get("size_bytes"),
             )
+        except StorageConfigurationError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 503)
+            return
         except (TypeError, ValueError) as exc:
             self._send_json({"success": False, "error": str(exc)}, 400)
             return
@@ -1275,8 +1278,10 @@ ___________________________________________________
             if not storage.exists(key=str(intent["storage_key"])):
                 raise ValueError("Objeto não encontrado no storage privado.")
             metadata = storage.get_metadata(key=str(intent["storage_key"]))
-            if metadata["size_bytes"] != int(intent["size_bytes"]) or metadata["mime_type"].lower().split(";", 1)[0] != str(intent["mime_type"]):
+            if metadata["size_bytes"] != int(intent["size_bytes"]):
                 raise ValueError("Metadados do objeto não correspondem ao upload autorizado.")
+            if metadata["mime_type"] and metadata["mime_type"].lower().split(";", 1)[0] != str(intent["mime_type"]):
+                raise ValueError("Tipo do objeto não corresponde ao upload autorizado.")
         except StorageConfigurationError as exc:
             self._send_json({"success": False, "error": str(exc)}, 503)
             return
