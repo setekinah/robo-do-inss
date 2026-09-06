@@ -1,5 +1,6 @@
 streamlit==1.55.0
 pydantic>=2.11,<3
+boto3>=1.35,<2
 
 # Inteligencia documental local: PDF nativo + OCR neural portatil (sem nuvem).
 pypdf>=6.0,<7

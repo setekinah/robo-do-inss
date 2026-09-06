@@ -9,6 +9,8 @@ import re
 import sys
 import urllib.parse
 import time
+import uuid
+from datetime import UTC, datetime, timedelta
 from email.parser import BytesParser
 from email.policy import default as email_policy
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -27,7 +29,7 @@ import docuseal_integration
 import document_audit
 import document_intelligence
 import document_rules
-import document_storage
+from filone_storage import FilOneStorageService, StorageConfigurationError, build_storage_key, validate_upload_metadata
 import official_catalog
 import office_settings
 import retirement_prefilter
@@ -232,6 +234,9 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         elif path.startswith("/api/atendimentos/") and path.endswith("/documentos"):
             attendance_id = path.split("/")[3]
             self.handle_get_documentos(int(attendance_id))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/download-url"):
+            parts = path.split("/")
+            self.handle_get_document_download_url(int(parts[3]), parts[5])
         elif path.startswith("/api/atendimentos/") and path.endswith("/contrato"):
             attendance_id = path.split("/")[3]
             self.handle_get_contrato(int(attendance_id))
@@ -306,6 +311,10 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_post_document_audit(int(path.split("/")[3]))
         elif path.startswith("/api/atendimentos/") and path.endswith("/dossie-probatorio"):
             self.handle_post_retirement_dossier(int(path.split("/")[3]))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/upload-intents"):
+            self.handle_post_document_upload_intent(int(path.split("/")[3]))
+        elif path.startswith("/api/documentos/upload-intents/") and path.endswith("/complete"):
+            self.handle_post_document_upload_complete(path.split("/")[4])
         elif path == "/api/triagem/executar":
             self.handle_post_triagem_executar()
         elif path == "/api/triagem/aposentadoria/pre-filtro":
@@ -1212,6 +1221,112 @@ ___________________________________________________
             "technical_notes": "Extrato CNIS NATIVO processado com OCR Neural + Resolução Automática de Indicadores INSS (PEXT/PREM)."
         })
 
+    def _get_owned_document(self, attendance_id: int, document_id: int):
+        with database.get_connection() as conn:
+            return conn.execute(
+                "SELECT id, document_code FROM atendimento_documentos WHERE id = ? AND attendance_id = ?",
+                (document_id, attendance_id),
+            ).fetchone()
+
+    def handle_post_document_upload_intent(self, attendance_id: int) -> None:
+        body = self._read_json_body()
+        try:
+            document_id = int(body.get("document_id"))
+            filename = validate_upload_metadata(
+                filename=str(body.get("filename", "")), mime_type=str(body.get("mime_type", "")),
+                size_bytes=body.get("size_bytes"),
+            )
+        except (TypeError, ValueError) as exc:
+            self._send_json({"success": False, "error": str(exc)}, 400)
+            return
+        if not self._get_owned_document(attendance_id, document_id):
+            self._send_json({"success": False, "error": "Documento não encontrado no caso autorizado."}, 404)
+            return
+        try:
+            storage = FilOneStorageService.from_environment()
+        except StorageConfigurationError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 503)
+            return
+        mime_type = str(body["mime_type"]).lower().split(";", 1)[0].strip()
+        intent_id = uuid.uuid4().hex
+        key = build_storage_key(attendance_id=attendance_id, document_id=document_id, filename=filename)
+        expires_at = (datetime.now(UTC) + timedelta(minutes=10)).isoformat()
+        database.create_document_upload_intent(
+            intent_id=intent_id, attendance_id=attendance_id, document_id=document_id,
+            original_filename=filename, mime_type=mime_type, size_bytes=int(body["size_bytes"]),
+            bucket=storage._config.bucket, storage_key=key, expires_at=expires_at,
+        )
+        # A URL é devolvida somente nesta resposta autenticada; não vai para logs nem banco.
+        self._send_json({"success": True, "intent_id": intent_id, "upload_url": storage.create_presigned_upload_url(key=key, content_type=mime_type, expires_in=600), "expires_in": 600})
+
+    def handle_post_document_upload_complete(self, intent_id: str) -> None:
+        intent = database.get_document_upload_intent(intent_id)
+        if not intent or intent["status"] != "PENDING_UPLOAD":
+            self._send_json({"success": False, "error": "Upload pendente não encontrado."}, 404)
+            return
+        if datetime.fromisoformat(intent["expires_at"]).astimezone(UTC) < datetime.now(UTC):
+            self._send_json({"success": False, "error": "Autorização de upload expirada."}, 409)
+            return
+        if not self._get_owned_document(int(intent["attendance_id"]), int(intent["document_id"])):
+            self._send_json({"success": False, "error": "Documento não encontrado no caso autorizado."}, 404)
+            return
+        try:
+            storage = FilOneStorageService.from_environment()
+            if not storage.exists(key=str(intent["storage_key"])):
+                raise ValueError("Objeto não encontrado no storage privado.")
+            metadata = storage.get_metadata(key=str(intent["storage_key"]))
+            if metadata["size_bytes"] != int(intent["size_bytes"]) or metadata["mime_type"].lower().split(";", 1)[0] != str(intent["mime_type"]):
+                raise ValueError("Metadados do objeto não correspondem ao upload autorizado.")
+        except StorageConfigurationError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 503)
+            return
+        except ValueError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 409)
+            return
+        checksum = str(metadata.get("etag") or "")
+        content_hash = hashlib.sha256(f"{intent['storage_key']}:{checksum}".encode()).hexdigest()
+        version_id = database.record_document_version(
+            attendance_id=int(intent["attendance_id"]), document_id=int(intent["document_id"]),
+            content_hash=content_hash, original_name=str(intent["original_filename"]), stored_path="",
+            raw_text="", extracted_data={}, source_type="filone_private_storage", extraction_status="nao_processado",
+            extraction_confidence=0.0, technical_notes="Armazenado privadamente; leitura técnica não executada nesta etapa.",
+            storage_provider="filone", bucket=str(intent["bucket"]), storage_key=str(intent["storage_key"]),
+            mime_type=str(intent["mime_type"]), size_bytes=int(intent["size_bytes"]), checksum=checksum,
+            processing_status="UPLOADED", metadata=metadata,
+        )
+        database.update_attendance_document(
+            document_id=int(intent["document_id"]), status="recebido",
+            notes="Arquivo privado recebido; aguardando leitura técnica.",
+            uploaded_files=[f"filone://{intent['bucket']}/{intent['storage_key']}"]
+        )
+        database.complete_document_upload_intent(intent_id)
+        database.invalidate_attendance_document_audits(int(intent["attendance_id"]))
+        self._send_json({"success": True, "document_id": int(intent["document_id"]), "version_id": version_id, "status": "UPLOADED"})
+
+    def handle_get_document_download_url(self, attendance_id: int, document_id_text: str) -> None:
+        try:
+            document_id = int(document_id_text)
+        except ValueError:
+            self._send_json({"success": False, "error": "Documento inválido."}, 400)
+            return
+        with database.get_connection() as conn:
+            version = conn.execute(
+                """SELECT v.storage_key FROM atendimento_documento_versoes v
+                   JOIN atendimento_documentos d ON d.id = v.document_id
+                   WHERE v.document_id = ? AND d.attendance_id = ? AND v.storage_provider = 'filone'
+                   ORDER BY v.id DESC LIMIT 1""",
+                (document_id, attendance_id),
+            ).fetchone()
+        if not version:
+            self._send_json({"success": False, "error": "Arquivo privado não encontrado."}, 404)
+            return
+        try:
+            url = FilOneStorageService.from_environment().create_presigned_download_url(key=str(version["storage_key"]), expires_in=300)
+        except StorageConfigurationError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 503)
+            return
+        self._send_json({"success": True, "download_url": url, "expires_in": 300})
+
     def _handle_uploaded_document_analysis(self) -> None:
         uploaded = self._read_uploaded_document()
         if uploaded is None:
@@ -1334,12 +1449,10 @@ ___________________________________________________
                 version_id = int(existing_version["id"])
                 duplicate_upload = True
             else:
-                stored_path = document_storage.save_document_bytes(
-                    attendance_id=attendance_id,
-                    document_code=str(document_row["document_code"]),
-                    original_name=file_name,
-                    content=file_content,
-                )
+                # O analisador trabalha somente no diretório temporário acima.
+                # Arquivos vinculados ao dossiê devem chegar pelo fluxo Fil One;
+                # nenhum PDF é persistido no notebook por esta rota.
+                stored_path = ""
                 version_id = database.record_document_version(
                     attendance_id=attendance_id,
                     document_id=document_id,

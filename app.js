@@ -1548,24 +1548,24 @@ class AppEngine {
     doc.status = 'recebido';
     this.renderModalDocs();
     try {
-      const formData = new FormData();
-      formData.append('file', file, file.name);
-      formData.append('document_code', doc.document_code || 'AUTO');
-      formData.append('attendance_id', String(this.currentLead.id));
-      formData.append('document_id', String(doc.id));
-      const response = await fetch('/api/documentos/analisar', { method: 'POST', body: formData });
+      const intentResponse = await fetch(`/api/atendimentos/${this.currentLead.id}/upload-intents`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_id: doc.id, filename: file.name, mime_type: file.type, size_bytes: file.size })
+      });
+      const intent = await intentResponse.json();
+      if (!intentResponse.ok || !intent.success) throw new Error(intent.error || 'Não foi possível autorizar o envio privado.');
+      const storageResponse = await fetch(intent.upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      if (!storageResponse.ok) throw new Error('O armazenamento privado recusou o arquivo. Verifique a configuração CORS do bucket.');
+      const response = await fetch(`/api/documentos/upload-intents/${intent.intent_id}/complete`, { method: 'POST' });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || data.technical_notes || 'Falha na leitura documental.');
-      doc.status = data.dossier_document?.status || 'recebido';
-      doc.extraction_status = data.extraction_status;
-      doc.extraction_confidence = data.extraction_confidence;
-      doc.technical_notes = data.technical_notes;
+      if (!response.ok || !data.success) throw new Error(data.error || 'Falha ao confirmar o arquivo no armazenamento privado.');
+      doc.status = 'recebido';
+      doc.extraction_status = 'nao_processado';
+      doc.technical_notes = 'Arquivo privado recebido; leitura técnica será uma etapa posterior.';
       this.currentDocumentAudit = null;
       this.currentRetirementDossier = null;
       this.renderModalDocs();
-      this.renderCNISDashboard(data);
-      this.switchTab('ocr');
-      alert(`Documento incluído no dossiê. Leitura: ${data.extraction_status}.`);
+      alert('Documento incluído no dossiê e armazenado privadamente. A leitura técnica não é executada nesta etapa.');
     } catch (error) {
       doc.status = originalStatus;
       this.renderModalDocs();
