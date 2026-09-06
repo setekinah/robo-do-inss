@@ -270,13 +270,14 @@ class AppEngine {
   }
 
   switchFinanceTab(tab) {
+    const unavailable = ['—', '—', '—', '—'];
     const views = {
-      geral: ['VISÃO GERAL', 'O escritório em números', 'Receita, carteira, margem e recebimentos em uma leitura operacional.', ['R$ 4.122.000', 'R$ 2.213.580', 'R$ 817.810', 'R$ 324.270']],
-      receita: ['RECEITA', 'De onde vem o dinheiro', 'Faturamento realizado, meios de pagamento e origem dos contratos.', ['R$ 301.942', 'R$ 184.468', 'R$ 852.209', '1.753']],
-      inadimplencia: ['INADIMPLÊNCIA', 'Recebimentos sob atenção', 'Acompanhe parcelas em aberto e priorize ações de recuperação.', ['68 clientes', 'R$ 324.270', '12,3%', 'R$ 74.527']],
-      carteira: ['CARTEIRA', 'Contratos e clientes', 'Contratos ativos, valor contratado e ticket médio por unidade.', ['473 contratos', 'R$ 4.122.000', 'R$ 8.250', 'R$ 1.800.000']],
-      custos: ['BENEFÍCIOS E CUSTOS', 'Onde o escritório gera resultado', 'Resultado e participação por tipo de benefício previdenciário.', ['Aposentadoria', 'R$ 381.248', '17,2%', '4 benefícios']],
-      equipe: ['EQUIPE', 'Produção por responsável', 'Carteira e receita por responsável, com leitura de risco.', ['4 sócios', 'R$ 637.602', 'R$ 561.521', 'R$ 491.760']],
+      geral: ['VISÃO GERAL', 'Financeiro ainda não integrado', 'Conecte uma fonte financeira para exibir carteira, receita, resultado e inadimplência reais.', unavailable],
+      receita: ['RECEITA', 'Receita ainda não integrada', 'Os dados de faturamento serão exibidos quando houver uma fonte financeira configurada.', unavailable],
+      inadimplencia: ['INADIMPLÊNCIA', 'Inadimplência ainda não integrada', 'Valores em aberto dependem da integração com uma fonte financeira real.', unavailable],
+      carteira: ['CARTEIRA', 'Carteira financeira ainda não integrada', 'Contratos e valores financeiros serão exibidos após integração da fonte correspondente.', unavailable],
+      custos: ['BENEFÍCIOS E CUSTOS', 'Custos ainda não integrados', 'Custos e resultados por benefício dependem de dados financeiros reais.', unavailable],
+      equipe: ['EQUIPE', 'Indicadores financeiros da equipe não integrados', 'Produção financeira por responsável será exibida após integração dos dados.', unavailable],
     };
     const view = views[tab] || views.geral;
     document.querySelectorAll('[data-finance-tab]').forEach((button) => button.classList.toggle('active', button.dataset.financeTab === tab));
@@ -807,7 +808,7 @@ class AppEngine {
     if (status.officeName) {
       document.getElementById('sidebar-office-name').textContent = status.officeName;
       document.getElementById('user-display-name').textContent = status.officeName;
-      document.getElementById('user-display-oab').textContent = `OAB: ${status.oab || '524387'}`;
+      document.getElementById('user-display-oab').textContent = status.oab ? `OAB: ${status.oab}` : 'OAB não informada';
       document.getElementById('user-avatar-initials').textContent = status.officeName.substring(0, 4).toUpperCase();
     }
     this.hideLoginOverlay();
@@ -894,10 +895,15 @@ class AppEngine {
 
   async submitRegistration() {
     audio.success();
-    const officeName = document.getElementById('office-name').value || 'MADE';
-    const officeOab = document.getElementById('office-oab').value || '524387';
+    const officeName = document.getElementById('office-name').value.trim();
+    const officeOab = document.getElementById('office-oab').value.trim();
     const email = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value;
+
+    if (!officeName || !officeOab || !email || !password) {
+      alert('Preencha nome do escritório, OAB, e-mail e senha para criar a conta.');
+      return;
+    }
 
     try {
       const response = await fetch('/api/auth/register', {
@@ -1200,12 +1206,21 @@ class AppEngine {
         card.className = 'lead-card';
         card.dataset.id = lead.id;
 
-        const val = (lead.estimated_total_value || 12500).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const estimatedValue = Number(lead.estimated_total_value);
+        const hasEstimatedValue =
+          lead.estimated_total_value !== null &&
+          lead.estimated_total_value !== undefined &&
+          lead.estimated_total_value !== '' &&
+          Number.isFinite(estimatedValue);
+
+        const val = hasEstimatedValue
+          ? estimatedValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          : 'Valor não informado';
 
         card.innerHTML = `
-          <span class="card-tag tag-aposentadoria">${escapeHTML(lead.flow_name || 'Aposentadoria')}</span>
+          <span class="card-tag tag-aposentadoria">${escapeHTML(lead.flow_name || 'Benefício não informado')}</span>
           <button class="card-title card-title-button" type="button">${escapeHTML(lead.lead_name)}</button>
-          <div class="card-sub"><i class="fa-solid fa-phone"></i> ${escapeHTML(lead.lead_phone || '(11) 98765-4321')}</div>
+          <div class="card-sub"><i class="fa-solid fa-phone"></i> ${escapeHTML(lead.lead_phone || 'Telefone não informado')}</div>
           <div class="card-value">${val}</div>
           <div class="card-actions">
             <button class="btn-secondary lead-details-button" type="button" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
@@ -1273,13 +1288,9 @@ class AppEngine {
       if (!res.ok) throw new Error('Não foi possível carregar os detalhes do lead.');
       this.currentLead = await res.json();
     } catch (e) {
-      this.currentLead = this.atendimentos.find(a => a.id === leadId) || {
-        id: leadId,
-        lead_name: "Cliente Exemplo",
-        flow_name: "Aposentadoria Programada",
-        activities: [],
-        documents: []
-      };
+      this.currentLead = null;
+      alert(e.message || 'Não foi possível carregar os detalhes do caso.');
+      return;
     }
 
     document.getElementById('modal-lead-name').textContent = this.currentLead.lead_name || 'Lead previdenciário';
@@ -1308,11 +1319,17 @@ class AppEngine {
     const list = document.getElementById('modal-activities-list');
     if (!list) return;
 
-    const activities = this.currentLead.activities || [
-      { activity_type: 'nota', body: 'Atendimento inicial de triagem concluído.', created_at: 'Hoje' }
-    ];
+    const activities = Array.isArray(this.currentLead?.activities)
+      ? this.currentLead.activities
+      : [];
 
     list.innerHTML = '';
+
+    if (!activities.length) {
+      list.innerHTML = '<p style="color:var(--text-muted); margin:0;">Nenhuma atividade registrada.</p>';
+      return;
+    }
+
     activities.forEach(act => {
       const item = document.createElement('div');
       item.style.padding = '0.7rem';
@@ -1396,12 +1413,9 @@ class AppEngine {
     const list = document.getElementById('modal-docs-list');
     if (!list) return;
 
-    const docs = this.currentLead.documents || [
-      { id: 1, document_name: 'Documento de Identidade com Foto', status: 'aprovado' },
-      { id: 2, document_name: 'CPF', status: 'aprovado' },
-      { id: 3, document_name: 'CNIS - Extrato Previdenciário', status: 'recebido' },
-      { id: 4, document_name: 'Carteira de Trabalho (CTPS)', status: 'pendente' }
-    ];
+    const docs = Array.isArray(this.currentLead?.documents)
+      ? this.currentLead.documents
+      : [];
 
     const completed = docs.filter(d => d.status === 'aprovado').length;
     document.getElementById('modal-docs-progress').textContent = `${completed} de ${docs.length} Aprovados`;
@@ -1421,6 +1435,12 @@ class AppEngine {
     this.renderEvidenceMatrix();
 
     list.innerHTML = '';
+
+    if (!docs.length) {
+      list.innerHTML = '<p style="color:var(--text-muted); margin:0;">Nenhum documento cadastrado neste caso.</p>';
+      return;
+    }
+
     docs.forEach(doc => {
       const card = document.createElement('div');
       card.className = 'doc-item-card';
@@ -1701,22 +1721,26 @@ class AppEngine {
   async loadModalContract() {
     if (!this.currentLead) return;
 
+    const contractText = document.getElementById('modal-contract-text');
+    const input = document.getElementById('modal-signature-email');
+
+    if (contractText) contractText.textContent = 'Carregando contrato...';
+    if (input) input.value = this.currentLead?.lead_email || '';
+
     try {
       const res = await fetch(`/api/atendimentos/${this.currentLead.id}/contrato`);
       const data = await res.json();
-      document.getElementById('modal-contract-text').textContent = data.contract_text;
-      const input = document.getElementById('modal-signature-email');
-      if (input) input.value = this.currentLead?.lead_email || '';
+
+      if (!res.ok || !data.contract_text) {
+        throw new Error(data.error || 'Contrato não disponível.');
+      }
+
+      if (contractText) contractText.textContent = data.contract_text;
     } catch (e) {
-      document.getElementById('modal-contract-text').textContent = `
-CONTRATO DE PRESTAÇÃO DE SERVIÇOS ADVOCATÍCIOS PREVIDENCIÁRIOS
-
-CONTRATADA: MADE Advocacia (OAB: 524387)
-CONTRATANTE: ${this.currentLead.lead_name}
-
-OBJETO: Prestação de serviços advocatícios para o benefício de ${this.currentLead.flow_name}.
-HONORÁRIOS: 30% sobre o proveito econômico obtido.
-`;
+      console.error('Erro ao carregar contrato:', e);
+      if (contractText) {
+        contractText.textContent = 'Contrato indisponível. Não foi possível carregar o conteúdo real deste caso.';
+      }
     }
   }
 

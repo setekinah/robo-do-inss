@@ -74,11 +74,11 @@
           </div>
           <div class="form-group">
             <label for="office-name">Nome do escritório</label>
-            <input type="text" id="office-name" placeholder="Ex: MADE Advocacia" value="MADE" required>
+            <input type="text" id="office-name" placeholder="Nome do escritório" required>
           </div>
           <div class="form-group">
             <label for="office-oab">Número da OAB</label>
-            <input type="text" id="office-oab" placeholder="Ex: 524387/SP" value="524387" required>
+            <input type="text" id="office-oab" placeholder="Número da OAB / UF" required>
           </div>
           <div class="form-actions">
             <button type="button" class="btn-secondary" data-action="onboarding-step" data-step="1">Voltar</button>
@@ -204,7 +204,7 @@
           <button class="btn-primary" style="background: var(--primary-blue);" data-action="print"><i class="fa-solid fa-print"></i> Imprimir Contrato</button>
         </div>
         <pre id="modal-contract-text" style="background: var(--bg-dark); padding: 1.2rem; border-radius: var(--radius-sm); border: 1px solid var(--glass-border); font-family: var(--font-code); font-size: 0.85rem; color: #fff; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></pre>
-        <div class="form-group" style="margin-top:1rem;"><label for="modal-signature-email">E-mail do contratante para assinatura</label><input id="modal-signature-email" type="email" placeholder="cliente@exemplo.com"></div>
+        <div class="form-group" style="margin-top:1rem;"><label for="modal-signature-email">E-mail do contratante para assinatura</label><input id="modal-signature-email" type="email" placeholder="nome@dominio.com.br"></div>
         <p id="modal-signature-feedback" class="triage-error" role="alert"></p>
         <button class="btn-primary" data-action="send-signature"><i class="fa-solid fa-paper-plane"></i> Enviar para assinatura</button>
       </div>
@@ -286,7 +286,7 @@
         <div class="user-avatar" id="user-avatar-initials">MADE</div>
         <div class="user-info">
           <h4 id="user-display-name">Escritório MADE</h4>
-          <p id="user-display-oab">OAB: 524387</p>
+          <p id="user-display-oab">OAB não informada</p>
         </div>
       </div>
     </aside>
@@ -404,21 +404,42 @@
       <section id="view-financeiro" class="tab-view" style="display: none;">
         <div class="finance-shell">
           <header class="finance-header">
-            <div class="finance-heading"><div class="finance-mark"><i class="fa-solid fa-scale-balanced"></i></div><div><span class="finance-overline">SOFI.IA PREVI · GESTÃO</span><h1>Painel financeiro</h1><p id="finance-caption">Visão consolidada do escritório · dados demonstrativos</p></div></div>
-            <span class="finance-status"><i class="fa-solid fa-circle"></i> 12 meses fechados</span>
+            <div class="finance-heading"><div class="finance-mark"><i class="fa-solid fa-scale-balanced"></i></div><div><span class="finance-overline">SOFI.IA PREVI · GESTÃO</span><h1>Painel financeiro</h1><p id="finance-caption">Integração financeira ainda não configurada</p></div></div>
+            <span class="finance-status"><i class="fa-solid fa-circle"></i> Dados não integrados</span>
           </header>
           <div class="finance-tabs" role="tablist" aria-label="Visões financeiras">
             <button class="active" type="button" data-finance-tab="geral">Visão geral</button><button type="button" data-finance-tab="receita">Receita</button><button type="button" data-finance-tab="inadimplencia">Inadimplência</button><button type="button" data-finance-tab="carteira">Carteira</button><button type="button" data-finance-tab="custos">Áreas e custos</button><button type="button" data-finance-tab="equipe">Equipe</button>
           </div>
           <div class="finance-title"><span id="finance-kicker">VISÃO GERAL</span><h2 id="finance-title">O escritório em números</h2><p id="finance-description">Receita, carteira, margem e recebimentos em uma leitura operacional.</p></div>
           <div class="finance-kpis">
-            <article class="finance-kpi cyan"><span>CARTEIRA CONTRATADA</span><strong id="finance-kpi-1">R$ 4.122.000</strong><small id="finance-kpi-1-note">473 contratos ativos</small></article>
-            <article class="finance-kpi teal"><span>RECEITA REALIZADA</span><strong id="finance-kpi-2">R$ 2.213.580</strong><small id="finance-kpi-2-note">↗ 31,4% nos últimos 12 meses</small></article>
-            <article class="finance-kpi violet"><span>LUCRO OPERACIONAL</span><strong id="finance-kpi-3">R$ 817.810</strong><small id="finance-kpi-3-note">margem de 36,9%</small></article>
-            <article class="finance-kpi pink"><span>INADIMPLÊNCIA</span><strong id="finance-kpi-4">R$ 324.270</strong><small id="finance-kpi-4-note">12,3% · 68 clientes</small></article>
+            <article class="finance-kpi cyan"><span>CARTEIRA CONTRATADA</span><strong id="finance-kpi-1">—</strong><small id="finance-kpi-1-note">Dados não integrados</small></article>
+            <article class="finance-kpi teal"><span>RECEITA REALIZADA</span><strong id="finance-kpi-2">—</strong><small id="finance-kpi-2-note">Dados não integrados</small></article>
+            <article class="finance-kpi violet"><span>LUCRO OPERACIONAL</span><strong id="finance-kpi-3">—</strong><small id="finance-kpi-3-note">Dados não integrados</small></article>
+            <article class="finance-kpi pink"><span>INADIMPLÊNCIA</span><strong id="finance-kpi-4">—</strong><small id="finance-kpi-4-note">Dados não integrados</small></article>
           </div>
-          <article class="finance-panel finance-main-chart"><div class="finance-panel-title"><div><h3 id="finance-chart-title">Receita, custo e resultado</h3><p>Valores demonstrativos por mês</p></div><span>12 meses <i class="fa-solid fa-chevron-down"></i></span></div><div class="finance-legend"><b class="teal-dot">Receita realizada</b><b class="violet-dot">Custo operacional</b><b class="line-dot">Resultado operacional</b></div><svg class="finance-chart" viewBox="0 0 1100 260" preserveAspectRatio="none" aria-label="Gráfico financeiro demonstrativo"><g class="finance-grid"><path d="M0 35H1100M0 90H1100M0 145H1100M0 200H1100"/></g><g class="finance-bars teal-bars"><path d="M55 205V130H82V205M145 205V115H172V205M235 205V122H262V205M325 205V104H352V205M415 205V92H442V205M505 205V80H532V205M595 205V88H622V205M685 205V65H712V205M775 205V55H802V205M865 205V46H892V205M955 205V35H982V205"/></g><g class="finance-bars violet-bars"><path d="M84 205V160H111V205M174 205V145H201V205M264 205V148H291V205M354 205V135H381V205M444 205V123H471V205M534 205V115H561V205M624 205V120H651V205M714 205V105H741V205M804 205V98H831V205M894 205V92H921V205M984 205V85H1011V205"/></g><polyline class="finance-line" points="68,175 158,155 248,164 338,145 428,128 518,112 608,120 698,96 788,83 878,70 968,55"/><g class="finance-axis"><text x="55" y="240">Mai</text><text x="235" y="240">Jul</text><text x="415" y="240">Set</text><text x="595" y="240">Nov</text><text x="775" y="240">Jan</text><text x="955" y="240">Mar</text></g></svg></article>
-          <div class="finance-bottom"><article class="finance-panel"><div class="finance-panel-title"><div><h3>Curva de faturamento</h3><p>Receita realizada mês a mês</p></div></div><svg class="finance-mini-chart" viewBox="0 0 540 190" preserveAspectRatio="none"><path class="finance-area" d="M0 166 L60 155 L120 140 L180 100 L240 115 L300 98 L360 73 L420 55 L480 40 L540 24 V190 H0Z"/><polyline class="finance-line" points="0,166 60,155 120,140 180,100 240,115 300,98 360,73 420,55 480,40 540,24"/></svg></article><article class="finance-panel finance-composition"><div class="finance-panel-title"><div><h3>Composição da receita por benefício</h3><p>Últimos 12 meses · 4 principais benefícios</p></div></div><div class="finance-donut"></div><ul><li><i class="teal-dot"></i>Aposentadoria <b>46,8%</b></li><li><i class="violet-dot"></i>BPC/LOAS <b>26,1%</b></li><li><i class="blue-dot"></i>Auxílio por incapacidade <b>15,2%</b></li><li><i class="gold-dot"></i>Auxílio-Acidente <b>11,9%</b></li></ul></article></div>
+          <article class="finance-panel finance-main-chart">
+  <div class="finance-panel-title">
+    <div>
+      <h3 id="finance-chart-title">Dados financeiros</h3>
+      <p>Gráfico indisponível até que uma fonte financeira real seja integrada.</p>
+    </div>
+  </div>
+</article>
+          <div class="finance-bottom"><article class="finance-panel">
+  <div class="finance-panel-title">
+    <div>
+      <h3>Curva de faturamento</h3>
+      <p>Dados não integrados.</p>
+    </div>
+  </div>
+</article><article class="finance-panel finance-composition">
+  <div class="finance-panel-title">
+    <div>
+      <h3>Composição da receita por benefício</h3>
+      <p>Dados não integrados.</p>
+    </div>
+  </div>
+</article></div>
         </div>
       </section>
 
