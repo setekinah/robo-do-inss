@@ -303,6 +303,20 @@ def init_database() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS document_upload_intents (
+                id TEXT PRIMARY KEY, attendance_id INTEGER NOT NULL, document_id INTEGER NOT NULL,
+                original_filename TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+                storage_provider TEXT NOT NULL, bucket TEXT NOT NULL, storage_key TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT 'PENDING_UPLOAD', expires_at TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP, completed_at TEXT,
+                FOREIGN KEY(attendance_id) REFERENCES atendimentos(id),
+                FOREIGN KEY(document_id) REFERENCES atendimento_documentos(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_upload_intents_document ON document_upload_intents(document_id, status)")
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS client_portal_access (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 attendance_id INTEGER NOT NULL,
@@ -324,6 +338,12 @@ def init_database() -> None:
         ensure_document_column(conn, "extraction_status", "TEXT")
         ensure_document_column(conn, "extraction_confidence", "REAL")
         ensure_document_column(conn, "technical_notes", "TEXT")
+        for column_name, column_type in (
+            ("storage_provider", "TEXT"), ("bucket", "TEXT"), ("storage_key", "TEXT"),
+            ("mime_type", "TEXT"), ("size_bytes", "INTEGER"), ("checksum", "TEXT"),
+            ("processing_status", "TEXT"), ("uploaded_at", "TEXT"), ("metadata_json", "TEXT"),
+        ):
+            ensure_document_version_column(conn, column_name, column_type)
         backfill_document_checklists(conn)
         conn.commit()
 
@@ -346,6 +366,12 @@ def ensure_document_column(conn: sqlite3.Connection, column_name: str, column_ty
         conn.execute(
             f"ALTER TABLE atendimento_documentos ADD COLUMN {column_name} {column_type}"
         )
+
+
+def ensure_document_version_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(atendimento_documento_versoes)").fetchall()}
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE atendimento_documento_versoes ADD COLUMN {column_name} {column_type}")
 
 
 def ensure_task_column(conn: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -1119,6 +1145,14 @@ def record_document_version(
     extraction_status: str,
     extraction_confidence: float,
     technical_notes: str,
+    storage_provider: str | None = None,
+    bucket: str | None = None,
+    storage_key: str | None = None,
+    mime_type: str | None = None,
+    size_bytes: int | None = None,
+    checksum: str | None = None,
+    processing_status: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> int:
     """Persist an immutable extraction snapshot before updating the live checklist."""
     with get_connection() as conn:
@@ -1127,16 +1161,44 @@ def record_document_version(
             INSERT INTO atendimento_documento_versoes (
                 attendance_id, document_id, content_hash, original_name, stored_path,
                 raw_text, extracted_data_json, source_type, extraction_status,
-                extraction_confidence, technical_notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                extraction_confidence, technical_notes, storage_provider, bucket,
+                storage_key, mime_type, size_bytes, checksum, processing_status,
+                uploaded_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
             """,
             (
                 attendance_id, document_id, content_hash, original_name, stored_path,
                 raw_text, json.dumps(extracted_data, ensure_ascii=False), source_type,
-                extraction_status, extraction_confidence, technical_notes,
+                extraction_status, extraction_confidence, technical_notes, storage_provider,
+                bucket, storage_key, mime_type, size_bytes, checksum, processing_status,
+                json.dumps(metadata or {}, ensure_ascii=True),
             ),
         )
         return int(cursor.lastrowid)
+
+
+def create_document_upload_intent(
+    *, intent_id: str, attendance_id: int, document_id: int, original_filename: str,
+    mime_type: str, size_bytes: int, bucket: str, storage_key: str, expires_at: str,
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO document_upload_intents (
+                id, attendance_id, document_id, original_filename, mime_type, size_bytes,
+                storage_provider, bucket, storage_key, expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'filone', ?, ?, ?)""",
+            (intent_id, attendance_id, document_id, original_filename, mime_type, size_bytes, bucket, storage_key, expires_at),
+        )
+
+
+def get_document_upload_intent(intent_id: str) -> sqlite3.Row | None:
+    with get_connection() as conn:
+        return conn.execute("SELECT * FROM document_upload_intents WHERE id = ?", (intent_id,)).fetchone()
+
+
+def complete_document_upload_intent(intent_id: str) -> None:
+    with get_connection() as conn:
+        conn.execute("UPDATE document_upload_intents SET status = 'UPLOADED', completed_at = CURRENT_TIMESTAMP WHERE id = ?", (intent_id,))
 
 
 def document_evidence_summary(attendance_id: int) -> dict[int, dict[str, Any]]:
