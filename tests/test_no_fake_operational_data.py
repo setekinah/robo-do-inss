@@ -46,6 +46,8 @@ class NoFakeOperationalDataTests(unittest.TestCase):
         self.assertNotIn('value="524387"', self.html)
         self.assertNotIn('OAB: 524387', self.html)
         self.assertNotIn('MADE Advocacia', self.html)
+        self.assertNotIn('>MADE</div>', self.html)
+        self.assertNotIn('Escritório MADE', self.html)
         self.assertIn('placeholder="Nome do escritório"', self.html)
         self.assertIn('placeholder="Número da OAB / UF"', self.html)
 
