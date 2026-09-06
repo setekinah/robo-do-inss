@@ -220,6 +220,9 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         elif path.startswith("/api/atendimentos/") and path.endswith("/auditoria-documental"):
             attendance_id = path.split("/")[3]
             self.handle_get_document_audit(int(attendance_id))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/matriz-provas"):
+            attendance_id = path.split("/")[3]
+            self.handle_get_document_evidence_matrix(int(attendance_id))
         elif path.startswith("/api/atendimentos/") and path.endswith("/dossie-probatorio"):
             attendance_id = path.split("/")[3]
             self.handle_get_retirement_dossier(int(attendance_id))
@@ -650,6 +653,14 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             )
             return
         self._send_json({"success": True, **audit})
+
+    def handle_get_document_evidence_matrix(self, attendance_id: int) -> None:
+        with database.get_connection() as conn:
+            exists = conn.execute("SELECT 1 FROM atendimentos WHERE id = ?", (attendance_id,)).fetchone()
+        if not exists:
+            self._send_json({"success": False, "error": "Atendimento não encontrado."}, 404)
+            return
+        self._send_json({"success": True, "matriz": database.build_document_evidence_matrix(attendance_id)})
 
     def handle_post_document_audit(self, attendance_id: int) -> None:
         """Generate an evidence-only CNIS × CTPS audit for an existing dossier."""

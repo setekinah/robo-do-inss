@@ -47,6 +47,16 @@ class DocumentEvidenceVersionTests(unittest.TestCase):
         self.assertIsNotNone(database.get_document_version_by_hash(self.document_id, hashlib.sha256(b"primeira leitura").hexdigest()))
         self.assertNotEqual(first, second)
 
+    def test_matrix_marks_received_evidence_without_claiming_eligibility(self) -> None:
+        self._record("leitura", "/privado/v1.pdf")
+
+        matrix = database.build_document_evidence_matrix(self.attendance_id)
+
+        row = next(row for row in matrix["evidencias"] if row["documento_id"] == self.document_id)
+        self.assertEqual(row["estado"], "recebida")
+        self.assertEqual(row["versoes"], 1)
+        self.assertIn("não conclui direito", matrix["aviso"])
+
 
 if __name__ == "__main__":
     unittest.main()

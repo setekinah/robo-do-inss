@@ -141,6 +141,7 @@ class AppEngine {
     this.atendimentos = [];
     this.currentLead = null;
     this.currentRetirementDossier = null;
+    this.currentEvidenceMatrix = null;
     this.smartPending = { items: [], summary: {} };
     this.stats = null;
     this.dashboardFilters = { stage: '', benefit: '' };
@@ -1169,6 +1170,7 @@ class AppEngine {
 
     this.renderModalHistory();
     this.renderModalDocs();
+    this.loadEvidenceMatrix();
     this.renderModalStrategy();
     this.loadModalContract();
 
@@ -1299,6 +1301,7 @@ class AppEngine {
     }
     this.renderDocumentAuditResult();
     this.renderRetirementDossier();
+    this.renderEvidenceMatrix();
 
     list.innerHTML = '';
     docs.forEach(doc => {
@@ -1342,6 +1345,32 @@ class AppEngine {
       card.appendChild(fileInput);
       list.appendChild(card);
     });
+  }
+
+  async loadEvidenceMatrix() {
+    if (!this.currentLead?.id) return;
+    try {
+      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/matriz-provas`);
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Matriz indisponível.');
+      this.currentEvidenceMatrix = data.matriz;
+      this.renderEvidenceMatrix();
+    } catch (_) {
+      this.currentEvidenceMatrix = null;
+      this.renderEvidenceMatrix();
+    }
+  }
+
+  renderEvidenceMatrix() {
+    const container = document.getElementById('modal-evidence-matrix');
+    if (!container) return;
+    const matrix = this.currentEvidenceMatrix;
+    if (!matrix) { container.hidden = true; container.innerHTML = ''; return; }
+    const summary = matrix.resumo || {};
+    const rows = Array.isArray(matrix.evidencias) ? matrix.evidencias : [];
+    const statusLabel = {recebida: 'Recebida', pendente: 'Pendente', revisar: 'Revisar'};
+    container.hidden = false;
+    container.innerHTML = `<div class="evidence-matrix-header"><div><strong><i class="fa-solid fa-diagram-project"></i> Matriz de provas</strong><span>${escapeHTML(summary.prontidao || 'Em organização')}</span></div><small>${Number(summary.cobertos || 0)}/${Number(summary.obrigatorios || 0)} obrigatórios cobertos · ${escapeHTML(matrix.cruzamento || 'Ainda não cruzado')}</small></div><div class="evidence-matrix-rows">${rows.map((row) => `<div class="evidence-matrix-row"><div><strong>${escapeHTML(row.documento)}</strong><small>${escapeHTML(row.papel)}</small></div><span>${Number(row.versoes || 0)} versão(ões)</span><span class="evidence-state evidence-state--${escapeHTML(row.estado)}">${escapeHTML(statusLabel[row.estado] || 'Pendente')}</span></div>`).join('')}</div><small class="doc-audit-note">${escapeHTML(matrix.aviso || '')}</small>`;
   }
 
   async generateClientPortalLink(button) {
