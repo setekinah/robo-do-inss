@@ -5,7 +5,7 @@ import unittest
 
 from filone_storage import (
     FilOneConfig, FilOneStorageService, StorageConfigurationError, build_storage_key,
-    validate_upload_metadata,
+    configured_max_document_bytes, validate_upload_metadata,
 )
 
 
@@ -32,6 +32,23 @@ class FakeS3:
         self.deleted.append(Key)
         self.objects.pop(Key, None)
 
+    def list_objects_v2(self, Bucket, Prefix, MaxKeys):
+        return {"Contents": [{"Key": key} for key in self.objects if key.startswith(Prefix)][:MaxKeys]}
+
+
+class AccessDeniedHeadS3(FakeS3):
+    def head_object(self, Bucket, Key):
+        error = Exception("access denied")
+        error.response = {"Error": {"Code": "AccessDenied"}}
+        raise error
+
+
+class AccessDeniedEverywhereS3(AccessDeniedHeadS3):
+    def list_objects_v2(self, Bucket, Prefix, MaxKeys):
+        error = Exception("access denied")
+        error.response = {"Error": {"Code": "AccessDenied"}}
+        raise error
+
 
 class FilOneStorageTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -57,6 +74,20 @@ class FilOneStorageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_upload_metadata(filename="arquivo.pdf", mime_type="application/pdf", size_bytes=51 * 1024 * 1024)
 
+    def test_maximum_size_policy_is_explicit_and_cannot_be_relaxed(self) -> None:
+        original = os.environ.get("FILONE_MAX_DOCUMENT_MB")
+        try:
+            os.environ["FILONE_MAX_DOCUMENT_MB"] = "12"
+            self.assertEqual(configured_max_document_bytes(), 12 * 1024 * 1024)
+            os.environ["FILONE_MAX_DOCUMENT_MB"] = "51"
+            with self.assertRaises(StorageConfigurationError):
+                configured_max_document_bytes()
+        finally:
+            if original is None:
+                os.environ.pop("FILONE_MAX_DOCUMENT_MB", None)
+            else:
+                os.environ["FILONE_MAX_DOCUMENT_MB"] = original
+
     def test_missing_configuration_fails_clearly(self) -> None:
         original = dict(os.environ)
         try:
@@ -67,6 +98,19 @@ class FilOneStorageTests(unittest.TestCase):
         finally:
             os.environ.clear()
             os.environ.update(original)
+
+    def test_access_denied_head_uses_exact_list_fallback(self) -> None:
+        key = "private/missing.pdf"
+        client = AccessDeniedHeadS3()
+        client.objects[key] = {"ContentLength": 1, "ContentType": "application/pdf", "ETag": '"etag"', "Metadata": {}}
+        service = FilOneStorageService(self.service._config, client)
+        self.assertTrue(service.exists(key=key))
+        self.assertFalse(service.exists(key="private/absent.pdf"))
+
+    def test_access_denied_list_is_not_masked_as_absence(self) -> None:
+        service = FilOneStorageService(self.service._config, AccessDeniedEverywhereS3())
+        with self.assertRaises(Exception):
+            service.exists(key="private/absent.pdf")
 
 
 if __name__ == "__main__":

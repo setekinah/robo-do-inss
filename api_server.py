@@ -1283,15 +1283,19 @@ ___________________________________________________
         except ValueError as exc:
             self._send_json({"success": False, "error": str(exc)}, 409)
             return
-        checksum = str(metadata.get("etag") or "")
-        content_hash = hashlib.sha256(f"{intent['storage_key']}:{checksum}".encode()).hexdigest()
+        storage_etag = str(metadata.get("etag") or "")
+        # content_hash is a legacy NOT NULL column for OCR-derived content
+        # hashes. A remote object was not hashed by this backend, so preserve a
+        # unique storage version identifier rather than mislabeling it as a
+        # document-content SHA-256. The provider ETag lives in storage_etag.
+        content_hash = f"storage-object:{intent_id}"
         version_id = database.record_document_version(
             attendance_id=int(intent["attendance_id"]), document_id=int(intent["document_id"]),
             content_hash=content_hash, original_name=str(intent["original_filename"]), stored_path="",
             raw_text="", extracted_data={}, source_type="filone_private_storage", extraction_status="nao_processado",
             extraction_confidence=0.0, technical_notes="Armazenado privadamente; leitura técnica não executada nesta etapa.",
             storage_provider="filone", bucket=str(intent["bucket"]), storage_key=str(intent["storage_key"]),
-            mime_type=str(intent["mime_type"]), size_bytes=int(intent["size_bytes"]), checksum=checksum,
+            mime_type=str(intent["mime_type"]), size_bytes=int(intent["size_bytes"]), storage_etag=storage_etag,
             processing_status="UPLOADED", metadata=metadata,
         )
         database.update_attendance_document(

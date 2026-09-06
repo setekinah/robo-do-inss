@@ -341,7 +341,7 @@ def init_database() -> None:
         for column_name, column_type in (
             ("storage_provider", "TEXT"), ("bucket", "TEXT"), ("storage_key", "TEXT"),
             ("mime_type", "TEXT"), ("size_bytes", "INTEGER"), ("checksum", "TEXT"),
-            ("processing_status", "TEXT"), ("uploaded_at", "TEXT"), ("metadata_json", "TEXT"),
+            ("storage_etag", "TEXT"), ("processing_status", "TEXT"), ("uploaded_at", "TEXT"), ("metadata_json", "TEXT"),
         ):
             ensure_document_version_column(conn, column_name, column_type)
         backfill_document_checklists(conn)
@@ -1151,6 +1151,7 @@ def record_document_version(
     mime_type: str | None = None,
     size_bytes: int | None = None,
     checksum: str | None = None,
+    storage_etag: str | None = None,
     processing_status: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> int:
@@ -1162,15 +1163,15 @@ def record_document_version(
                 attendance_id, document_id, content_hash, original_name, stored_path,
                 raw_text, extracted_data_json, source_type, extraction_status,
                 extraction_confidence, technical_notes, storage_provider, bucket,
-                storage_key, mime_type, size_bytes, checksum, processing_status,
+                storage_key, mime_type, size_bytes, checksum, storage_etag, processing_status,
                 uploaded_at, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
             """,
             (
                 attendance_id, document_id, content_hash, original_name, stored_path,
                 raw_text, json.dumps(extracted_data, ensure_ascii=False), source_type,
                 extraction_status, extraction_confidence, technical_notes, storage_provider,
-                bucket, storage_key, mime_type, size_bytes, checksum, processing_status,
+                bucket, storage_key, mime_type, size_bytes, checksum, storage_etag, processing_status,
                 json.dumps(metadata or {}, ensure_ascii=True),
             ),
         )

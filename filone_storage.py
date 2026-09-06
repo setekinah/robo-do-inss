@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any
 
 
-MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
+DEFAULT_MAX_DOCUMENT_MB = 50
 ALLOWED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 ALLOWED_MIME_TYPES = {
     "application/pdf", "image/png", "image/jpeg", "image/tiff", "image/webp", "image/bmp",
 }
 FILONE_ENV_NAMES = ("FILONE_ENDPOINT", "FILONE_REGION", "FILONE_ACCESS_KEY", "FILONE_SECRET_KEY", "FILONE_BUCKET")
+FILONE_LOCAL_ENV_NAMES = (*FILONE_ENV_NAMES, "FILONE_MAX_DOCUMENT_MB")
 
 
 class StorageConfigurationError(RuntimeError):
@@ -33,8 +34,20 @@ def load_local_filone_environment() -> None:
             continue
         name, value = line.split("=", 1)
         name = name.strip()
-        if name in FILONE_ENV_NAMES and not os.environ.get(name):
+        if name in FILONE_LOCAL_ENV_NAMES and not os.environ.get(name):
             os.environ[name] = value.strip().strip('"').strip("'")
+
+
+def configured_max_document_bytes() -> int:
+    """Return a deliberately conservative local policy (1-50 MB), configurable only downward."""
+    raw_value = os.environ.get("FILONE_MAX_DOCUMENT_MB", str(DEFAULT_MAX_DOCUMENT_MB)).strip()
+    try:
+        megabytes = int(raw_value)
+    except ValueError as exc:
+        raise StorageConfigurationError("FILONE_MAX_DOCUMENT_MB deve ser um número inteiro entre 1 e 50.") from exc
+    if not 1 <= megabytes <= DEFAULT_MAX_DOCUMENT_MB:
+        raise StorageConfigurationError("FILONE_MAX_DOCUMENT_MB deve estar entre 1 e 50.")
+    return megabytes * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -72,8 +85,8 @@ def validate_upload_metadata(*, filename: str, mime_type: str, size_bytes: int) 
     normalized_mime = mime_type.lower().split(";", 1)[0].strip()
     if suffix not in ALLOWED_SUFFIXES or normalized_mime not in ALLOWED_MIME_TYPES:
         raise ValueError("Tipo de arquivo não permitido.")
-    if not isinstance(size_bytes, int) or not 0 < size_bytes <= MAX_DOCUMENT_BYTES:
-        raise ValueError("Arquivo vazio ou acima do limite de 50 MB.")
+    if not isinstance(size_bytes, int) or not 0 < size_bytes <= configured_max_document_bytes():
+        raise ValueError("Arquivo vazio ou acima do limite configurado para o storage privado.")
     return safe_name
 
 
@@ -123,8 +136,15 @@ class FilOneStorageService:
             self._client.head_object(Bucket=self._config.bucket, Key=key)
             return True
         except Exception as exc:
-            if getattr(exc, "response", {}).get("Error", {}).get("Code") in {"404", "NoSuchKey", "NotFound"}:
+            code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", ""))
+            if code in {"404", "NoSuchKey", "NotFound"}:
                 return False
+            # Fil One eu-west-1 can return AccessDenied for a key that is not
+            # visible. List permission is intentionally required on the dev key;
+            # an exact-prefix list differentiates absence from bad credentials.
+            if code in {"403", "AccessDenied"}:
+                listing = self._client.list_objects_v2(Bucket=self._config.bucket, Prefix=key, MaxKeys=1)
+                return any(item.get("Key") == key for item in listing.get("Contents", []))
             raise
 
     def delete(self, *, key: str) -> None:
