@@ -1555,7 +1555,7 @@ class AppEngine {
       const intent = await intentResponse.json();
       if (!intentResponse.ok || !intent.success) throw new Error(intent.error || 'Não foi possível autorizar o envio privado.');
       const storageResponse = await fetch(intent.upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
-      if (!storageResponse.ok) throw new Error('O armazenamento privado recusou o arquivo. Verifique a configuração CORS do bucket.');
+      if (!storageResponse.ok) throw new Error('O armazenamento privado recusou o arquivo. O comportamento do upload direto pelo navegador precisa ser validado no bucket Fil One.');
       const response = await fetch(`/api/documentos/upload-intents/${intent.intent_id}/complete`, { method: 'POST' });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || 'Falha ao confirmar o arquivo no armazenamento privado.');

@@ -49,9 +49,9 @@ ao Git, a um `.env` versionado ou a conversas.
 
 ## Storage privado Fil One (etapa 1)
 
-Os anexos do dossiê na interface web usam upload direto para um bucket privado via URL temporária. Configure, sem valores padrão, `FILONE_ENDPOINT`, `FILONE_REGION`, `FILONE_ACCESS_KEY`, `FILONE_SECRET_KEY` e `FILONE_BUCKET` a partir de `.env.example`. A aplicação não salva URLs assinadas nem PDFs permanentemente no disco para esse fluxo; ela confirma o objeto com `HeadObject` antes de marcar o upload como concluído.
+Os anexos do dossiê na interface web usam upload direto para um bucket privado via URL temporária. Configure, sem valores padrão, `FILONE_ENDPOINT`, `FILONE_REGION`, `FILONE_ACCESS_KEY`, `FILONE_SECRET_KEY` e `FILONE_BUCKET` a partir de `.env.example`. `FILONE_MAX_DOCUMENT_MB` é uma política local explícita e conservadora de 1 a 50 MB (padrão 50 MB); reduza-a quando o perfil de risco exigir. A aplicação não salva URLs assinadas nem PDFs permanentemente no disco para esse fluxo; ela confirma o objeto com `HeadObject` antes de marcar o upload como concluído.
 
-O bucket deve ser criado privadamente no painel Fil One e permitir CORS apenas para a origem autorizada do PrevIA, com `PUT` e os cabeçalhos de conteúdo necessários. A leitura técnica/OCR não faz parte desta etapa de storage.
+O Fil One documenta presigned `PutObject` para uploads diretos pelo browser, mas sua documentação atual não descreve uma API de configuração CORS de bucket. O comportamento do navegador deve ser validado contra o bucket real antes de qualquer orientação de CORS. A leitura técnica/OCR não faz parte desta etapa de storage.
 
 O `requirements.txt` instala o pipeline documental completo:
 
