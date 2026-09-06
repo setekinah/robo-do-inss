@@ -47,7 +47,7 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
     # O servidor web nunca deve funcionar como um explorador do diretório do
     # projeto.  Código, logs, banco, .git e eventuais arquivos de configuração
     # são deliberadamente inacessíveis pela porta HTTP.
-    STATIC_FILES = {"/index.html", "/styles.css", "/app.js", "/flows.js"}
+    STATIC_FILES = {"/index.html", "/styles.css", "/app.js", "/flows.js", "/portal.html", "/portal.js"}
     MAX_JSON_BODY_BYTES = 256 * 1024
     MAX_RATE_BUCKETS = 2_048
 
@@ -193,13 +193,20 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
         query = urllib.parse.parse_qs(parsed_url.query)
-        if path.startswith("/api/") and path != "/api/auth/status":
+        public_portal = path == "/api/portal/resumo"
+        if path.startswith("/api/") and path != "/api/auth/status" and not public_portal:
             if not self._allow_request() or not self._require_auth():
                 return
+        if public_portal and not self._allow_request(12):
+            return
 
         # Rotas API
         if path == "/api/auth/status":
             self.handle_get_auth_status()
+        elif path == "/api/portal/resumo":
+            # O token nunca é aceito por query string: links usam fragmento no
+            # navegador para não aparecer em logs do servidor ou Referer.
+            self._send_json({"error": "Use POST para consultar o portal."}, 405)
         elif path == "/api/office":
             self.handle_get_office()
         elif path == "/api/stats":
@@ -261,10 +268,11 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             if self._allow_request(30):
                 self.handle_post_docuseal_webhook(path.rsplit("/", 1)[-1])
             return
-        login_limit = 5 if path in {"/api/auth/login", "/api/auth/register"} else 60
+        public_portal = path == "/api/portal/resumo"
+        login_limit = 5 if path in {"/api/auth/login", "/api/auth/register"} else (12 if public_portal else 60)
         if not self._allow_request(login_limit):
             return
-        if path not in {"/api/auth/login", "/api/auth/register"} and not self._require_auth():
+        if path not in {"/api/auth/login", "/api/auth/register", "/api/portal/resumo"} and not self._require_auth():
             return
 
         if path == "/api/auth/login":
@@ -273,6 +281,8 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_post_register()
         elif path == "/api/auth/logout":
             self.handle_post_logout()
+        elif path == "/api/portal/resumo":
+            self.handle_post_client_portal_summary()
         elif path == "/api/office":
             self.handle_post_office()
         elif path == "/api/atendimentos":
@@ -287,6 +297,8 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             self.handle_post_tarefa(attendance_id)
         elif path.startswith("/api/atendimentos/") and path.endswith("/assinatura"):
             self.handle_post_assinatura(int(path.split("/")[3]))
+        elif path.startswith("/api/atendimentos/") and path.endswith("/portal-acesso"):
+            self.handle_post_client_portal_access(int(path.split("/")[3]))
         elif path.startswith("/api/atendimentos/") and path.endswith("/auditoria-documental"):
             self.handle_post_document_audit(int(path.split("/")[3]))
         elif path.startswith("/api/atendimentos/") and path.endswith("/dossie-probatorio"):
@@ -816,6 +828,29 @@ ___________________________________________________
             "fee_percentage": fee_pct,
             "contract_text": contract_text.strip()
         })
+
+    def handle_post_client_portal_summary(self) -> None:
+        body = self._read_json_body()
+        portal = database.get_client_portal_view(str(body.get("token") or ""))
+        if not portal:
+            # Não diferenciamos token expirado, revogado ou inexistente para
+            # impedir enumeração de acessos temporários.
+            self._send_json({"error": "Acesso indisponível. Solicite um novo link ao escritório."}, 404)
+            return
+        self._send_json({"success": True, "portal": portal})
+
+    def handle_post_client_portal_access(self, attendance_id: int) -> None:
+        body = self._read_json_body()
+        try:
+            ttl_days = int(body.get("ttl_days", 7))
+        except (TypeError, ValueError):
+            ttl_days = 0
+        try:
+            access = database.create_client_portal_access(attendance_id, ttl_days=ttl_days)
+        except ValueError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 400)
+            return
+        self._send_json({"success": True, **access}, 201)
 
     def handle_post_assinatura(self, attendance_id: int) -> None:
         body = self._read_json_body()
