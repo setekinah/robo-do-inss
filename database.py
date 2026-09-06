@@ -1157,6 +1157,66 @@ def document_evidence_summary(attendance_id: int) -> dict[int, dict[str, Any]]:
     }
 
 
+_EVIDENCE_ROLES = {
+    "cnis": "Base contributiva",
+    "ctps": "Confirmação de vínculos",
+    "pps_ltcats": "Prova de atividade especial",
+    "carnes_guias": "Comprovação de recolhimentos",
+    "certidoes_tempo": "Averbação e tempo complementar",
+    "provas_atividade_rural": "Início de prova material rural",
+    "laudos_pcd": "Prova de deficiência e funcionalidade",
+    "atestados": "Incapacidade e afastamento",
+    "laudos_exames": "Diagnóstico e restrições",
+    "certidao_obito": "Fato gerador do óbito",
+    "prova_dependencia": "Dependência ou parentesco",
+}
+
+
+def build_document_evidence_matrix(attendance_id: int) -> dict[str, Any]:
+    """Build a non-conclusive evidence coverage matrix for a case."""
+    documents = list_attendance_documents(attendance_id)
+    versions = document_evidence_summary(attendance_id)
+    rows: list[dict[str, Any]] = []
+    required_total = required_with_evidence = 0
+    for document in documents:
+        document_id = int(document["id"])
+        version_count = int(versions.get(document_id, {}).get("version_count", 0))
+        required = bool(document["required"])
+        if required:
+            required_total += 1
+            required_with_evidence += int(version_count > 0)
+        status = str(document["status"] or "pendente")
+        state = "recebida" if version_count else "pendente"
+        if status in {"ilegivel", "inconsistente", "rejeitado"}:
+            state = "revisar"
+        rows.append({
+            "documento_id": document_id,
+            "documento": str(document["document_name"]),
+            "papel": _EVIDENCE_ROLES.get(str(document["document_code"]).lower(), "Prova complementar"),
+            "obrigatorio": required,
+            "versoes": version_count,
+            "estado": state,
+            "confianca": document["extraction_confidence"],
+        })
+    audit = get_attendance_audit(attendance_id, "CNIS_X_CTPS")
+    crosscheck = "Ainda não cruzado"
+    if audit:
+        crosscheck = {"confirmada": "CNIS × CTPS consistente", "revisao_necessaria": "CNIS × CTPS requer revisão", "base_insuficiente": "CNIS × CTPS com base insuficiente"}.get(str(audit["status"]), "Cruzamento registrado")
+    pending = [row["documento"] for row in rows if row["obrigatorio"] and row["estado"] != "recebida"]
+    return {
+        "resumo": {
+            "obrigatorios": required_total,
+            "cobertos": required_with_evidence,
+            "pendentes": len(pending),
+            "prontidao": "Pronto para revisão jurídica" if not pending else "Documentação complementar necessária",
+        },
+        "cruzamento": crosscheck,
+        "pendencias": pending,
+        "evidencias": rows,
+        "aviso": "A matriz organiza a prova documental e não conclui direito ao benefício.",
+    }
+
+
 def get_document_pipeline_summary() -> dict[str, Any]:
     with get_connection() as conn:
         status_rows = conn.execute(
