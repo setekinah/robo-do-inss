@@ -54,6 +54,7 @@ def _evidence(document: Mapping[str, Any]) -> dict[str, Any]:
         "pagina": page,
         "trecho": excerpt,
     }
+    return report
 
 
 def _requirement(
@@ -176,7 +177,7 @@ def build_retirement_dossier(
         for hypothesis in hypotheses for requirement in hypothesis["requisitos"]
         if requirement["status"] in {"evidenciado", "informado"}
     )
-    return {
+    report = {
         "tipo": AUDIT_TYPE_RETIREMENT_DOSSIER,
         "status": "revisao_humana_obrigatoria",
         "resumo": {"hipoteses": len(hypotheses), "evidencias": evidence_count, "pendencias": pending},
