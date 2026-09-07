@@ -68,7 +68,7 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
-            "form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; "
+            "form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
             "script-src 'self'; connect-src 'self'",
         )
