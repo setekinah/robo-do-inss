@@ -77,7 +77,7 @@ class DocumentUxPriorityTests(unittest.TestCase):
     def test_asset_release_token_is_coherent(self) -> None:
         portal = (ROOT / "portal.html").read_text(encoding="utf-8")
         references = re.findall(r'(?:styles\.css|app\.js|portal\.js)\?v=([^"\']+)', HTML + portal)
-        self.assertEqual(set(references), {'p1.1.1-20260907'})
+        self.assertEqual(set(references), {'a0.1-20260907'})
 
 
 if __name__ == '__main__':

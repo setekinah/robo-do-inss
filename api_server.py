@@ -566,29 +566,23 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
     def handle_get_stats(self) -> None:
         with database.get_connection() as conn:
             total = conn.execute("SELECT COUNT(*) FROM atendimentos").fetchone()[0]
-            stage_rows = conn.execute(
-                "SELECT crm_stage, COUNT(*), SUM(COALESCE(estimated_total_value, 0)) FROM atendimentos GROUP BY crm_stage"
-            ).fetchall()
+            stage_rows = conn.execute("SELECT crm_stage, COUNT(*) FROM atendimentos GROUP BY crm_stage").fetchall()
             
             stages = {
-                "triagem": {"count": 0, "value": 0},
-                "qualificacao": {"count": 0, "value": 0},
-                "conflito": {"count": 0, "value": 0},
-                "proposta": {"count": 0, "value": 0},
-                "documentos": {"count": 0, "value": 0},
-                "concluido": {"count": 0, "value": 0},
-                "perdido": {"count": 0, "value": 0},
+                "triagem": {"count": 0},
+                "qualificacao": {"count": 0},
+                "conflito": {"count": 0},
+                "proposta": {"count": 0},
+                "documentos": {"count": 0},
+                "concluido": {"count": 0},
+                "perdido": {"count": 0},
             }
             
-            total_estimated_value = 0
             for r in stage_rows:
                 st = r[0] or "triagem"
                 cnt = r[1]
-                val = r[2] or 0
                 if st in stages:
                     stages[st]["count"] = cnt
-                    stages[st]["value"] = val
-                total_estimated_value += val
 
             recent_events = conn.execute(
                 "SELECT COUNT(*) FROM integration_events WHERE status = 'pendente'"
@@ -600,7 +594,6 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
 
         self._send_json({
             "total_atendimentos": total,
-            "total_estimated_value": total_estimated_value,
             "events_pending": recent_events,
             "docs_pending": docs_pending,
             "stages": stages
@@ -893,7 +886,7 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         fee_pct = office_settings.resolve_fee_percentage(att["flow_name"], settings)
         client_name = att["lead_name"]
         flow_name = att["flow_name"]
-        estimated_val = (att.get("estimated_total_value") or 15000.0)
+        contract_date = datetime.now().strftime("%d/%m/%Y")
 
         contract_text = f"""
 CONTRATO DE PRESTAÇÃO DE SERVIÇOS ADVOCATÍCIOS PREVIDENCIÁRIOS
@@ -905,12 +898,12 @@ CLÁUSULA PRIMEIRA - DO OBJETO:
 O presente contrato tem como objeto a prestação de serviços advocatícios para a tutela dos direitos previdenciários do CONTRATANTE referentes ao benefício de {flow_name} junto ao INSS e/ou Poder Judiciário.
 
 CLÁUSULA SEGUNDA - DOS HONORÁRIOS ADVOCATÍCIOS:
-Pelos serviços prestados, o CONTRATANTE pagará à CONTRATADA o percentual de {fee_pct}% ({fee_pct} por cento) sobre o valor total do proveito econômico obtido (atrasados e/ou parcelas vincendas estimadas em R$ {estimated_val:,.2f}).
+Pelos serviços prestados, o CONTRATANTE pagará à CONTRATADA o percentual de {fee_pct}% ({fee_pct} por cento) sobre o valor total do proveito econômico obtido.
 
 CLÁUSULA TERCEIRA - DA PRIVACIDADE E LGPD:
 O CONTRATANTE autoriza o tratamento de seus dados pessoais e documentos estritamente para o cumprimento das obrigações contratuais e instrução previdenciária.
 
-São Paulo, 14 de Agosto de 2026.
+{contract_date}.
 
 ___________________________________________________
 {office_name} (OAB: {oab})
