@@ -1194,12 +1194,14 @@ class AppEngine {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage: nextStage })
         });
-        if (!response.ok) throw new Error('Não foi possível atualizar a etapa do lead.');
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível atualizar a etapa do lead.');
         const item = this.atendimentos.find(a => a.id === leadId);
-        if (item) item.crm_stage = nextStage;
+        if (item) item.crm_stage = data.stage;
         this.renderKanban();
       } catch (error) {
         console.error('Erro ao avançar etapa:', error);
+        alert(error.message || 'Não foi possível atualizar a etapa do lead.');
       }
     }
   }
@@ -1315,24 +1317,31 @@ class AppEngine {
     if (!this.currentLead) return;
     audio.click();
 
+    const lead = this.currentLead;
     const type = document.getElementById('new-activity-type').value;
-    const body = document.getElementById('new-activity-body').value;
+    const activityInput = document.getElementById('new-activity-body');
+    const body = activityInput.value;
 
     if (!body) return;
 
-    if (!this.currentLead.activities) this.currentLead.activities = [];
-    this.currentLead.activities.unshift({ activity_type: type, body: body });
-    this.renderModalHistory();
-
-    document.getElementById('new-activity-body').value = '';
-
     try {
-      await fetch(`/api/atendimentos/${this.currentLead.id}/atividades`, {
+      const response = await fetch(`/api/atendimentos/${lead.id}/atividades`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activity_type: type, body: body })
       });
-    } catch (e) {}
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível registrar a atividade.');
+
+      if (!lead.activities) lead.activities = [];
+      lead.activities.unshift({ activity_type: type, body: body });
+      if (this.currentLead?.id === lead.id) {
+        this.renderModalHistory();
+        activityInput.value = '';
+      }
+    } catch (error) {
+      alert(error.message || 'Não foi possível registrar a atividade.');
+    }
   }
 
   renderModalDocs() {
@@ -1628,20 +1637,25 @@ class AppEngine {
     const order = ['pendente', 'recebido', 'aprovado', 'rejeitado'];
     const idx = order.indexOf(currentStatus);
     const nextStatus = order[(idx + 1) % order.length];
-
-    if (this.currentLead && this.currentLead.documents) {
-      const d = this.currentLead.documents.find(doc => doc.id === docId);
-      if (d) d.status = nextStatus;
-      this.renderModalDocs();
-    }
+    const lead = this.currentLead;
 
     try {
-      await fetch(`/api/documentos/${docId}/status`, {
+      const response = await fetch(`/api/documentos/${docId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus })
       });
-    } catch (e) {}
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível atualizar o status do documento.');
+
+      if (lead?.documents) {
+        const d = lead.documents.find(doc => doc.id === docId);
+        if (d) d.status = data.status;
+        if (this.currentLead?.id === lead.id) this.renderModalDocs();
+      }
+    } catch (error) {
+      alert(error.message || 'Não foi possível atualizar o status do documento.');
+    }
   }
 
   async loadModalContract() {
