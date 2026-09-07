@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import api_server
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_JS = ROOT / "app.js"
@@ -56,10 +58,83 @@ class NoFakeOperationalDataTests(unittest.TestCase):
 
         self.assertNotIn("12500", body)
         self.assertNotIn("98765-4321", body)
+        self.assertNotIn("estimated_total_value", body)
 
-        self.assertIn("Valor não informado", body)
+        self.assertIn("Etapa:", body)
         self.assertIn("Telefone não informado", body)
         self.assertIn("Benefício não informado", body)
+
+    def test_triage_lead_has_no_financial_defaults(self) -> None:
+        body = self._method("saveTriageLead")
+
+        for value in ("3840", "46080", "estimated_monthly_value", "estimated_total_value"):
+            self.assertNotIn(value, body)
+
+    def test_lead_api_uses_neutral_values_when_financial_fields_are_omitted(self) -> None:
+        handler = object.__new__(api_server.SofiPreviRequestHandler)
+        responses = []
+        handler._read_json_body = lambda: {
+            "lead_name": "Cliente sem valor", "lead_phone": "11999999999", "flow_id": "aposentadoria"
+        }
+        handler._send_json = lambda payload, status=200: responses.append((payload, status))
+
+        with patch("api_server.database.save_attendance", return_value=42) as save_attendance:
+            handler.handle_post_atendimento()
+
+        self.assertEqual(responses, [({"success": True, "id": 42}, 201)])
+        self.assertEqual(save_attendance.call_args.kwargs["estimated_monthly_value"], 0.0)
+        self.assertEqual(save_attendance.call_args.kwargs["estimated_total_value"], 0.0)
+
+    def test_dashboard_uses_case_counts_not_financial_estimates(self) -> None:
+        filtering = self._method("applyDashboardFilters")
+        stats = self._method("renderDashboardStats")
+        chart = self._method("renderMetricsChart")
+
+        for body in (filtering, stats, chart):
+            self.assertNotIn("total_estimated_value", body)
+            self.assertNotIn("estimated_total_value", body)
+        self.assertIn("data?.count", stats)
+        self.assertIn("caso(s)", chart)
+        self.assertNotIn("R$", chart)
+        self.assertNotIn("HONORÁRIOS ESTIMADOS", self.html)
+        self.assertIn("Casos por etapa", self.html)
+
+    def test_contract_has_no_fallback_monetary_value_or_fixed_date(self) -> None:
+        server = (ROOT / "api_server.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("15000", server)
+        self.assertNotIn("estimated_val", server)
+        self.assertIn("datetime.now().strftime", server)
+        self.assertNotIn("14 de Agosto de 2026", server)
+        self.assertNotIn("São Paulo, {contract_date}", server)
+        self.assertNotIn("parcelas vincendas estimadas em R$", server)
+
+    def test_contract_without_economic_value_does_not_generate_a_currency_amount(self) -> None:
+        class _Connection:
+            def execute(self, *_args, **_kwargs):
+                return self
+
+            def fetchone(self):
+                return {"lead_name": "Cliente", "flow_name": "Aposentadoria", "estimated_total_value": 0}
+
+        class _ConnectionContext:
+            def __enter__(self):
+                return _Connection()
+
+            def __exit__(self, *_args):
+                return False
+
+        handler = object.__new__(api_server.SofiPreviRequestHandler)
+        responses = []
+        handler._send_json = lambda payload, status=200: responses.append((payload, status))
+        with patch("api_server.database.get_connection", return_value=_ConnectionContext()), patch(
+            "api_server.office_settings.load_office_settings", return_value={"office_name": "Escritório", "oab": "OAB/UF"}
+        ), patch("api_server.office_settings.resolve_fee_percentage", return_value=30):
+            handler.handle_get_contrato(7)
+
+        self.assertEqual(responses[0][0]["fee_percentage"], 30)
+        self.assertNotIn("R$", responses[0][0]["contract_text"])
+        self.assertNotIn("São Paulo,", responses[0][0]["contract_text"])
 
     def test_lead_modal_does_not_create_fake_client_or_history(self) -> None:
         modal = self._method("openLeadModal")

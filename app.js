@@ -1067,22 +1067,18 @@ class AppEngine {
       (!benefit || item.flow_name === benefit)
     );
     const stages = Object.fromEntries(
-      Object.keys(this.stats.stages || {}).map((key) => [key, { count: 0, value: 0 }])
+      Object.keys(this.stats.stages || {}).map((key) => [key, { count: 0 }])
     );
 
     filteredRows.forEach((item) => {
       const key = item.crm_stage || 'triagem';
-      if (!stages[key]) stages[key] = { count: 0, value: 0 };
+      if (!stages[key]) stages[key] = { count: 0 };
       stages[key].count += 1;
-      stages[key].value += Number(item.estimated_total_value || 0);
     });
 
     this.filteredDashboardStats = {
       ...this.stats,
       total_atendimentos: filteredRows.length,
-      total_estimated_value: filteredRows.reduce(
-        (total, item) => total + Number(item.estimated_total_value || 0), 0
-      ),
       stages,
     };
 
@@ -1096,7 +1092,11 @@ class AppEngine {
     const stats = this.filteredDashboardStats || this.stats;
 
     document.getElementById('stat-total').textContent = stats.total_atendimentos || 0;
-    document.getElementById('stat-value').textContent = (stats.total_estimated_value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const activeCases = Object.entries(stats.stages || {}).reduce(
+      (total, [stage, data]) => total + (['concluido', 'perdido'].includes(stage) ? 0 : Number(data?.count || 0)),
+      0
+    );
+    document.getElementById('stat-value').textContent = activeCases;
     document.getElementById('stat-docs').textContent = stats.docs_pending || 0;
     document.getElementById('stat-events').textContent = stats.events_pending || 0;
 
@@ -1118,7 +1118,7 @@ class AppEngine {
     const stats = this.filteredDashboardStats || this.stats || { stages: {} };
     const stages = ['Triagem', 'Qualificação', 'Conflito', 'Proposta', 'Documentos', 'Concluído'];
     const stageKeys = ['triagem', 'qualificacao', 'conflito', 'proposta', 'documentos', 'concluido'];
-    const values = stageKeys.map((key) => Number(stats.stages?.[key]?.value || 0) / 1000);
+    const values = stageKeys.map((key) => Number(stats.stages?.[key]?.count || 0));
     const maxVal = Math.max(1, ...values);
 
     const barWidth = (width - 100) / stages.length;
@@ -1141,7 +1141,7 @@ class AppEngine {
       ctx.fillStyle = '#f8fafc';
       ctx.font = '11px Outfit, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`R$ ${val}k`, x + barWidth / 2, y - 8);
+      ctx.fillText(`${val} caso(s)`, x + barWidth / 2, y - 8);
 
       ctx.fillStyle = '#94a3b8';
       ctx.font = '10px Inter, sans-serif';
@@ -1186,22 +1186,11 @@ class AppEngine {
         card.className = 'lead-card';
         card.dataset.id = lead.id;
 
-        const estimatedValue = Number(lead.estimated_total_value);
-        const hasEstimatedValue =
-          lead.estimated_total_value !== null &&
-          lead.estimated_total_value !== undefined &&
-          lead.estimated_total_value !== '' &&
-          Number.isFinite(estimatedValue);
-
-        const val = hasEstimatedValue
-          ? estimatedValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-          : 'Valor não informado';
-
         card.innerHTML = `
           <span class="card-tag tag-aposentadoria">${escapeHTML(lead.flow_name || 'Benefício não informado')}</span>
           <button class="card-title card-title-button" type="button">${escapeHTML(lead.lead_name)}</button>
           <div class="card-sub"><i class="fa-solid fa-phone"></i> ${escapeHTML(lead.lead_phone || 'Telefone não informado')}</div>
-          <div class="card-value">${val}</div>
+          <div class="card-value">Etapa: ${escapeHTML(lead.crm_stage || 'triagem')}</div>
           <div class="card-actions">
             <button class="btn-secondary lead-details-button" type="button" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
               <i class="fa-solid fa-folder-open"></i> Abrir Detalhes
@@ -2098,9 +2087,7 @@ class AppEngine {
         prequalification: this.triageState.prequalification,
         answers: this.triageState.history,
         result: { title: result.title, status: result.status }
-      },
-      estimated_monthly_value: 3840.0,
-      estimated_total_value: 46080.0
+      }
     };
 
     try {

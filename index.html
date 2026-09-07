@@ -10,7 +10,7 @@
   
   <!-- CSS Principal -->
   <!-- Atualize este token em todos os assets locais a cada release frontend. -->
-  <link rel="stylesheet" href="styles.css?v=p1.1.1-20260907">
+  <link rel="stylesheet" href="styles.css?v=a0.1-20260907">
 </head>
 <body>
 
@@ -355,18 +355,18 @@
             </div>
             <div class="metric-value" id="stat-total">0</div>
             <div class="metric-footer">
-              <span class="trend-up"><i class="fa-solid fa-arrow-trend-up"></i> +18%</span> este mês
+              <span>Casos cadastrados na base.</span>
             </div>
           </div>
 
           <div class="glass-panel metric-card">
             <div class="metric-header">
-              <span>HONORÁRIOS ESTIMADOS</span>
-              <div class="metric-icon" style="color: var(--accent-emerald); background: rgba(16, 185, 129, 0.1);"><i class="fa-solid fa-sack-dollar"></i></div>
+              <span>CASOS EM ANDAMENTO</span>
+              <div class="metric-icon"><i class="fa-solid fa-briefcase"></i></div>
             </div>
-            <div class="metric-value" style="color: var(--accent-emerald);" id="stat-value">R$ 0,00</div>
+            <div class="metric-value" id="stat-value">0</div>
             <div class="metric-footer">
-              <span>Estimativa dos casos qualificados</span>
+              <span>Exclui casos concluídos e perdidos.</span>
             </div>
           </div>
 
@@ -392,7 +392,7 @@
         <div class="dashboard-grid">
           <div class="glass-panel chart-panel">
             <div class="chart-header">
-              <h3 style="font-family: var(--font-heading); font-size: 1.1rem;"><i class="fa-solid fa-chart-line"></i> Desempenho por Benefício</h3>
+              <h3 style="font-family: var(--font-heading); font-size: 1.1rem;"><i class="fa-solid fa-chart-bar"></i> Casos por etapa</h3>
             </div>
             <div class="chart-container">
               <canvas id="metrics-chart"></canvas>
@@ -406,11 +406,11 @@
             <div style="display: flex; flex-direction: column; gap: 1.2rem; margin-top: 1rem;">
               <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
                 <span style="font-size: 0.8rem; color: var(--text-muted);">CHECAGEM DE CONFLITO</span>
-                <h4 style="color: var(--accent-emerald); font-size: 1.1rem; margin-top: 0.2rem;" id="lgpd-conflict-stat">100% Conforme</h4>
+                <h4 style="color: var(--text-muted); font-size: 1.1rem; margin-top: 0.2rem;" id="lgpd-conflict-stat">Aguardando consulta</h4>
               </div>
               <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
                 <span style="font-size: 0.8rem; color: var(--text-muted);">BASE LEGAL PREDOMINANTE</span>
-                <h4 style="color: var(--primary); font-size: 1.0rem; margin-top: 0.2rem;">Execução de Contrato / Tutela de Saúde</h4>
+                <h4 style="color: var(--text-muted); font-size: 1.0rem; margin-top: 0.2rem;">Aguardando dados do caso</h4>
               </div>
             </div>
           </div>
@@ -857,6 +857,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=p1.1.1-20260907"></script>
+  <script src="app.js?v=a0.1-20260907"></script>
 </body>
 </html>
