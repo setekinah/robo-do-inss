@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import unittest
+from unittest.mock import patch
 
-from retirement_dossier import apply_human_decision, build_retirement_dossier
+from retirement_dossier import _evidence, apply_human_decision, build_retirement_dossier
 
 
 def document(code: str, *, uploaded: bool = True, status: str = "recebido") -> dict:
@@ -20,6 +21,14 @@ def document(code: str, *, uploaded: bool = True, status: str = "recebido") -> d
 
 
 class RetirementDossierTests(unittest.TestCase):
+    def test_evidence_returns_a_structured_dictionary(self) -> None:
+        evidence = _evidence(document("cnis"))
+
+        self.assertIsInstance(evidence, dict)
+        self.assertEqual(evidence["codigo"], "CNIS")
+        self.assertEqual(evidence["documento_id"], 1)
+        self.assertIn("trecho", evidence)
+
     def test_dossier_maps_all_retirement_hypotheses_without_approving_any(self) -> None:
         report = build_retirement_dossier(
             documents=[document("identidade"), document("cnis"), document("ctps")],
@@ -33,6 +42,26 @@ class RetirementDossierTests(unittest.TestCase):
         self.assertEqual(report["hipoteses"][0]["status"], "revisao_humana_obrigatoria")
         self.assertNotIn("aprovada", {item["status"] for item in report["hipoteses"]})
         self.assertEqual(report["hipoteses"][2]["status"], "base_incompleta")
+        self.assertEqual(report["cenarios_preparatorios"]["versao"], "0.1")
+        self.assertEqual(len(report["cenarios_preparatorios"]["cenarios"]), 5)
+        cnis_requirement = next(
+            item for item in report["hipoteses"][0]["requisitos"] if item["chave"] == "cnis"
+        )
+        self.assertTrue(cnis_requirement["evidencias"])
+        self.assertTrue(all(isinstance(item, dict) for item in cnis_requirement["evidencias"]))
+
+    def test_dossier_includes_scenarios_from_real_catalog_integration(self) -> None:
+        catalog = {"status": "revisao_humana_obrigatoria", "cenarios": []}
+        triage_profile = {"prequalification": {"age": 65}}
+
+        with patch("retirement_dossier.build_scenario_catalog", return_value=catalog) as build_catalog:
+            report = build_retirement_dossier(documents=[], triage_profile=triage_profile)
+
+        self.assertIs(report["cenarios_preparatorios"], catalog)
+        build_catalog.assert_called_once_with(dossier=report, triage_profile=triage_profile)
+        self.assertIn("tipo", report)
+        self.assertIn("hipoteses", report)
+        self.assertIn("decisao_humana", report)
 
     def test_missing_cnis_keeps_programmed_retirement_incomplete(self) -> None:
         report = build_retirement_dossier(
