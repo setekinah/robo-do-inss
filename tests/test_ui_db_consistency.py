@@ -20,32 +20,32 @@ class UiDatabaseConsistencyTests(unittest.TestCase):
     def test_activity_is_added_only_after_persistence_succeeds(self) -> None:
         body = function_body("addActivity", "renderModalDocs")
 
-        self.assertIn("if (!response.ok || !data.success)", body)
-        self.assertLess(body.index("if (!response.ok || !data.success)"), body.index("lead.activities.unshift"))
+        self.assertIn("requestJson(", body)
+        self.assertLess(body.index("requestJson("), body.index("lead.activities.unshift"))
         self.assertIn("const lead = this.currentLead", body)
-        self.assertIn("alert(error.message || 'Não foi possível registrar a atividade.')", body)
+        self.assertIn("showUserError(error", body)
 
     def test_document_status_changes_only_after_persistence_succeeds(self) -> None:
         body = function_body("toggleDocStatus", "loadModalContract")
 
-        self.assertIn("if (!response.ok || !data.success)", body)
-        self.assertLess(body.index("if (!response.ok || !data.success)"), body.index("d.status = data.status"))
+        self.assertIn("requestJson(", body)
+        self.assertLess(body.index("requestJson("), body.index("d.status = data.status"))
         self.assertIn("const lead = this.currentLead", body)
-        self.assertIn("alert(error.message || 'Não foi possível atualizar o status do documento.')", body)
+        self.assertIn("showUserError(error", body)
 
     def test_stage_changes_only_after_confirmed_response_and_reports_failure(self) -> None:
         body = function_body("advanceStage", "openLeadModal")
 
-        self.assertIn("if (!response.ok || !data.success)", body)
-        self.assertLess(body.index("if (!response.ok || !data.success)"), body.index("item.crm_stage = data.stage"))
-        self.assertIn("alert(error.message || 'Não foi possível atualizar a etapa do lead.')", body)
+        self.assertIn("requestJson(", body)
+        self.assertLess(body.index("requestJson("), body.index("item.crm_stage = data.stage"))
+        self.assertIn("showUserError(error", body)
 
     def test_case_document_upload_retains_its_existing_rollback(self) -> None:
         body = function_body("uploadCaseDocument", "toggleDocStatus")
 
         self.assertIn("const originalStatus = doc.status", body)
         self.assertIn("doc.status = originalStatus", body)
-        self.assertLess(body.index("doc.status = originalStatus"), body.index("alert(error.message"))
+        self.assertLess(body.index("doc.status = originalStatus"), body.index("showUserError(error"))
 
 
 if __name__ == "__main__":

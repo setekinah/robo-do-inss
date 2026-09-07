@@ -68,6 +68,75 @@ const escapeHTML = (value) => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+const API_HTTP_MESSAGES = Object.freeze({
+  401: 'Sua sessão expirou. Entre novamente.',
+  403: 'Você não tem permissão para realizar esta ação.',
+  404: 'O recurso solicitado não foi encontrado.',
+  409: 'Não foi possível concluir porque os dados foram alterados ou estão em conflito.',
+  413: 'O arquivo enviado excede o limite permitido.',
+  429: 'Muitas tentativas em pouco tempo. Aguarde e tente novamente.',
+});
+const API_NETWORK_MESSAGE = 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
+
+class ApiRequestError extends Error {
+  constructor(message, { status = null, cause = null } = {}) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.cause = cause;
+  }
+}
+
+function safeBackendMessage(data) {
+  const message = typeof data?.error === 'string' ? data.error : typeof data?.message === 'string' ? data.message : '';
+  const unsafe = /[<>]|\b(?:traceback|stack(?:\s+trace)?|exception|syntaxerror|typeerror|referenceerror|failed to fetch|networkerror|load failed|unexpected token)\b/i;
+  return message.trim() && !unsafe.test(message) ? message.trim() : null;
+}
+
+function apiErrorMessage({ status = null, data = null, fallbackMessage }) {
+  const backendMessage = safeBackendMessage(data);
+  if (backendMessage) return backendMessage;
+  if (API_HTTP_MESSAGES[status]) return API_HTTP_MESSAGES[status];
+  if (status >= 500 && status <= 599) return 'O servidor encontrou um problema. Tente novamente em instantes.';
+  return fallbackMessage;
+}
+
+function userFacingErrorMessage(error, fallbackMessage) {
+  if (error instanceof ApiRequestError) return error.message;
+  const rawMessage = String(error?.message || '');
+  if (/failed to fetch|networkerror|load failed|unexpected token|json|syntaxerror/i.test(rawMessage)) return API_NETWORK_MESSAGE;
+  return rawMessage && !/[<>]/.test(rawMessage) ? rawMessage : fallbackMessage;
+}
+
+async function requestJson(url, options = {}, fallbackMessage = 'Não foi possível concluir a operação.') {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (error) {
+    console.error('Falha de rede na API.', { url, error });
+    throw new ApiRequestError(API_NETWORK_MESSAGE, { cause: error });
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (error) {
+    console.error('Resposta inválida da API.', { url, status: response.status, error });
+  }
+
+  if (!response.ok || data?.success === false || data === null) {
+    const message = apiErrorMessage({ status: response.status, data, fallbackMessage });
+    console.error('Resposta de API recusada.', { url, status: response.status });
+    throw new ApiRequestError(message, { status: response.status });
+  }
+  return data;
+}
+
+function showUserError(error, fallbackMessage = 'Não foi possível concluir a operação.') {
+  console.error('Operação não concluída.', error);
+  alert(userFacingErrorMessage(error, fallbackMessage));
+}
+
 class NeuralCanvas {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
@@ -422,12 +491,8 @@ class AppEngine {
       const formData = new FormData();
       formData.append('file', file, file.name);
       formData.append('document_code', 'AUTO');
-      const response = await fetch('/api/documentos/analisar', { method: 'POST', body: formData });
-      const data = await response.json();
+      const data = await requestJson('/api/documentos/analisar', { method: 'POST', body: formData }, 'O documento não pôde ser lido.');
       if (requestVersion !== this.ocrUploadSequence) return;
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || data.technical_notes || 'O documento não pôde ser lido.');
-      }
       statusBox.style.display = 'none';
       tree.textContent = JSON.stringify(data, null, 2);
       this.renderCNISDashboard(data);
@@ -435,7 +500,7 @@ class AppEngine {
     } catch (error) {
       if (requestVersion !== this.ocrUploadSequence) return;
       statusBox.style.display = 'none';
-      this.showOCRError(error.message || 'Falha ao analisar o documento.');
+      this.showOCRError(userFacingErrorMessage(error, 'Falha ao analisar o documento.'));
     }
   }
 
@@ -637,9 +702,7 @@ class AppEngine {
    */
   async checkAuthStatus() {
     try {
-      const res = await fetch('/api/auth/status');
-      if (!res.ok) throw new Error(`auth-status-http-${res.status}`);
-      const data = await res.json();
+      const data = await requestJson('/api/auth/status', {}, 'Não foi possível verificar a sessão.');
       return {
         available: true,
         configured: Boolean(data.configured),
@@ -832,7 +895,7 @@ class AppEngine {
     }
 
     try {
-      const response = await fetch('/api/auth/register', {
+      await requestJson('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -841,11 +904,9 @@ class AppEngine {
           office_name: officeName,
           oab: officeOab
         })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível criar a conta.');
+      }, 'Não foi possível criar a conta.');
     } catch (e) {
-      alert(e.message || 'Não foi possível criar a conta.');
+      showUserError(e, 'Não foi possível criar a conta.');
       return;
     }
 
@@ -859,14 +920,12 @@ class AppEngine {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
     try {
-      const response = await fetch('/api/auth/login', {
+      await requestJson('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível entrar.');
+      }, 'Não foi possível entrar.');
     } catch (e) {
-      alert(e.message || 'Não foi possível entrar.');
+      showUserError(e, 'Não foi possível entrar.');
       return;
     }
     audio.success();
@@ -911,21 +970,16 @@ class AppEngine {
    */
   async loadData() {
     try {
-      const resStats = await fetch('/api/stats');
-      if (resStats.status === 401) { this.handleUnauthenticated(); return; }
-      if (!resStats.ok) throw new Error(`stats-http-${resStats.status}`);
-      this.stats = await resStats.json();
+      this.stats = await requestJson('/api/stats', {}, 'Não foi possível carregar os dados do painel.');
       this.renderDashboardStats();
 
-      const resAtt = await fetch('/api/atendimentos');
-      if (resAtt.status === 401) { this.handleUnauthenticated(); return; }
-      if (!resAtt.ok) throw new Error(`atendimentos-http-${resAtt.status}`);
-      this.atendimentos = await resAtt.json();
+      this.atendimentos = await requestJson('/api/atendimentos', {}, 'Não foi possível carregar os atendimentos.');
       this.populateDashboardBenefitFilter();
       this.applyDashboardFilters();
       this.renderKanban();
       await this.loadSmartPending();
     } catch (e) {
+      if (e instanceof ApiRequestError && e.status === 401) { this.handleUnauthenticated(); return; }
       // Falha real de rede/parse (não é 401): mantemos o estado atual em vez
       // de inventar números. O dashboard permanece vazio/desatualizado até a
       // próxima tentativa, o que é preferível a exibir dados fictícios.
@@ -1189,19 +1243,17 @@ class AppEngine {
       if (!window.confirm(`Mover este lead para ${nextStage}?`)) return;
       
       try {
-        const response = await fetch(`/api/atendimentos/${leadId}/stage`, {
+        const data = await requestJson(`/api/atendimentos/${leadId}/stage`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage: nextStage })
-        });
-        const data = await response.json();
-        if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível atualizar a etapa do lead.');
+        }, 'Não foi possível atualizar a etapa do lead.');
         const item = this.atendimentos.find(a => a.id === leadId);
         if (item) item.crm_stage = data.stage;
         this.renderKanban();
       } catch (error) {
         console.error('Erro ao avançar etapa:', error);
-        alert(error.message || 'Não foi possível atualizar a etapa do lead.');
+        showUserError(error, 'Não foi possível atualizar a etapa do lead.');
       }
     }
   }
@@ -1212,12 +1264,10 @@ class AppEngine {
     this.currentDocumentAudit = null;
     this.currentRetirementDossier = null;
     try {
-      const res = await fetch(`/api/atendimentos/${leadId}`);
-      if (!res.ok) throw new Error('Não foi possível carregar os detalhes do lead.');
-      this.currentLead = await res.json();
+      this.currentLead = await requestJson(`/api/atendimentos/${leadId}`, {}, 'Não foi possível carregar os detalhes do caso.');
     } catch (e) {
       this.currentLead = null;
-      alert(e.message || 'Não foi possível carregar os detalhes do caso.');
+      showUserError(e, 'Não foi possível carregar os detalhes do caso.');
       return;
     }
 
@@ -1325,13 +1375,11 @@ class AppEngine {
     if (!body) return;
 
     try {
-      const response = await fetch(`/api/atendimentos/${lead.id}/atividades`, {
+      const data = await requestJson(`/api/atendimentos/${lead.id}/atividades`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activity_type: type, body: body })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível registrar a atividade.');
+      }, 'Não foi possível registrar a atividade.');
 
       if (!lead.activities) lead.activities = [];
       lead.activities.unshift({ activity_type: type, body: body });
@@ -1340,7 +1388,7 @@ class AppEngine {
         activityInput.value = '';
       }
     } catch (error) {
-      alert(error.message || 'Não foi possível registrar a atividade.');
+      showUserError(error, 'Não foi possível registrar a atividade.');
     }
   }
 
@@ -1546,15 +1594,13 @@ class AppEngine {
     const button = document.getElementById('modal-retirement-dossier-button');
     if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Montando'; }
     try {
-      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/dossie-probatorio`, {
+      const data = await requestJson(`/api/atendimentos/${this.currentLead.id}/dossie-probatorio`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'gerar' })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível montar o dossiê probatório.');
+      }, 'Não foi possível montar o dossiê probatório.');
       this.currentRetirementDossier = data.dossie;
       this.renderRetirementDossier();
     } catch (error) {
-      alert(error.message || 'Não foi possível montar o dossiê probatório.');
+      showUserError(error, 'Não foi possível montar o dossiê probatório.');
     } finally {
       if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-scale-balanced"></i> Dossiê probatório'; }
     }
@@ -1566,16 +1612,14 @@ class AppEngine {
     const responsavel = document.getElementById('retirement-dossier-responsible')?.value;
     const nota = document.getElementById('retirement-dossier-note')?.value;
     try {
-      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/dossie-probatorio`, {
+      const data = await requestJson(`/api/atendimentos/${this.currentLead.id}/dossie-probatorio`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'registrar_decisao', status, responsavel, nota })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível registrar a decisão.');
+      }, 'Não foi possível registrar a decisão.');
       this.currentRetirementDossier = data.dossie;
       this.renderRetirementDossier();
     } catch (error) {
-      alert(error.message || 'Não foi possível registrar a decisão.');
+      showUserError(error, 'Não foi possível registrar a decisão.');
     }
   }
 
@@ -1584,13 +1628,11 @@ class AppEngine {
     const button = document.getElementById('modal-docs-audit-button');
     if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Auditando'; }
     try {
-      const response = await fetch(`/api/atendimentos/${this.currentLead.id}/auditoria-documental`, { method: 'POST' });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível gerar a auditoria documental.');
+      const data = await requestJson(`/api/atendimentos/${this.currentLead.id}/auditoria-documental`, { method: 'POST' }, 'Não foi possível gerar a auditoria documental.');
       this.currentDocumentAudit = data.audit;
       this.renderDocumentAuditResult();
     } catch (error) {
-      alert(error.message || 'Não foi possível gerar a auditoria documental.');
+      showUserError(error, 'Não foi possível gerar a auditoria documental.');
     } finally {
       if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-code-compare"></i> Auditar CNIS × CTPS'; }
     }
@@ -1607,17 +1649,13 @@ class AppEngine {
     doc.status = 'recebido';
     this.renderModalDocs();
     try {
-      const intentResponse = await fetch(`/api/atendimentos/${this.currentLead.id}/upload-intents`, {
+      const intent = await requestJson(`/api/atendimentos/${this.currentLead.id}/upload-intents`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document_id: doc.id, filename: file.name, mime_type: file.type, size_bytes: file.size })
-      });
-      const intent = await intentResponse.json();
-      if (!intentResponse.ok || !intent.success) throw new Error(intent.error || 'Não foi possível autorizar o envio privado.');
+      }, 'Não foi possível autorizar o envio privado.');
       const storageResponse = await fetch(intent.upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
       if (!storageResponse.ok) throw new Error('O armazenamento privado recusou o arquivo. O comportamento do upload direto pelo navegador precisa ser validado no bucket Fil One.');
-      const response = await fetch(`/api/documentos/upload-intents/${intent.intent_id}/complete`, { method: 'POST' });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Falha ao confirmar o arquivo no armazenamento privado.');
+      const data = await requestJson(`/api/documentos/upload-intents/${intent.intent_id}/complete`, { method: 'POST' }, 'Falha ao confirmar o arquivo no armazenamento privado.');
       doc.status = 'recebido';
       doc.extraction_status = 'nao_processado';
       doc.technical_notes = 'Arquivo privado recebido; leitura técnica será uma etapa posterior.';
@@ -1628,7 +1666,7 @@ class AppEngine {
     } catch (error) {
       doc.status = originalStatus;
       this.renderModalDocs();
-      alert(error.message || 'Não foi possível anexar o documento ao dossiê.');
+      showUserError(error, 'Não foi possível anexar o documento ao dossiê.');
     }
   }
 
@@ -1640,13 +1678,11 @@ class AppEngine {
     const lead = this.currentLead;
 
     try {
-      const response = await fetch(`/api/documentos/${docId}/status`, {
+      const data = await requestJson(`/api/documentos/${docId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível atualizar o status do documento.');
+      }, 'Não foi possível atualizar o status do documento.');
 
       if (lead?.documents) {
         const d = lead.documents.find(doc => doc.id === docId);
@@ -1654,7 +1690,7 @@ class AppEngine {
         if (this.currentLead?.id === lead.id) this.renderModalDocs();
       }
     } catch (error) {
-      alert(error.message || 'Não foi possível atualizar o status do documento.');
+      showUserError(error, 'Não foi possível atualizar o status do documento.');
     }
   }
 
@@ -1695,7 +1731,7 @@ class AppEngine {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível enviar para assinatura.');
       if (feedback) { feedback.style.color='var(--accent-emerald)'; feedback.textContent=data.message; }
-    } catch (error) { if (feedback) { feedback.style.color='var(--accent-rose)'; feedback.textContent=error.message; } }
+    } catch (error) { if (feedback) { feedback.style.color='var(--accent-rose)'; feedback.textContent=userFacingErrorMessage(error, 'Não foi possível enviar para assinatura.'); } }
   }
 
   filterKanban(term) {
@@ -1729,7 +1765,7 @@ class AppEngine {
         container.appendChild(btn);
       });
     } catch (e) {
-      if (error) error.textContent = e.message || 'Falha ao carregar os benefícios.';
+      if (error) error.textContent = userFacingErrorMessage(e, 'Falha ao carregar os benefícios.');
     }
   }
 
@@ -1785,7 +1821,7 @@ class AppEngine {
       };
       this.renderRetirementPrefilter(data);
     } catch (err) {
-      error.textContent = err.message || 'Falha ao avaliar o pré-filtro.';
+      error.textContent = userFacingErrorMessage(err, 'Falha ao avaliar o pré-filtro.');
     } finally {
       if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Avaliar pré-filtro'; }
     }
@@ -1840,7 +1876,7 @@ class AppEngine {
       status.className = 'triage-evidence-status success';
     } catch (error) {
       this.triageState = { ...this.triageState, cnisEvidence: null };
-      status.textContent = error.message || 'Falha ao ler o CNIS.';
+      status.textContent = userFacingErrorMessage(error, 'Falha ao ler o CNIS.');
       status.className = 'triage-evidence-status error';
     } finally {
       if (input) input.value = '';
@@ -1927,7 +1963,7 @@ class AppEngine {
     } catch (e) {
       const container = document.getElementById('triage-options-container');
       if (container) {
-        container.textContent = e.message || 'Falha na triagem. Tente novamente.';
+        container.textContent = userFacingErrorMessage(e, 'Falha na triagem. Tente novamente.');
         container.className = 'triage-error';
       }
     }
@@ -2022,7 +2058,7 @@ class AppEngine {
       if (!res.ok || !data.success || !data.id) throw new Error(data.error || 'Não foi possível criar o dossiê do cliente.');
       newLead.id = data.id;
     } catch (error) {
-      alert(error.message || 'Não foi possível salvar a triagem.');
+      showUserError(error, 'Não foi possível salvar a triagem.');
       this.triageSaving = false;
       if (saveButton) { saveButton.disabled = false; this.renderTriageResult(result); }
       return;
@@ -2079,7 +2115,7 @@ class AppEngine {
         container.appendChild(card);
       });
     } catch (error) {
-      container.textContent = error.message || 'Falha ao carregar a base de relacionamento.';
+      container.textContent = userFacingErrorMessage(error, 'Falha ao carregar a base de relacionamento.');
       container.className = 'triage-error';
     }
   }
@@ -2091,7 +2127,7 @@ class AppEngine {
       await this.loadData();
       this.switchTab('kanban');
     } catch (error) {
-      alert(error.message || 'Falha ao reabrir o lead.');
+      showUserError(error, 'Falha ao reabrir o lead.');
     }
   }
 
@@ -2159,7 +2195,7 @@ class AppEngine {
       await this.loadData();
       this.switchTab(isRelationship ? 'relationship' : 'kanban');
     } catch (error) {
-      feedback.textContent = error.message || 'Falha ao salvar o lead.';
+      feedback.textContent = userFacingErrorMessage(error, 'Falha ao salvar o lead.');
     }
   }
 
