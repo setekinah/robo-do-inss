@@ -9,12 +9,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_JS = ROOT / "app.js"
+API_SERVER = ROOT / "api_server.py"
 
 
 class OCRDeadCodeRemovalTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.app = APP_JS.read_text(encoding="utf-8")
+        cls.server = API_SERVER.read_text(encoding="utf-8")
 
     def test_handle_ocr_only_delegates_to_real_processor(self) -> None:
         pattern = (
@@ -53,10 +55,21 @@ class OCRDeadCodeRemovalTests(unittest.TestCase):
             "32 anos, 2 meses e 15 dias",
             "386 contribuições",
             "Apto para Aposentadoria por Idade Urbana",
+            "R$ 3.840,50",
+            "Extrato CNIS NATIVO processado com OCR Neural + Resolução Automática",
         )
 
         for value in forbidden:
             self.assertNotIn(value, self.app)
+            self.assertNotIn(value, self.server)
+
+    def test_backend_analysis_handler_only_delegates_to_real_processor(self) -> None:
+        self.assertRegex(
+            self.server,
+            r"def handle_post_documento_analisar\(self\) -> None:\s*"
+            r"self\._handle_uploaded_document_analysis\(\)\s*"
+            r"def _get_owned_document",
+        )
 
 
 if __name__ == "__main__":
