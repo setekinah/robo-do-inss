@@ -59,6 +59,20 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self) -> None:
         """Add baseline browser protections to every response, including errors."""
+        response_path = urllib.parse.urlparse(self.path).path
+        if response_path.startswith("/api/"):
+            # Dados operacionais e autenticados nunca devem ser reutilizados
+            # por navegador ou proxy intermediário.
+            self.send_header("Cache-Control", "no-store")
+        elif response_path in {"/", "/index.html", "/portal.html"}:
+            # O HTML aponta para os assets versionados; ele próprio deve ser
+            # revalidado a cada abertura para descobrir uma nova release.
+            self.send_header("Cache-Control", "no-cache, max-age=0, must-revalidate")
+        elif response_path in self.STATIC_FILES:
+            if getattr(self, "_versioned_static_asset", False):
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            else:
+                self.send_header("Cache-Control", "no-cache, max-age=0, must-revalidate")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -259,6 +273,10 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             if requested not in self.STATIC_FILES:
                 self._send_json({"error": "Recurso não encontrado."}, 404)
                 return
+            # SimpleHTTPRequestHandler usa apenas o path para localizar o
+            # arquivo. Guardamos separadamente se a URL original tinha versão
+            # para aplicar cache imutável apenas a assets versionados.
+            self._versioned_static_asset = bool(parsed_url.query)
             self.path = requested
             super().do_GET()
 
