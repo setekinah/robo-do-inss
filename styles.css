@@ -171,16 +171,52 @@ body {
   color: var(--primary);
 }
 
-/* Document Item Card */
+/* Checklist documental: a ação vem antes da análise secundária. */
+.docs-operational-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .9rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .025);
+}
+.docs-eyebrow { display: block; color: var(--text-muted); font-size: .68rem; font-weight: 800; letter-spacing: .09em; }
+.docs-operational-summary h4 { margin: .25rem 0; font-family: var(--font-heading); }
+.docs-operational-summary h4 i { color: var(--accent-emerald); margin-right: .35rem; }
+.docs-summary-copy { margin: 0; color: var(--text-muted); font-size: .78rem; }
+.docs-summary-counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
+.docs-count { border-radius: var(--radius-full); padding: .35rem .55rem; font-size: .72rem; font-weight: 700; white-space: nowrap; }
+.docs-count-pending { background: rgba(245, 158, 11, .14); color: var(--accent-gold); }
+.docs-count-received { background: rgba(16, 185, 129, .14); color: var(--accent-emerald); }
+.docs-checklist { display: flex; flex-direction: column; gap: .7rem; max-height: 420px; overflow-y: auto; padding-right: .15rem; }
 .doc-item-card {
-  padding: 1rem;
+  padding: .9rem 1rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .85rem;
   align-items: center;
-  justify-content: space-between;
 }
+.doc-item-card h5 { margin: 0; font-size: .9rem; }
+.doc-purpose { display: block; margin-top: .28rem; color: var(--text-muted); font-size: .75rem; line-height: 1.4; }
+.doc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .45rem; }
+.doc-version-count { color: var(--text-muted); font-size: .72rem; }
+.doc-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
+.doc-actions .btn-primary, .doc-actions .btn-secondary { min-height: 2.1rem; padding: .42rem .65rem; border-radius: .55rem; font-size: .74rem; }
+.doc-actions .btn-primary { box-shadow: none; }
+.docs-analysis-tools { margin-top: 1rem; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); background: rgba(255, 255, 255, .015); }
+.docs-analysis-tools > summary { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .8rem .95rem; color: var(--text-main); cursor: pointer; font-size: .82rem; font-weight: 700; }
+.docs-analysis-tools > summary span { color: var(--text-muted); font-size: .72rem; font-weight: 500; }
+.docs-analysis-tools-content { display: grid; gap: .75rem; padding: 0 .95rem .95rem; border-top: 1px solid var(--glass-border); }
+.docs-analysis-actions { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: .75rem; }
+.docs-analysis-actions .btn-secondary { padding: .45rem .65rem; font-size: .74rem; }
+.docs-tool-help { margin: 0; color: var(--text-muted); font-size: .75rem; }
+.docs-analysis-actions button:disabled { cursor: not-allowed; opacity: .58; }
 
 .doc-status-badge {
   padding: 0.2rem 0.6rem;
@@ -216,6 +252,11 @@ body {
 .doc-status-recebido { background: rgba(0, 242, 254, 0.15); color: var(--primary); }
 .doc-status-aprovado { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
 .doc-status-rejeitado { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); }
+@media (max-width: 680px) {
+  .docs-operational-summary, .doc-item-card { grid-template-columns: 1fr; display: grid; }
+  .docs-summary-counts, .doc-actions { justify-content: flex-start; }
+  .docs-analysis-tools > summary { align-items: flex-start; flex-direction: column; }
+}
 
 /* --- KANBAN BOARD INTELIGENTE & RESPONSIVO --- */
 .kanban-filter-bar {

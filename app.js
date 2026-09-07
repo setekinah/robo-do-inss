@@ -1263,6 +1263,7 @@ class AppEngine {
     audio.click();
     this.currentDocumentAudit = null;
     this.currentRetirementDossier = null;
+    this.currentEvidenceMatrix = null;
     try {
       this.currentLead = await requestJson(`/api/atendimentos/${leadId}`, {}, 'Não foi possível carregar os detalhes do caso.');
     } catch (e) {
@@ -1400,11 +1401,28 @@ class AppEngine {
       ? this.currentLead.documents
       : [];
 
-    const completed = docs.filter(d => d.status === 'aprovado').length;
-    document.getElementById('modal-docs-progress').textContent = `${completed} de ${docs.length} Aprovados`;
+    const receivedStatuses = new Set(['recebido', 'aprovado', 'validado']);
+    const received = docs.filter(doc => receivedStatuses.has(String(doc.status || '').toLowerCase())).length;
+    const pending = docs.filter(doc => String(doc.status || 'pendente').toLowerCase() === 'pendente').length;
+    document.getElementById('modal-docs-progress').textContent = docs.length
+      ? `${docs.length} documento(s) cadastrado(s) neste caso`
+      : 'Nenhum documento cadastrado neste caso.';
+    document.getElementById('modal-docs-pending-count').textContent = `${pending} pendentes`;
+    document.getElementById('modal-docs-received-count').textContent = `${received} recebidos`;
 
     const auditButton = document.getElementById('modal-docs-audit-button');
-    if (auditButton) auditButton.onclick = () => this.runDocumentAudit();
+    const auditHelp = document.getElementById('modal-docs-audit-help');
+    const hasReadableEvidence = (documentCode) => docs.some((doc) => (
+      String(doc.document_code || '').toLowerCase() === documentCode
+      && String(doc.raw_text || '').trim().length > 0
+    ));
+    const auditAvailable = hasReadableEvidence('cnis') && hasReadableEvidence('ctps');
+    if (auditButton) {
+      auditButton.disabled = !auditAvailable;
+      auditButton.onclick = auditAvailable ? () => this.runDocumentAudit() : null;
+      auditButton.setAttribute('aria-describedby', 'modal-docs-audit-help');
+    }
+    if (auditHelp) auditHelp.hidden = auditAvailable;
     const portalButton = document.getElementById('modal-client-portal-button');
     if (portalButton) portalButton.onclick = () => this.generateClientPortalLink(portalButton);
     const dossierButton = document.getElementById('modal-retirement-dossier-button');
@@ -1430,26 +1448,34 @@ class AppEngine {
       const safeStatus = ['pendente', 'recebido', 'aprovado', 'rejeitado', 'validado', 'ilegivel', 'inconsistente'].includes(doc.status)
         ? doc.status
         : 'pendente';
+      const strategyDocument = (this.currentLead?.document_strategy?.documents || []).find((item) => (
+        String(item.code || '').toLowerCase() === String(doc.document_code || '').toLowerCase()
+      ));
+      const purpose = strategyDocument?.analysis_focus || doc.notes || 'Finalidade não informada para este documento.';
       const auditNote = doc.extraction_status
         ? `Leitura: ${doc.extraction_status}${doc.extraction_confidence != null ? ` · confiança ${Math.round(Number(doc.extraction_confidence) * 100)}%` : ''}`
         : 'Ainda não enviado para leitura.';
-      const evidenceNote = Number(doc.version_count || 0) > 0
-        ? `${doc.version_count} versão(ões) de evidência preservada(s)`
-        : 'Nenhuma evidência analisada ainda.';
+      const versionCount = Number(doc.version_count || 0);
+      const hasEvidence = versionCount > 0;
+      const uploadLabel = hasEvidence ? 'Adicionar nova versão' : 'Enviar documento';
+      const validationLabel = safeStatus === 'recebido'
+        ? 'Validar documento'
+        : (safeStatus === 'aprovado' ? 'Reabrir validação' : 'Atualizar status');
 
       card.innerHTML = `
         <div>
-          <strong style="font-size: 0.9rem;">${escapeHTML(doc.document_name)}</strong>
-          <small class="doc-audit-note">${escapeHTML(auditNote)} · ${escapeHTML(evidenceNote)}</small>
+          <h5>${escapeHTML(doc.document_name)}</h5>
+          <small class="doc-purpose"><strong>Finalidade:</strong> ${escapeHTML(purpose)}</small>
+          <div class="doc-meta">
+            <span class="doc-status-badge doc-status-${safeStatus}">${escapeHTML(safeStatus)}</span>
+            <span class="doc-version-count">${versionCount} versão(ões)</span>
+          </div>
+          <small class="doc-audit-note">${escapeHTML(auditNote)}</small>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.8rem;">
-          <span class="doc-status-badge doc-status-${safeStatus}">${escapeHTML(safeStatus)}</span>
-          <button class="icon-btn doc-upload-button" style="width: 30px; height: 30px; font-size: 0.8rem;" title="Enviar e ler documento">
-            <i class="fa-solid fa-file-arrow-up"></i>
-          </button>
-          <button class="icon-btn doc-status-toggle" style="width: 30px; height: 30px; font-size: 0.8rem;" title="Alternar Status">
-            <i class="fa-solid fa-rotate"></i>
-          </button>
+        <div class="doc-actions">
+          ${hasEvidence ? '<button class="btn-secondary doc-view-button" type="button"><i class="fa-solid fa-eye"></i> Visualizar</button>' : ''}
+          <button class="${hasEvidence ? 'btn-secondary' : 'btn-primary'} doc-upload-button" type="button"><i class="fa-solid fa-file-arrow-up"></i> ${uploadLabel}</button>
+          <button class="btn-secondary doc-status-toggle" type="button"><i class="fa-solid fa-circle-check"></i> ${validationLabel}</button>
         </div>
       `;
       card.querySelector('.doc-status-toggle').addEventListener('click', () => this.toggleDocStatus(Number(doc.id), safeStatus));
@@ -1462,6 +1488,7 @@ class AppEngine {
         if (file) this.uploadCaseDocument(file, doc);
       });
       card.querySelector('.doc-upload-button').addEventListener('click', () => fileInput.click());
+      card.querySelector('.doc-view-button')?.addEventListener('click', () => this.viewCaseDocument(doc));
       card.appendChild(fileInput);
       list.appendChild(card);
     });
@@ -1634,7 +1661,22 @@ class AppEngine {
     } catch (error) {
       showUserError(error, 'Não foi possível gerar a auditoria documental.');
     } finally {
-      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-code-compare"></i> Auditar CNIS × CTPS'; }
+      if (button) button.innerHTML = '<i class="fa-solid fa-code-compare"></i> Auditar CNIS × CTPS';
+      this.renderModalDocs();
+    }
+  }
+
+  async viewCaseDocument(doc) {
+    if (!this.currentLead?.id || !doc?.id) return;
+    try {
+      const data = await requestJson(
+        `/api/atendimentos/${this.currentLead.id}/documentos/${doc.id}/download-url`,
+        {},
+        'Não foi possível preparar a visualização segura do documento.'
+      );
+      window.open(data.download_url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      showUserError(error, 'Não foi possível preparar a visualização segura do documento.');
     }
   }
 

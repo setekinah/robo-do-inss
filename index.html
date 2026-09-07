@@ -10,7 +10,7 @@
   
   <!-- CSS Principal -->
   <!-- Atualize este token em todos os assets locais a cada release frontend. -->
-  <link rel="stylesheet" href="styles.css?v=p0.8-20260907">
+  <link rel="stylesheet" href="styles.css?v=p1.1-20260907">
 </head>
 <body>
 
@@ -184,19 +184,34 @@
       </div>
 
       <div id="modaltab-docs" class="modal-panel" style="display: none;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-          <h4 style="font-family: var(--font-heading);"><i class="fa-solid fa-folder-tree" style="color: var(--accent-emerald);"></i> Checklist do Benefício</h4>
-          <div style="display: flex; align-items: center; gap: 0.65rem;">
-            <button type="button" id="modal-client-portal-button" class="btn-secondary" style="padding: 0.5rem 0.7rem; font-size: 0.76rem;"><i class="fa-solid fa-link"></i> Acesso do cliente</button>
-            <button type="button" id="modal-retirement-dossier-button" class="btn-primary" style="padding: 0.5rem 0.7rem; font-size: 0.76rem;"><i class="fa-solid fa-scale-balanced"></i> Dossiê probatório</button>
-            <button type="button" id="modal-docs-audit-button" class="btn-secondary" style="padding: 0.5rem 0.7rem; font-size: 0.76rem;"><i class="fa-solid fa-code-compare"></i> Auditar CNIS × CTPS</button>
-            <span style="font-size: 0.85rem; color: var(--text-muted);" id="modal-docs-progress">0 de 0 Concluídos</span>
+        <section class="docs-operational-summary" aria-labelledby="modal-docs-title">
+          <div>
+            <span class="docs-eyebrow">DOCUMENTOS DO CASO</span>
+            <h4 id="modal-docs-title"><i class="fa-solid fa-folder-tree" aria-hidden="true"></i> Documentos</h4>
+            <p id="modal-docs-progress" class="docs-summary-copy">0 documentos cadastrados</p>
           </div>
-        </div>
-        <div id="modal-retirement-dossier-result" class="doc-audit-result" hidden></div>
-        <div id="modal-docs-audit-result" class="doc-audit-result" hidden></div>
-        <div id="modal-evidence-matrix" class="doc-audit-result evidence-matrix" hidden></div>
-        <div id="modal-docs-list" style="display: flex; flex-direction: column; gap: 0.8rem; max-height: 320px; overflow-y: auto;"></div>
+          <div class="docs-summary-counts" aria-label="Resumo dos documentos">
+            <span id="modal-docs-pending-count" class="docs-count docs-count-pending">0 pendentes</span>
+            <span id="modal-docs-received-count" class="docs-count docs-count-received">0 recebidos</span>
+          </div>
+        </section>
+
+        <div id="modal-docs-list" class="docs-checklist" aria-live="polite"></div>
+
+        <details class="docs-analysis-tools">
+          <summary>Ferramentas de análise <span>Auditoria, evidências e dossiê</span></summary>
+          <div class="docs-analysis-tools-content">
+            <div class="docs-analysis-actions">
+              <button type="button" id="modal-docs-audit-button" class="btn-secondary"><i class="fa-solid fa-code-compare"></i> Auditar CNIS × CTPS</button>
+              <button type="button" id="modal-retirement-dossier-button" class="btn-secondary"><i class="fa-solid fa-scale-balanced"></i> Dossiê probatório</button>
+              <button type="button" id="modal-client-portal-button" class="btn-secondary"><i class="fa-solid fa-link"></i> Acesso do cliente</button>
+            </div>
+            <p id="modal-docs-audit-help" class="docs-tool-help" role="status" hidden>Disponível após a leitura técnica de CNIS e CTPS.</p>
+            <div id="modal-docs-audit-result" class="doc-audit-result" hidden></div>
+            <div id="modal-evidence-matrix" class="doc-audit-result evidence-matrix" hidden></div>
+            <div id="modal-retirement-dossier-result" class="doc-audit-result" hidden></div>
+          </div>
+        </details>
       </div>
 
       <div id="modaltab-contract" class="modal-panel" style="display: none;">
@@ -842,6 +857,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=p0.8-20260907"></script>
+  <script src="app.js?v=p1.1-20260907"></script>
 </body>
 </html>
