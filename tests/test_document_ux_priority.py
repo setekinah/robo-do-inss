@@ -33,6 +33,11 @@ class DocumentUxPriorityTests(unittest.TestCase):
         self.assertIn('/upload-intents', upload.group(0))
         self.assertIn("method: 'PUT'", upload.group(0))
         self.assertIn('/complete', upload.group(0))
+        self.assertNotIn("doc.status = 'recebido'", upload.group(0))
+        self.assertIn('const attendanceId = this.currentLead.id', upload.group(0))
+        self.assertIn('this.currentLead = refreshedLead', upload.group(0))
+        self.assertIn('Arquivo armazenado com sucesso, mas a tela não pôde ser atualizada.', upload.group(0))
+        self.assertIn('Não foi possível enviar o arquivo ao armazenamento privado.', upload.group(0))
 
     def test_analysis_features_remain_available_without_mock_documents(self) -> None:
         for method in ('async runDocumentAudit', 'async loadEvidenceMatrix', 'async runRetirementDossier'):
@@ -72,7 +77,7 @@ class DocumentUxPriorityTests(unittest.TestCase):
     def test_asset_release_token_is_coherent(self) -> None:
         portal = (ROOT / "portal.html").read_text(encoding="utf-8")
         references = re.findall(r'(?:styles\.css|app\.js|portal\.js)\?v=([^"\']+)', HTML + portal)
-        self.assertEqual(set(references), {'p1.1-20260907'})
+        self.assertEqual(set(references), {'p1.1.1-20260907'})
 
 
 if __name__ == '__main__':

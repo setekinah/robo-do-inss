@@ -30,7 +30,13 @@ import docuseal_integration
 import document_audit
 import document_intelligence
 import document_rules
-from filone_storage import FilOneStorageService, StorageConfigurationError, build_storage_key, validate_upload_metadata
+from filone_storage import (
+    FilOneStorageService,
+    StorageConfigurationError,
+    build_storage_key,
+    load_local_filone_environment,
+    validate_upload_metadata,
+)
 import official_catalog
 import office_settings
 import retirement_prefilter
@@ -42,6 +48,46 @@ from triage_engine import answer_current_question, create_state, get_current_nod
 # Garante inicializacao do banco de dados na partida
 database.init_database()
 database.register_official_sources(list(official_catalog.OFFICIAL_SOURCE_REGISTRY))
+
+
+def configured_filone_connect_origin() -> str | None:
+    """Return only a valid HTTPS Fil One origin for the browser CSP, if configured."""
+    try:
+        load_local_filone_environment()
+    except (OSError, UnicodeError):
+        return None
+
+    endpoint = os.environ.get("FILONE_ENDPOINT", "").strip()
+    if not endpoint:
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(endpoint)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme.lower() != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or not re.fullmatch(r"[A-Za-z0-9.-]+", hostname)
+    ):
+        return None
+    return f"https://{hostname.lower()}{f':{port}' if port is not None else ''}"
+
+
+def content_security_policy() -> str:
+    """Keep the CSP restrictive while allowing direct browser PUTs to Fil One."""
+    connect_sources = ["'self'"]
+    if origin := configured_filone_connect_origin():
+        connect_sources.append(origin)
+    return (
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
+        "form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+        f"script-src 'self'; connect-src {' '.join(connect_sources)}"
+    )
 
 
 class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
@@ -81,10 +127,7 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
         # proibidos para reduzir o impacto de qualquer futura falha de XSS.
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
-            "form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
-            "script-src 'self'; connect-src 'self'",
+            content_security_policy(),
         )
         super().end_headers()
 

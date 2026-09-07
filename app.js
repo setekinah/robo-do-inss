@@ -1682,32 +1682,45 @@ class AppEngine {
 
   async uploadCaseDocument(file, doc) {
     if (!this.currentLead?.id || !doc?.id) return;
+    const attendanceId = this.currentLead.id;
     const allowedExtensions = /\.(pdf|png|jpe?g|tiff?|webp|bmp)$/i;
     if (!allowedExtensions.test(file.name)) {
       alert('Envie PDF, PNG, JPG, TIFF, WEBP ou BMP.');
       return;
     }
-    const originalStatus = doc.status;
-    doc.status = 'recebido';
-    this.renderModalDocs();
     try {
-      const intent = await requestJson(`/api/atendimentos/${this.currentLead.id}/upload-intents`, {
+      const intent = await requestJson(`/api/atendimentos/${attendanceId}/upload-intents`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document_id: doc.id, filename: file.name, mime_type: file.type, size_bytes: file.size })
       }, 'Não foi possível autorizar o envio privado.');
-      const storageResponse = await fetch(intent.upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
-      if (!storageResponse.ok) throw new Error('O armazenamento privado recusou o arquivo. O comportamento do upload direto pelo navegador precisa ser validado no bucket Fil One.');
-      const data = await requestJson(`/api/documentos/upload-intents/${intent.intent_id}/complete`, { method: 'POST' }, 'Falha ao confirmar o arquivo no armazenamento privado.');
-      doc.status = 'recebido';
-      doc.extraction_status = 'nao_processado';
-      doc.technical_notes = 'Arquivo privado recebido; leitura técnica será uma etapa posterior.';
+      let storageResponse;
+      try {
+        storageResponse = await fetch(intent.upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      } catch (_) {
+        throw new Error('Não foi possível enviar o arquivo ao armazenamento privado. Tente novamente.');
+      }
+      if (!storageResponse.ok) throw new Error('Não foi possível enviar o arquivo ao armazenamento privado. Tente novamente.');
+      await requestJson(`/api/documentos/upload-intents/${intent.intent_id}/complete`, { method: 'POST' }, 'Falha ao confirmar o arquivo no armazenamento privado.');
       this.currentDocumentAudit = null;
       this.currentRetirementDossier = null;
-      this.renderModalDocs();
-      alert('Documento incluído no dossiê e armazenado privadamente. A leitura técnica não é executada nesta etapa.');
+      this.currentEvidenceMatrix = null;
+      try {
+        const refreshedLead = await requestJson(
+          `/api/atendimentos/${attendanceId}`,
+          {},
+          'Não foi possível atualizar os dados do caso.'
+        );
+        if (this.currentLead?.id === attendanceId) {
+          this.currentLead = refreshedLead;
+          this.renderModalDocs();
+          this.loadEvidenceMatrix();
+        }
+        alert('Documento incluído no dossiê e armazenado privadamente. A leitura técnica não é executada nesta etapa.');
+      } catch (refreshError) {
+        this.renderModalDocs();
+        alert('Arquivo armazenado com sucesso, mas a tela não pôde ser atualizada. Reabra o caso para ver os dados confirmados.');
+      }
     } catch (error) {
-      doc.status = originalStatus;
-      this.renderModalDocs();
       showUserError(error, 'Não foi possível anexar o documento ao dossiê.');
     }
   }

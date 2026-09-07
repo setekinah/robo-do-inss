@@ -57,7 +57,7 @@ class AssetCachePolicyTests(unittest.TestCase):
         self.assertEqual(headers.get("cache-control"), "no-store")
 
     def test_versioned_assets_are_immutable_and_query_preserves_allowlist_access(self) -> None:
-        for path in ("/styles.css?v=p1.1-20260907", "/app.js?v=p1.1-20260907", "/portal.js?v=p1.1-20260907"):
+        for path in ("/styles.css?v=p1.1.1-20260907", "/app.js?v=p1.1.1-20260907", "/portal.js?v=p1.1.1-20260907"):
             status, headers = self.server.get(path)
             self.assertEqual(status, 200)
             self.assertEqual(headers.get("cache-control"), "public, max-age=31536000, immutable")
@@ -65,10 +65,10 @@ class AssetCachePolicyTests(unittest.TestCase):
     def test_first_party_html_references_use_one_release_token(self) -> None:
         self.assertNotIn("control-icons-20260903", self.index)
         references = re.findall(r'(?:styles\.css|app\.js|portal\.js)\?v=([^"\']+)', self.index + self.portal)
-        self.assertEqual(set(references), {"p1.1-20260907"})
+        self.assertEqual(set(references), {"p1.1.1-20260907"})
 
     def test_cache_policy_keeps_security_headers(self) -> None:
-        _, headers = self.server.get("/app.js?v=p1.1-20260907")
+        _, headers = self.server.get("/app.js?v=p1.1.1-20260907")
         self.assertIn("default-src 'self'", headers.get("content-security-policy", ""))
         self.assertEqual(headers.get("x-content-type-options"), "nosniff")
 

@@ -40,12 +40,13 @@ class UiDatabaseConsistencyTests(unittest.TestCase):
         self.assertLess(body.index("requestJson("), body.index("item.crm_stage = data.stage"))
         self.assertIn("showUserError(error", body)
 
-    def test_case_document_upload_retains_its_existing_rollback(self) -> None:
+    def test_case_document_upload_changes_the_ui_only_after_confirmed_refresh(self) -> None:
         body = function_body("uploadCaseDocument", "toggleDocStatus")
 
-        self.assertIn("const originalStatus = doc.status", body)
-        self.assertIn("doc.status = originalStatus", body)
-        self.assertLess(body.index("doc.status = originalStatus"), body.index("showUserError(error"))
+        self.assertNotIn("doc.status = 'recebido'", body)
+        self.assertNotIn("originalStatus", body)
+        self.assertLess(body.index("/complete"), body.index("this.currentLead = refreshedLead"))
+        self.assertIn("Arquivo armazenado com sucesso, mas a tela não pôde ser atualizada.", body)
 
 
 if __name__ == "__main__":
