@@ -11,6 +11,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+from domain_state import (
+    normalize_legacy_status,
+    require_stage_transition,
+    validate_case_stage,
+    validate_conflict_status,
+    validate_privacy_legal_basis,
+    validate_relationship_status,
+)
 from document_rules import build_document_checklist
 from runtime_paths import DATA_DIR
 
@@ -598,6 +606,9 @@ def save_attendance(
     relationship_next_review_at: str | None = None,
     remarketing_opt_in: bool = False,
 ) -> int:
+    status = normalize_legacy_status(status)
+    crm_stage = validate_case_stage(crm_stage)
+    relationship_status = validate_relationship_status(relationship_status)
     with get_connection() as conn:
         cursor = conn.execute(
             """
@@ -1330,7 +1341,13 @@ def update_crm_case(
         current = conn.execute(
             "SELECT crm_stage FROM atendimentos WHERE id = ?", (attendance_id,)
         ).fetchone()
-        stage_changed = current is not None and current["crm_stage"] != crm_stage
+        if current is None:
+            raise ValueError("Atendimento não encontrado.")
+        crm_stage = require_stage_transition(current["crm_stage"] or "triagem", crm_stage)
+        conflict_status = validate_conflict_status(conflict_status)
+        if privacy_notice_acknowledged:
+            privacy_legal_basis = validate_privacy_legal_basis(privacy_legal_basis)
+        stage_changed = current["crm_stage"] != crm_stage
         if stage_changed and (not next_action.strip() or not next_action_at):
             raise ValueError("Defina a próxima ação e a data antes de mudar a etapa do caso.")
         if conflict_status == "liberado" and not conflict_checked_parties.strip():

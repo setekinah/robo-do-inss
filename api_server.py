@@ -24,6 +24,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import auth_security
+import case_lifecycle
 import cnis_knowledge
 import database
 import docuseal_integration
@@ -41,6 +42,14 @@ import official_catalog
 import office_settings
 import retirement_prefilter
 import retirement_dossier
+from domain_state import (
+    DomainStateError,
+    InvalidStageTransitionError,
+    derive_legacy_stage,
+    normalize_legacy_status,
+    validate_case_stage,
+    validate_relationship_status,
+)
 from modules.pdf_generator import build_review_draft_pdf
 from flows_data import FLOW_DEFINITIONS
 from triage_engine import answer_current_question, create_state, get_current_node, get_result
@@ -849,27 +858,35 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
 
     def handle_post_atividade(self, attendance_id: int) -> None:
         body = self._read_json_body()
-        activity_type = body.get("activity_type", "nota")
-        activity_body = body.get("body", "Interacao registrada")
-
-        with database.get_connection() as conn:
-            conn.execute(
-                "INSERT INTO crm_atividades (attendance_id, activity_type, body) VALUES (?, ?, ?)",
-                (attendance_id, activity_type, activity_body)
+        try:
+            case_lifecycle.record_activity(
+                attendance_id=attendance_id,
+                activity_type=body.get("activity_type", "nota"),
+                body=body.get("body"),
             )
+        except case_lifecycle.AttendanceNotFoundError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 404)
+            return
+        except DomainStateError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 422)
+            return
         self._send_json({"success": True, "attendance_id": attendance_id})
 
     def handle_post_tarefa(self, attendance_id: int) -> None:
         body = self._read_json_body()
-        title = body.get("title", "Retornar ao cliente")
-        due_at = body.get("due_at", "")
-        priority = body.get("priority", "media")
-
-        with database.get_connection() as conn:
-            conn.execute(
-                "INSERT INTO crm_tarefas (attendance_id, title, due_at, priority, status) VALUES (?, ?, ?, ?, 'aberta')",
-                (attendance_id, title, due_at, priority)
+        try:
+            case_lifecycle.create_manual_task(
+                attendance_id=attendance_id,
+                title=body.get("title"),
+                due_at=body.get("due_at"),
+                priority=body.get("priority", "media"),
             )
+        except case_lifecycle.AttendanceNotFoundError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 404)
+            return
+        except DomainStateError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 422)
+            return
         self._send_json({"success": True, "attendance_id": attendance_id})
 
     def handle_get_contrato(self, attendance_id: int) -> None:
@@ -995,13 +1012,23 @@ ___________________________________________________
                 self._send_json({"success": False, "error": "Nome e WhatsApp são obrigatórios."}, 400)
                 return
 
-            flow_id = body.get("flow_id", "aposentadoria")
+            flow_id = str(body.get("flow_id", "aposentadoria")).strip()
+            if flow_id not in FLOW_DEFINITIONS:
+                self._send_json({"success": False, "error": "Fluxo inválido."}, 422)
+                return
             history = body.get("history", [])
             result_title = body.get("result_title", "Triagem em Andamento")
             summary = body.get("summary", "Criado via Web App")
             next_step = body.get("next_step", "Verificar documentos iniciais")
-            status = body.get("status", "aprovado")
-            crm_stage = body.get("crm_stage", "triagem")
+            # status é uma entrada transitória porque o motor de triagem ainda
+            # roda no navegador. O estágio, privacidade e relacionamento são
+            # derivados pelo servidor e jamais aceitos como autoridade do POST.
+            status = normalize_legacy_status(body.get("status", "aprovado"))
+            if "crm_stage" in body:
+                validate_case_stage(body.get("crm_stage"))
+            if "relationship_status" in body:
+                validate_relationship_status(body.get("relationship_status"))
+            crm_stage = derive_legacy_stage(status)
             monthly_val = float(body.get("estimated_monthly_value", 0))
             total_val = float(body.get("estimated_total_value", 0))
             flow_name = FLOW_DEFINITIONS.get(flow_id, {}).get("name", flow_id)
@@ -1023,14 +1050,16 @@ ___________________________________________________
                 crm_stage=crm_stage,
                 lead_email=str(body.get("lead_email", "")),
                 lead_source=str(body.get("lead_source", "")),
-                privacy_notice_acknowledged=bool(body.get("privacy_notice_acknowledged", False)),
-                privacy_legal_basis=str(body.get("privacy_legal_basis", "")),
+                privacy_notice_acknowledged=False,
+                privacy_legal_basis="",
                 triage_profile=body.get("triage_profile") if isinstance(body.get("triage_profile"), dict) else {},
-                relationship_status=str(body.get("relationship_status", "nao_aplicavel")),
-                relationship_next_review_at=body.get("relationship_next_review_at"),
+                relationship_status=("aguardando_revisao" if status == "desqualificado" else "nao_aplicavel"),
+                relationship_next_review_at=None,
                 remarketing_opt_in=bool(body.get("remarketing_opt_in", False)),
             )
             self._send_json({"success": True, "id": att_id}, 201)
+        except DomainStateError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 422)
         except (TypeError, ValueError) as exc:
             self._send_json({"success": False, "error": f"Dados inválidos para o lead: {exc}"}, 400)
         except Exception as exc:
@@ -1053,62 +1082,66 @@ ___________________________________________________
         self._send_json([dict(row) for row in rows])
 
     def handle_post_reativar_lead(self, attendance_id: int) -> None:
-        with database.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE atendimentos
-                SET status = 'revisao', crm_stage = 'triagem',
-                    relationship_status = 'reativado',
-                    relationship_next_review_at = NULL,
-                    next_action = 'Refazer triagem guiada com dados atualizados',
-                    crm_stage_updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (attendance_id,),
-            )
-        if cursor.rowcount == 0:
-            self._send_json({"success": False, "error": "Lead não encontrado."}, 404)
+        try:
+            result = case_lifecycle.reactivate_lead(attendance_id=attendance_id)
+        except case_lifecycle.AttendanceNotFoundError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 404)
             return
-        self._send_json({"success": True, "id": attendance_id})
+        except InvalidStageTransitionError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 409)
+            return
+        self._send_json({"success": True, **result})
 
     def handle_put_stage(self, attendance_id: int) -> None:
         body = self._read_json_body()
-        new_stage = body.get("stage", "triagem")
-        
-        with database.get_connection() as conn:
-            conn.execute(
-                "UPDATE atendimentos SET crm_stage = ?, crm_stage_updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (new_stage, attendance_id)
+        try:
+            result = case_lifecycle.transition_case_stage(
+                attendance_id=attendance_id,
+                destination_stage=body.get("stage"),
             )
-            conn.execute(
-                "INSERT INTO crm_atividades (attendance_id, activity_type, body) VALUES (?, 'estagio_alterado', ?)",
-                (attendance_id, f"Estágio do CRM alterado para: {new_stage.upper()}")
-            )
-        self._send_json({"success": True, "id": attendance_id, "stage": new_stage})
+        except case_lifecycle.AttendanceNotFoundError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 404)
+            return
+        except InvalidStageTransitionError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 409)
+            return
+        except DomainStateError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 422)
+            return
+        self._send_json({"success": True, **result})
 
     def handle_post_conflito(self, attendance_id: int) -> None:
         body = self._read_json_body()
-        status = body.get("status", "liberado")
-        notes = body.get("notes", "Sem conflito de interesse detectado")
-        parties = body.get("parties", "")
-
-        database.update_conflict_check(
-            attendance_id=attendance_id,
-            status=status,
-            notes=notes,
-            parties=parties
-        )
-        self._send_json({"success": True, "id": attendance_id, "conflict_status": status})
+        try:
+            result = case_lifecycle.record_conflict_check(
+                attendance_id=attendance_id,
+                status=body.get("status"),
+                notes=body.get("notes"),
+                parties=body.get("parties"),
+            )
+        except case_lifecycle.AttendanceNotFoundError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 404)
+            return
+        except DomainStateError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 422)
+            return
+        self._send_json({"success": True, **result})
 
     def handle_post_lgpd(self, attendance_id: int) -> None:
         body = self._read_json_body()
-        legal_basis = body.get("legal_basis", "Execucao de Contrato / Tutela da Saude")
-        
-        database.register_privacy_acknowledgement(
-            attendance_id=attendance_id,
-            legal_basis=legal_basis
-        )
-        self._send_json({"success": True, "id": attendance_id, "privacy_legal_basis": legal_basis})
+        try:
+            result = case_lifecycle.record_privacy_acknowledgement(
+                attendance_id=attendance_id,
+                legal_basis=body.get("legal_basis"),
+                acknowledged=body.get("privacy_notice_acknowledged"),
+            )
+        except case_lifecycle.AttendanceNotFoundError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 404)
+            return
+        except DomainStateError as exc:
+            self._send_json({"success": False, "error": str(exc)}, 422)
+            return
+        self._send_json({"success": True, **result})
 
     def handle_post_triagem_executar(self) -> None:
         body = self._read_json_body()
