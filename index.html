@@ -10,12 +10,11 @@
   
   <!-- CSS Principal -->
   <!-- Atualize este token em todos os assets locais a cada release frontend. -->
-  <link rel="stylesheet" href="styles.css?v=a0.1-20260907">
+  <link rel="stylesheet" href="styles.css?v=a0.4-20260907">
 </head>
 <body>
 
-  <!-- Canvas Fundo de Matriz Neural -->
-  <canvas id="bg-canvas"></canvas>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
   <!-- OVERLAY DE LOGIN / ONBOARDING PREVIA (Matching TELA DE LOGIN.png) -->
   <div id="login-overlay" class="login-overlay">
@@ -244,21 +243,11 @@
       </div>
 
       <div class="topbar-right">
-        <div class="status-badge">
-          <div class="status-dot"></div>
-          <span>Robô PrevIA Online</span>
-        </div>
-
         <button class="icon-btn" id="btn-audio-toggle" type="button" title="Ativar efeitos sonoros" aria-pressed="false">
           <svg id="audio-toggle-icon" class="control-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6m0-6-5 6"/></svg>
         </button>
-
         <button class="icon-btn" type="button" id="btn-logout" title="Encerrar sessão">
           <svg class="control-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5"/><path d="M14 8l4 4-4 4M18 12H9"/></svg>
-        </button>
-
-        <button class="icon-btn" type="button" id="btn-notifications" aria-controls="notifications-popover" aria-expanded="false" title="Notificações e alertas">
-          <svg class="control-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 22h4"/></svg>
         </button>
       </div>
     </header>
@@ -325,17 +314,9 @@
           <span id="dashboard-filter-summary"></span>
         </div>
 
-        <section class="status-center" aria-labelledby="status-center-title">
-          <div class="status-center-heading"><span class="eyebrow">STATUS CENTER</span><h3 id="status-center-title">O que está funcionando agora</h3><p>Visibilidade da operação local. Integrações externas só aparecem quando estiverem configuradas.</p></div>
-          <div class="status-center-items">
-            <article class="status-item"><span class="status-dot status-dot--ok" id="status-network-dot"></span><div><strong id="status-network">Conexão local disponível</strong><small>Comunicação com o PrevIA neste navegador.</small></div></article>
-            <article class="status-item"><span class="status-dot status-dot--ok"></span><div><strong>Leitura documental local disponível</strong><small>PDFs e imagens são analisados no ambiente local.</small></div></article>
-            <article class="status-item"><span class="status-dot status-dot--idle"></span><div><strong>Integrações externas não configuradas</strong><small>Não há consulta automática ao Gov.br ou INSS nesta instalação.</small></div></article>
-          </div>
-        </section>
         <section class="first-value-guide" id="first-value-guide" aria-labelledby="first-value-title">
           <div><span class="eyebrow">COMECE POR AQUI</span><h3 id="first-value-title">Veja valor no primeiro caso</h3><p>Três passos curtos, sem acesso ao Gov.br e sem configurar integrações.</p></div>
-          <ol class="first-value-steps"><li><span>1</span><div><strong>Qualifique um caso</strong><small>Registre o cliente e o benefício de interesse.</small></div><button type="button" data-action="quickstart-case">Começar</button></li><li><span>2</span><div><strong>Envie um CNIS</strong><small>A leitura ocorre localmente.</small></div><button type="button" data-action="quickstart-document">Analisar</button></li><li><span>3</span><div><strong>Revise os sinais</strong><small>Confirme vínculos e pendências.</small></div><button type="button" data-action="quickstart-review">Ver relatório</button></li></ol>
+          <ol class="first-value-steps"><li><span>1</span><div><strong>Qualifique um caso</strong><small>Registre o cliente e o benefício de interesse.</small></div><button type="button" data-action="quickstart-case">Começar</button></li><li><span>2</span><div><strong>Envie um CNIS</strong><small>Envie o documento para análise.</small></div><button type="button" data-action="quickstart-document">Analisar</button></li><li><span>3</span><div><strong>Revise os sinais</strong><small>Confirme vínculos e pendências.</small></div><button type="button" data-action="quickstart-review">Ver relatório</button></li></ol>
         </section>
 
         <section class="glass-panel smart-pending-panel" style="margin-bottom:1.25rem;">
@@ -638,7 +619,7 @@
         <div class="section-header">
           <div>
             <h1 class="section-title">Inteligência <span>Documental & OCR</span></h1>
-            <p style="color: var(--text-muted);">Leitura neural e análise previdenciária de alta precisão para CNIS, CTPS, Carta de Concessão e Laudos Médicos.</p>
+            <p style="color: var(--text-muted);">Leitura e análise documental para CNIS, CTPS, Carta de Concessão e Laudos Médicos.</p>
           </div>
         </div>
 
@@ -653,7 +634,7 @@
               <input type="file" id="ocr-file-input" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" style="display: none;">
               <i class="fa-solid fa-file-pdf" style="font-size: 2.5rem;"></i>
               <h4 id="ocr-dropzone-title" style="font-size: 0.95rem; margin-top: 0.5rem;">Arraste o documento aqui ou clique para selecionar</h4>
-              <p style="color: var(--text-muted); font-size: 0.78rem; margin-top: 0.4rem;" id="ocr-dropzone-sub">Suporta PDF nativo, PNG ou JPG (Processamento 100% Local)</p>
+              <p style="color: var(--text-muted); font-size: 0.78rem; margin-top: 0.4rem;" id="ocr-dropzone-sub">Formatos aceitos: PDF, PNG ou JPG.</p>
               <button type="button" class="btn-primary" style="margin-top: 1rem; font-size: 0.8rem; padding: 0.5rem 1rem; width: 100%; justify-content: center;" data-action="choose-ocr-file">
                 <i class="fa-solid fa-folder-open"></i> Selecionar do Computador
               </button>
@@ -670,18 +651,6 @@
               </span>
             </div>
 
-            <!-- AUDITORIA DO DOCUMENTO -->
-            <div id="ocr-doc-meta" style="margin-top: 1.2rem; padding: 1rem; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border); display: none;">
-              <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Auditoria de Leitura Neural</div>
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
-                <span style="font-size: 0.85rem;">Confiança OCR:</span>
-                <span style="font-weight: 700; color: var(--accent-emerald);" id="ocr-confidence-val">98.7%</span>
-              </div>
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.3rem;">
-                <span style="font-size: 0.85rem;">Motor Neural:</span>
-                <span style="font-size: 0.8rem; color: var(--primary);" id="ocr-engine-val">RapidOCR ONNX</span>
-              </div>
-            </div>
           </div>
 
           <!-- COLUNA DIREITA: PAINEL EXECUTIVO GRAFICO DO CNIS -->
@@ -845,18 +814,6 @@
     </main>
   </div>
 
-  <div id="notifications-popover" popover="auto" hidden>
-    <h3 style="font-family: var(--font-heading); font-size: 1rem; margin-bottom: 0.8rem;"><i class="fa-solid fa-bell" style="color: var(--primary);"></i> Central de Notificações</h3>
-    <div style="display: flex; flex-direction: column; gap: 0.8rem; font-size: 0.85rem;">
-      <div style="padding: 0.6rem; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm);">
-        <strong style="color: var(--accent-emerald);">Sistema PrevIA Inicializado:</strong> Robô operando sem alertas.
-      </div>
-      <div style="padding: 0.6rem; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm);">
-        <strong style="color: var(--primary);">Inteligência OCR:</strong> ONNX Engine carregado com sucesso.
-      </div>
-    </div>
-  </div>
-
-  <script src="app.js?v=a0.1-20260907"></script>
+  <script src="app.js?v=a0.4-20260907"></script>
 </body>
 </html>
