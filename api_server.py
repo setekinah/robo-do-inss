@@ -670,13 +670,6 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
             else:
                 item["triage_profile"] = {}
             item["document_strategy"] = document_rules.get_flow_document_strategy(item["flow_id"])
-            
-            # Garantir checklist de documentos
-            database.seed_document_checklist(
-                conn,
-                attendance_id=attendance_id,
-                flow_id=item["flow_id"],
-            )
 
             # Buscar tarefas
             tasks = conn.execute(
@@ -704,13 +697,10 @@ class SofiPreviRequestHandler(SimpleHTTPRequestHandler):
 
     def handle_get_documentos(self, attendance_id: int) -> None:
         with database.get_connection() as conn:
-            row = conn.execute("SELECT flow_id FROM atendimentos WHERE id = ?", (attendance_id,)).fetchone()
-            if row:
-                database.seed_document_checklist(
-                    conn,
-                    attendance_id=attendance_id,
-                    flow_id=row[0],
-                )
+            row = conn.execute("SELECT 1 FROM atendimentos WHERE id = ?", (attendance_id,)).fetchone()
+            if not row:
+                self._send_json({"error": "Atendimento não encontrado."}, 404)
+                return
             docs = conn.execute(
                 "SELECT * FROM atendimento_documentos WHERE attendance_id = ?", (attendance_id,)
             ).fetchall()
