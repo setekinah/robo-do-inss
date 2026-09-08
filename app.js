@@ -1,8 +1,3 @@
-/**
- * PrevIA - Core Engine & Interactive UI
- * Módulo JavaScript ES2024 Modular com OCR & Leitura Documental Totalmente Operacional
- */
-
 class AudioSynth {
   constructor() {
     this.ctx = null;
@@ -24,15 +19,12 @@ class AudioSynth {
     try {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-
       osc.type = type;
       osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
       gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
-
       osc.connect(gain);
       gain.connect(this.ctx.destination);
-
       osc.start();
       osc.stop(this.ctx.currentTime + duration);
     } catch (e) {}
@@ -140,14 +132,13 @@ function showUserError(error, fallbackMessage = 'Não foi possível concluir a o
 class NeuralCanvas {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
-    if (!this.canvas) return;
+    if (!this.canvas || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     this.ctx = this.canvas.getContext('2d');
     this.particles = [];
     this.numParticles = 45;
     this.resize();
     this.init();
     this.animate();
-
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -164,7 +155,7 @@ class NeuralCanvas {
         y: Math.random() * this.canvas.height,
         vx: (Math.random() - 0.5) * 0.6,
         vy: (Math.random() - 0.5) * 0.6,
-        radius: Math.random() * 2 + 1
+        radius: Math.random() * 2 + 1,
       });
     }
   }
@@ -172,29 +163,24 @@ class NeuralCanvas {
   animate() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     for (let i = 0; i < this.particles.length; i++) {
-      let p = this.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-
-      if (p.x < 0 || p.x > this.canvas.width) p.vx *= -1;
-      if (p.y < 0 || p.y > this.canvas.height) p.vy *= -1;
-
+      const particle = this.particles[i];
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+      if (particle.x < 0 || particle.x > this.canvas.width) particle.vx *= -1;
+      if (particle.y < 0 || particle.y > this.canvas.height) particle.vy *= -1;
       this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      this.ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
       this.ctx.fillStyle = 'rgba(0, 242, 254, 0.4)';
       this.ctx.fill();
 
       for (let j = i + 1; j < this.particles.length; j++) {
-        let p2 = this.particles[j];
-        let dx = p.x - p2.x;
-        let dy = p.y - p2.y;
-        let dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < 120) {
+        const otherParticle = this.particles[j];
+        const distance = Math.hypot(particle.x - otherParticle.x, particle.y - otherParticle.y);
+        if (distance < 120) {
           this.ctx.beginPath();
-          this.ctx.moveTo(p.x, p.y);
-          this.ctx.lineTo(p2.x, p2.y);
-          this.ctx.strokeStyle = `rgba(0, 242, 254, ${1 - dist / 120})`;
+          this.ctx.moveTo(particle.x, particle.y);
+          this.ctx.lineTo(otherParticle.x, otherParticle.y);
+          this.ctx.strokeStyle = `rgba(0, 242, 254, ${1 - distance / 120})`;
           this.ctx.lineWidth = 0.5;
           this.ctx.stroke();
         }
@@ -227,9 +213,6 @@ class AppEngine {
     this.initCatalogControls();
     this.initOCRDropzone();
     this.bootstrap();
-    this.renderOperationalStatus();
-    window.addEventListener('online', () => this.renderOperationalStatus());
-    window.addEventListener('offline', () => this.renderOperationalStatus());
   }
 
   initEvents() {
@@ -245,9 +228,6 @@ class AppEngine {
     const btnAudio = document.getElementById('btn-audio-toggle');
     if (btnAudio) {
       const icon = document.getElementById('audio-toggle-icon');
-      btnAudio.setAttribute('aria-pressed', 'false');
-      btnAudio.title = 'Ativar efeitos sonoros';
-      if (icon) icon.innerHTML = '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6m0-6-5 6"/>';
       btnAudio.addEventListener('click', () => {
         const enabled = audio.toggle();
         btnAudio.style.color = enabled ? 'var(--primary)' : 'var(--text-muted)';
@@ -260,7 +240,6 @@ class AppEngine {
     }
 
     document.getElementById('btn-logout')?.addEventListener('click', () => this.logout());
-    document.getElementById('btn-notifications')?.addEventListener('click', () => this.toggleNotifications());
 
     const globalCreate = document.getElementById('btn-global-create');
     const globalOptions = document.getElementById('global-create-options');
@@ -310,32 +289,6 @@ class AppEngine {
     });
     document.getElementById('btn-refresh-smart-pending')?.addEventListener('click', () => this.loadSmartPending());
     document.getElementById('btn-ocr-reset')?.addEventListener('click', () => this.resetOCRAnalysis());
-  }
-
-  toggleNotifications() {
-    const panel = document.getElementById('notifications-popover');
-    const button = document.getElementById('btn-notifications');
-    if (!panel || !button) return;
-    const isOpen = panel.matches(':popover-open') || !panel.hidden;
-    if (isOpen) {
-      if (typeof panel.hidePopover === 'function' && panel.matches(':popover-open')) panel.hidePopover();
-      panel.hidden = true;
-    } else {
-      panel.hidden = false;
-      if (typeof panel.showPopover === 'function') panel.showPopover();
-    }
-    button.setAttribute('aria-expanded', String(!isOpen));
-    audio.click();
-  }
-
-  renderOperationalStatus() {
-    const network = document.getElementById('status-network');
-    const dot = document.getElementById('status-network-dot');
-    if (!network || !dot) return;
-    const online = navigator.onLine;
-    network.textContent = online ? 'Conexão local disponível' : 'Sem conexão neste navegador';
-    dot.classList.toggle('status-dot--ok', online);
-    dot.classList.toggle('status-dot--alert', !online);
   }
 
   switchFinanceTab(tab) {
@@ -463,7 +416,7 @@ class AppEngine {
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      this.showOCRError('Arquivo excede o limite de 50 MB para o OCR local.');
+      this.showOCRError('Arquivo excede o limite de 50 MB para análise.');
       return;
     }
 
@@ -477,16 +430,15 @@ class AppEngine {
     const resetButton = document.getElementById('btn-ocr-reset');
     const resetFeedback = document.getElementById('ocr-reset-feedback');
     title.textContent = `Arquivo selecionado: ${file.name}`;
-    sub.textContent = `Tamanho: ${fileSizeKB} KB | Processamento local em andamento`;
+    sub.textContent = `Tamanho: ${fileSizeKB} KB | Análise em andamento`;
     statusBox.style.display = 'block';
     statusBox.style.borderColor = 'var(--glass-border-glow)';
     statusText.style.color = 'var(--primary)';
-    statusText.textContent = `Lendo ${file.name} com OCR local...`;
-    tree.textContent = 'Processando documento localmente...';
+    statusText.textContent = `Lendo ${file.name}...`;
+    tree.textContent = 'Processando documento...';
     if (resetButton) resetButton.style.display = 'inline-flex';
     if (resetFeedback) resetFeedback.style.display = 'none';
     audio.scan();
-
     try {
       const formData = new FormData();
       formData.append('file', file, file.name);
@@ -518,20 +470,18 @@ class AppEngine {
     const empty = document.getElementById('ocr-empty-state');
     const reportTitle = document.getElementById('ocr-report-title');
     const tree = document.getElementById('ocr-extracted-tree');
-    const meta = document.getElementById('ocr-doc-meta');
 
     if (input) input.value = '';
     if (title) title.textContent = 'Arraste o documento aqui ou clique para selecionar';
-    if (sub) sub.textContent = 'Suporta PDF nativo, PNG ou JPG (Processamento 100% Local)';
+    if (sub) sub.textContent = 'Formatos aceitos: PDF, PNG ou JPG.';
     if (statusBox) statusBox.style.display = 'none';
     if (results) results.style.display = 'none';
     if (empty) empty.style.display = 'block';
     if (reportTitle) reportTitle.textContent = 'Central de Inteligência Documental';
     if (tree) tree.textContent = '// A análise estruturada do próximo documento aparecerá aqui.';
-    if (meta) meta.style.display = 'none';
     if (resetButton) resetButton.style.display = 'none';
     if (resetFeedback) {
-      resetFeedback.textContent = 'Análise descartada. Selecione o documento correto para iniciar uma nova leitura local.';
+      resetFeedback.textContent = 'Análise descartada. Selecione o documento correto para iniciar uma nova leitura.';
       resetFeedback.style.display = 'block';
     }
     this.toggleOCRViewMode('visual');
@@ -551,7 +501,7 @@ class AppEngine {
     const note = document.getElementById('new-lead-note');
     if (name) name.value = segurado.nome || '';
     if (flow) flow.value = 'aposentadoria';
-    if (note) note.value = `CNIS analisado localmente: ${report.metricas?.alertas_contagem || 0} indicador(es) para revisão. Vincule e confira o documento original antes de qualquer conclusão.`;
+    if (note) note.value = `CNIS analisado: ${report.metricas?.alertas_contagem || 0} indicador(es) para revisão. Vincule e confira o documento original antes de qualquer conclusão.`;
     document.getElementById('new-lead-modal-title').textContent = 'Criar lead a partir do CNIS';
     document.getElementById('new-lead-modal-subtitle').textContent = 'Confirme o contato e inclua este caso na esteira para revisão documental.';
     document.getElementById('new-lead-submit-label').textContent = 'Criar lead na esteira';
@@ -883,7 +833,6 @@ class AppEngine {
   }
 
   async submitRegistration() {
-    audio.success();
     const officeName = document.getElementById('office-name').value.trim();
     const officeOab = document.getElementById('office-oab').value.trim();
     const email = document.getElementById('reg-email').value.trim();
@@ -914,6 +863,7 @@ class AppEngine {
     // Confirmamos o status real (em vez de confiar só nos valores digitados
     // no formulário) e então carregamos os dados reais da aplicação.
     await this.bootstrap();
+    audio.success();
   }
 
   async submitLogin() {
@@ -928,13 +878,12 @@ class AppEngine {
       showUserError(e, 'Não foi possível entrar.');
       return;
     }
-    audio.success();
     await this.bootstrap();
+    audio.success();
   }
 
   switchTab(tabId) {
     if (this.currentTab === tabId) return;
-
     audio.tabSwitch();
 
     const updateDOM = () => {
@@ -1356,7 +1305,6 @@ class AppEngine {
   async addActivity() {
     if (!this.currentLead) return;
     audio.click();
-
     const lead = this.currentLead;
     const type = document.getElementById('new-activity-type').value;
     const activityInput = document.getElementById('new-activity-body');
@@ -1880,7 +1828,7 @@ class AppEngine {
       status.className = 'triage-evidence-status error';
       return;
     }
-    status.textContent = `Lendo ${file.name} localmente…`;
+    status.textContent = `Lendo ${file.name}…`;
     status.className = 'triage-evidence-status loading';
     try {
       const body = new FormData();
@@ -2062,7 +2010,6 @@ class AppEngine {
   async saveTriageLead() {
     if (this.triageSaving || !this.triageState?.selectedResult) return;
     this.triageSaving = true;
-    audio.success();
     const result = this.triageState.selectedResult;
     const saveButton = document.getElementById('btn-salvar-triage-lead');
     if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Salvando dossiê...'; }
@@ -2109,6 +2056,7 @@ class AppEngine {
     this.atendimentos.unshift(newLead);
     if (result.status === 'desqualificado') {
       this.switchTab('relationship');
+      audio.success();
       this.triageSaving = false;
       return;
     }
@@ -2118,9 +2066,11 @@ class AppEngine {
       await this.openLeadModal(newLead.id);
       this.switchModalTab('docs');
       this.switchTab('kanban');
+      audio.success();
     } catch (error) {
       this.switchTab('kanban');
       alert('Lead salvo. Abra os detalhes no Kanban para acessar o dossiê documental.');
+      audio.success();
     } finally {
       this.triageSaving = false;
       if (saveButton) { saveButton.disabled = false; this.renderTriageResult(result); }

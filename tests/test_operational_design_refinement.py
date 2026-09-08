@@ -47,13 +47,40 @@ class OperationalDesignRefinementTests(unittest.TestCase):
         self.assertIn("EM ACOMPANHAMENTO", markup)
         self.assertIn(".metric-card--action", css)
 
-    def test_dashboard_exposes_honest_local_status_center(self):
+    def test_dashboard_has_no_simulated_operational_status_center(self):
         markup = Path("index.html").read_text(encoding="utf-8")
         source = Path("app.js").read_text(encoding="utf-8")
 
-        self.assertIn("STATUS CENTER", markup)
-        self.assertIn("Integrações externas não configuradas", markup)
-        self.assertIn("renderOperationalStatus()", source)
+        self.assertNotIn("STATUS CENTER", markup)
+        self.assertNotIn("Robô PrevIA Online", markup)
+        self.assertNotIn("navigator.onLine", source)
+        self.assertNotIn("renderOperationalStatus", source)
+
+    def test_primary_runtime_keeps_decorative_audio_and_neural_surface(self):
+        markup = Path("index.html").read_text(encoding="utf-8")
+        source = Path("app.js").read_text(encoding="utf-8")
+        css = Path("styles.css").read_text(encoding="utf-8")
+
+        for marker in ("AudioSynth", "NeuralCanvas", "window.AudioContext", "webkitAudioContext"):
+            self.assertIn(marker, source)
+        self.assertIn('id="bg-canvas"', markup)
+        self.assertIn("#bg-canvas", css)
+        self.assertIn("new NeuralCanvas('bg-canvas')", source)
+        self.assertIn("prefers-reduced-motion: reduce", source)
+        self.assertNotIn("Robô operando sem alertas", markup)
+        self.assertNotIn("ONNX Engine carregado", markup)
+        self.assertNotIn("Motor Neural", markup)
+        self.assertNotIn("98.7%", markup)
+
+    def test_success_audio_follows_confirmed_login_and_triage_persistence(self):
+        source = Path("app.js").read_text(encoding="utf-8")
+        registration = source[source.index("async submitRegistration()"):source.index("async submitLogin()")]
+        login = source[source.index("async submitLogin()"):source.index("switchTab(tabId)")]
+        triage_save = source[source.index("async saveTriageLead()"):source.index("async renderRelationshipBase()")]
+
+        self.assertLess(registration.index("await this.bootstrap();"), registration.index("audio.success();"))
+        self.assertLess(login.index("await this.bootstrap();"), login.index("audio.success();"))
+        self.assertLess(triage_save.index("newLead.id = data.id;"), triage_save.index("audio.success();"))
 
 
 if __name__ == "__main__":
